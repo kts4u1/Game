@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>핏빛 심연</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=Noto+Sans+KR:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="at-title">
+<!--GAME-BODY-START-->
+<canvas id="game"></canvas>
+
+<div id="topinfo">
+  <div id="floor-name">1층 · 어둠의 묘지</div>
+  <div id="floor-sub">몬스터 레벨 1</div>
+  <div id="gold-text">0 골드</div>
+</div>
+<canvas id="minimap" aria-label="미니맵"></canvas>
+
+<div id="target" hidden>
+  <div class="t-name"></div>
+  <div class="t-bar"><div class="t-fill"></div></div>
+  <div class="t-tags"></div>
+</div>
+<div id="messages" aria-live="polite"></div>
+<div id="banner" hidden><div class="b-title"></div><div class="b-sub"></div></div>
+<div id="hurt"></div>
+
+<div id="hud">
+  <div class="orb life" id="orb-life" title="생명력">
+    <div class="orb-fill"></div><div class="orb-gloss"></div><div class="orb-text"></div>
+  </div>
+  <div id="bar">
+    <div id="xp"><div id="xp-fill"></div><span id="xp-text"></span></div>
+    <div id="slots">
+      <button class="slot" data-slot="0" aria-label="스킬 1"><img alt="" hidden><span class="key">1</span><span class="lv"></span><div class="cd"></div></button>
+      <button class="slot" data-slot="1" aria-label="스킬 2"><img alt="" hidden><span class="key">2</span><span class="lv"></span><div class="cd"></div></button>
+      <button class="slot" data-slot="2" aria-label="스킬 3"><img alt="" hidden><span class="key">3</span><span class="lv"></span><div class="cd"></div></button>
+      <button class="slot" data-slot="3" aria-label="스킬 4"><img alt="" hidden><span class="key">4</span><span class="lv"></span><div class="cd"></div></button>
+      <button class="slot potion" id="potion-slot" aria-label="생명력 물약"><span class="flask"></span><span class="key">Q</span><span class="count">0</span></button>
+    </div>
+    <div id="menu-row">
+      <span id="lvl-text">레벨 1</span>
+      <button data-open="char">캐릭터 <kbd>C</kbd></button>
+      <button data-open="inv">소지품 <kbd>I</kbd></button>
+      <button data-open="menu">메뉴 <kbd>Esc</kbd></button>
+    </div>
+  </div>
+  <div class="orb fury" id="orb-fury" title="분노">
+    <div class="orb-fill"></div><div class="orb-gloss"></div><div class="orb-text"></div>
+  </div>
+</div>
+
+<section id="inv-panel" class="panel right" hidden>
+  <header class="panel-head"><h2>소지품</h2><button class="x" data-close aria-label="닫기">×</button></header>
+  <div class="panel-body"></div>
+</section>
+
+<section id="char-panel" class="panel left" hidden>
+  <header class="panel-head"><h2>야만용사</h2><button class="x" data-close aria-label="닫기">×</button></header>
+  <div class="panel-body"></div>
+</section>
+
+<div id="levelup" class="overlay" hidden>
+  <div class="lu-box">
+    <div class="lu-eyebrow"></div>
+    <h2 class="lu-title"></h2>
+    <div class="lu-cards"></div>
+    <p class="lu-hint">카드를 누르거나 1 · 2 · 3 키로 고르세요</p>
+  </div>
+</div>
+
+<div id="title" class="overlay">
+  <div class="title-wrap">
+    <p class="eyebrow">야만용사 핵앤슬래시</p>
+    <h1>핏빛 심연</h1>
+    <p class="tagline">끝없이 이어지는 지하 묘지로 내려가세요. 깊어질수록 적은 강해지고, 레어와 유니크 전리품이 쏟아집니다.</p>
+    <div class="title-btns">
+      <button id="btn-continue" class="primary" hidden>이어하기 <small></small></button>
+      <button id="btn-new">새 게임</button>
+    </div>
+    <dl class="controls">
+      <dt>왼쪽 클릭</dt><dd>이동 · 공격 · 줍기 (누르고 있으면 계속)</dd>
+      <dt>WASD</dt><dd>키보드로 이동</dd>
+      <dt>1 – 4 · 오른쪽 클릭</dt><dd>스킬 (커서 방향)</dd>
+      <dt>Shift + 클릭</dt><dd>제자리 공격</dd>
+      <dt>Q</dt><dd>생명력 물약</dd>
+      <dt>I · C · Tab</dt><dd>소지품 · 캐릭터 · 지도</dd>
+    </dl>
+  </div>
+</div>
+
+<div id="death" class="overlay" hidden>
+  <div class="death-box">
+    <h2>당신은 죽었습니다</h2>
+    <p>층 입구에서 다시 일어납니다. 가진 골드의 10%를 잃습니다.</p>
+    <button id="btn-respawn" class="primary">부활</button>
+  </div>
+</div>
+
+<div id="menu" class="overlay" hidden>
+  <div class="menu-box">
+    <h2>일시정지</h2>
+    <button id="btn-resume" class="primary">계속하기</button>
+    <button id="btn-sound">소리 끄기 (M)</button>
+    <button id="btn-quit">저장하고 타이틀로</button>
+    <p class="menu-note">진행 상황은 층을 내려갈 때와 레벨업할 때 자동 저장됩니다.</p>
+  </div>
+</div>
+
+<div id="tooltip" hidden></div>
+<!--GAME-BODY-END-->
+
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/items.js"></script>
+<script src="js/dungeon.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/effects.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/player.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
