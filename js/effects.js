@@ -2,12 +2,45 @@
 // ───────── 시각 효과: 파티클, 피해 숫자, 충격파, 바닥 흔적, 번개 ─────────
 
 const FX = {
-  particles: [], texts: [], rings: [], decals: [], bolts: [], beams: [], shake: 0,
+  particles: [], texts: [], rings: [], decals: [], bolts: [], beams: [], sprites: [], shake: 0,
   reset() {
     this.particles.length = 0; this.texts.length = 0; this.rings.length = 0;
-    this.decals.length = 0; this.bolts.length = 0; this.beams.length = 0; this.shake = 0;
+    this.decals.length = 0; this.bolts.length = 0; this.beams.length = 0; this.sprites.length = 0; this.shake = 0;
   },
 };
+
+// ── Flare 효과 애니메이션 ──
+// layer: 'ground' 바닥(조명 전) · 'top' 캐릭터 위(조명 전) · 'glow' 빛나는 효과(조명 뒤 더하기 합성)
+// opts: dir(0~7), scale, scale1(끝 크기), life(초), alpha, fade(사라지는 시간), follow(따라갈 대상), z, speed
+function fxSprite(name, x, y, opts = {}) {
+  const set = typeof spriteSet === 'function' ? spriteSet('effects', name) : null;
+  if (!set) return null;
+  const a = set.anims.power;
+  const speed = opts.speed || 1;
+  const e = {
+    set, a, x, y, z: opts.z || 0, t: 0, speed,
+    dur: opts.life != null ? opts.life : a.dur / 1000 / speed,
+    scale: opts.scale || 1, scale1: opts.scale1, dir: opts.dir || 0, layer: opts.layer || 'glow',
+    alpha: opts.alpha != null ? opts.alpha : 1, fade: opts.fade || 0, follow: opts.follow || null,
+  };
+  FX.sprites.push(e);
+  if (FX.sprites.length > 180) FX.sprites.shift();
+  return e;
+}
+
+function drawFXSprites(ctx, layer) {
+  for (const e of FX.sprites) {
+    if (e.layer !== layer) continue;
+    const k = Math.min(1, e.t / e.dur);
+    const sc = e.scale1 != null ? lerp(e.scale, e.scale1, easeOutCubic(k)) : e.scale;
+    let al = e.alpha;
+    if (e.fade) al *= clamp((e.dur - e.t) / e.fade, 0, 1);
+    if (al <= 0.01) continue;
+    ctx.globalAlpha = al;
+    drawSpriteFrame(ctx, e.set, 'power', e.dir, animIndex(e.a, e.t * 1000 * e.speed), isoX(e.x, e.y), isoY(e.x, e.y) - e.z, sc);
+  }
+  ctx.globalAlpha = 1;
+}
 
 function fxBlood(x, y, z, n, color = '#8c1014', spread = 1) {
   for (let i = 0; i < n; i++) {
@@ -111,6 +144,12 @@ function updateFX(dt) {
   }
   for (let i = FX.bolts.length - 1; i >= 0; i--) { FX.bolts[i].life -= dt; if (FX.bolts[i].life <= 0) FX.bolts.splice(i, 1); }
   for (let i = FX.beams.length - 1; i >= 0; i--) { FX.beams[i].life -= dt; if (FX.beams[i].life <= 0) FX.beams.splice(i, 1); }
+  for (let i = FX.sprites.length - 1; i >= 0; i--) {
+    const e = FX.sprites[i];
+    e.t += dt;
+    if (e.follow) { e.x = e.follow.x; e.y = e.follow.y; }
+    if (e.t >= e.dur) FX.sprites.splice(i, 1);
+  }
   FX.shake = Math.max(0, FX.shake - dt * 35);
 }
 

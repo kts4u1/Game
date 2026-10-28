@@ -1,7 +1,9 @@
-"""Flare(flare-game) 그림 자원을 이 게임용으로 변환한다.
+"""Flare(flare-game) 그림·효과음 자원을 이 게임용으로 변환한다.
 
 필요한 애니메이션 프레임만 골라 축소하고, WebP 아틀라스로 다시 묶은 뒤
 좌표 정보를 assets/flare/manifest.js 하나에 담는다.
+효과음은 MP3(모노)로 바꿔 assets/flare/sounds.js에 base64로 담는다.
+(파일을 직접 열어도 동작하도록 fetch 대신 스크립트로 불러오기 위함)
 
 사용법:
     git clone --depth 1 https://github.com/flareteam/flare-game.git
@@ -9,10 +11,13 @@
 
 Flare 그림 자원 라이선스: CC-BY-SA 3.0 (자세한 내용은 assets/flare/CREDITS.md)
 """
+import base64
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 
 from PIL import Image
 
@@ -38,6 +43,32 @@ MONSTERS = {
     'minotaur': ['stance', 'run', 'swing', 'die'],
     'wyvern_fire': ['stance', 'run', 'swing', 'die'],
 }
+# 스킬·투사체·타격 효과 (animations/powers)
+EFFECTS = [
+    'cleave', 'quake', 'blast', 'spikes', 'shield_orange', 'throw_axe', 'arrows', 'fireball',
+    'thunderstrike', 'lightning', 'spark_red', 'spark_orange', 'spark_blue', 'heal', 'sparkle', 'freeze', 'rupture',
+]
+EFFECT_SCALE = {'blast': 0.5, 'quake': 0.6, 'shield_orange': 0.55, 'thunderstrike': 0.6}
+
+# 효과음: 게임 안 이름 → soundfx 경로
+SOUNDS = {
+    'swing1': 'melee_attack', 'swing2': 'melee_attack_2', 'swing3': 'melee_attack_3',
+    'male_hit': 'male_hit', 'male_die': 'male_die', 'level_up': 'level_up', 'no_mana': 'no_mana',
+    'heartbeat': 'heartbeat', 'flying_loot': 'flying_loot',
+    'warcry': 'powers/warcry', 'quake': 'powers/quake', 'spikes': 'powers/spikes', 'fireball': 'powers/fireball',
+    'burn': 'powers/burn', 'shock': 'powers/shock', 'thunder': 'powers/thunder', 'shoot': 'powers/shoot',
+    'arrow_wall': 'powers/arrow_wall', 'potion': 'powers/potion', 'freeze': 'powers/freeze', 'shield': 'powers/shield',
+    'coins': 'inventory/inventory_coins', 'inv_metal': 'inventory/inventory_metal', 'inv_maille': 'inventory/inventory_maille',
+    'inv_leather': 'inventory/inventory_leather', 'inv_cloth': 'inventory/inventory_cloth', 'inv_heavy': 'inventory/inventory_heavy',
+    'inv_gem': 'inventory/inventory_gem', 'inv_object': 'inventory/inventory_object', 'inv_potion': 'inventory/inventory_potion',
+    'wood_open': 'wood_open', 'stairs': 'environment/stairs',
+    'amb_drops': 'environment/cave_droplets_loop', 'amb_wind': 'environment/cave_wind_loop',
+    'step1': 'steps/step_echo1', 'step2': 'steps/step_echo2', 'step3': 'steps/step_echo3', 'step4': 'steps/step_echo4',
+}
+for _m in ('zombie', 'skeleton', 'goblin', 'antlion', 'minotaur', 'wyvern'):
+    for _k in ('hit', 'die', 'phys', 'ment', 'critdie'):
+        SOUNDS[f'{_m}_{_k}'] = f'enemies/{_m}_{_k}'
+
 TILESETS = {
     'dungeon': {
         'floor': [16, 18, 19, 23, 30, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47],
@@ -120,12 +151,14 @@ class Packer:
         return atlas, pos
 
 
-def scaled(im):
-    w, h = max(1, round(im.width * SCALE)), max(1, round(im.height * SCALE))
+def scaled(im, k=None):
+    k = SCALE if k is None else k
+    w, h = max(1, round(im.width * k)), max(1, round(im.height * k))
     return im.resize((w, h), Image.LANCZOS)
 
 
-def build_sprite(base, anim_path, wanted, out_png):
+def build_sprite(base, anim_path, wanted, out_png, scale=None):
+    scale = SCALE if scale is None else scale
     images, anims = parse_anim(anim_path)
     sheets = {}
 
@@ -156,9 +189,9 @@ def build_sprite(base, anim_path, wanted, out_png):
                     bbox = (0, 0, 1, 1)
                 im = im.crop(bbox)
                 seen[rect_key] = (len(seen), bbox)
-                packer.add(seen[rect_key][0], scaled(im))
+                packer.add(seen[rect_key][0], scaled(im, scale))
             fid, bbox = seen[rect_key]
-            table[d][idx] = [fid, round((ox - bbox[0]) * SCALE), round((oy - bbox[1]) * SCALE)]
+            table[d][idx] = [fid, round((ox - bbox[0]) * scale), round((oy - bbox[1]) * scale)]
         meta[anim] = {'n': n, 'dur': a['dur'], 'type': a['type'], 'f': table}
     atlas, pos = packer.pack()
     # 프레임 번호를 아틀라스 좌표로 치환: [x, y, w, h, ox, oy]
@@ -174,7 +207,7 @@ def build_sprite(base, anim_path, wanted, out_png):
                 w, h = sizes[fid]
                 anim['f'][d][k] = [x, y, w, h, ox, oy]
     atlas.save(out_png, 'WEBP', quality=QUALITY, method=6, alpha_quality=90)
-    return {'size': list(atlas.size), 'anims': meta}
+    return {'size': list(atlas.size), 'anims': meta, 'scale': scale}
 
 
 def parse_tileset(path):
@@ -216,11 +249,30 @@ def build_tileset(base, name, spec, out_png):
     return out
 
 
+def build_sounds(base, out_js):
+    """ogg → MP3(모노, 64kbps) → base64. 반복 재생용 배경음은 48kbps"""
+    data = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        for key, rel in SOUNDS.items():
+            src = os.path.join(base, 'soundfx', rel + '.ogg')
+            if not os.path.exists(src):
+                continue
+            dst = os.path.join(tmp, key + '.mp3')
+            rate = '48k' if key.startswith('amb_') else '64k'
+            subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', src, '-ac', '1', '-ar', '44100', '-b:a', rate, dst], check=True)
+            with open(dst, 'rb') as f:
+                data[key] = base64.b64encode(f.read()).decode('ascii')
+    with open(out_js, 'w', encoding='utf-8') as f:
+        f.write('// 자동 생성: tools/build_flare_assets.py — Flare 효과음 (CC-BY-SA 3.0), MP3 base64\n')
+        f.write('var FLARE_SOUNDS = ' + json.dumps(data, separators=(',', ':')) + ';\n')
+    return sorted(data)
+
+
 def main():
     base, out = sys.argv[1], sys.argv[2]
-    for sub in ('hero', 'monsters', 'tiles'):
+    for sub in ('hero', 'monsters', 'tiles', 'effects'):
         os.makedirs(os.path.join(out, sub), exist_ok=True)
-    manifest = {'scale': SCALE, 'hero': {}, 'monsters': {}, 'tiles': {}}
+    manifest = {'scale': SCALE, 'hero': {}, 'monsters': {}, 'tiles': {}, 'effects': {}}
     for layer in HERO_LAYERS:
         manifest['hero'][layer] = build_sprite(base, os.path.join(base, 'animations', 'avatar', 'male', f'{layer}.txt'), HERO_ANIMS, os.path.join(out, 'hero', f'{layer}.webp'))
         print('hero', layer, manifest['hero'][layer]['size'])
@@ -230,11 +282,16 @@ def main():
     for name, spec in TILESETS.items():
         manifest['tiles'][name] = build_tileset(base, name, spec, os.path.join(out, 'tiles', f'{name}.webp'))
         print('tiles', name, manifest['tiles'][name]['size'])
+    for name in EFFECTS:
+        manifest['effects'][name] = build_sprite(base, os.path.join(base, 'animations', 'powers', f'{name}.txt'), ['power'], os.path.join(out, 'effects', f'{name}.webp'), EFFECT_SCALE.get(name))
+        print('effect', name, manifest['effects'][name]['size'])
+    manifest['sounds'] = build_sounds(base, os.path.join(out, 'sounds.js'))
+    print('sounds', len(manifest['sounds']))
     icons = Image.open(os.path.join(base, 'images', 'icons', 'icons.png')).convert('RGBA')
     icons.save(os.path.join(out, 'icons.webp'), 'WEBP', quality=88, method=6)
     manifest['icons'] = {'size': 64, 'cols': icons.width // 64}
     # 하위 폴더 안의 그림 경로 계층
-    for k in ('hero', 'monsters'):
+    for k in ('hero', 'monsters', 'effects'):
         for name, m in manifest[k].items():
             m['img'] = f'{k}/{name}.webp'
     for name, m in manifest['tiles'].items():

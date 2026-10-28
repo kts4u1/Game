@@ -219,6 +219,7 @@ function resolveSwing(a) {
   const p = player, s = p.stats;
   SFX.play('swing');
   const bash = a.kind === 'bash';
+  fxSprite('cleave', p.x + Math.cos(a.angle) * 30, p.y + Math.sin(a.angle) * 30, { dir: flareDir(a.angle), scale: bash ? 1.25 : 0.95, alpha: 0.8 });
   const v = bash ? SKILLS.bash.vals(effLevel(p, 'bash')) : null;
   const opts = bash ? { knock: v.knock, stun: v.stun, fury: 2 } : { fury: 5 };
   const mult = bash ? v.mult : 1;
@@ -233,7 +234,7 @@ function resolveSwing(a) {
     if (bash && targets.length > 1) targets = [targets.sort((x, y) => dist(p.x, p.y, x.x, x.y) - dist(p.x, p.y, y.x, y.y))[0]];
   }
   for (const t of targets) playerStrike(t, mult, opts);
-  if (bash && targets.length) { fxShake(4); fxSparks(targets[0].x, targets[0].y, 30, 10, '#ffd28a', 160); }
+  if (bash && targets.length) { fxShake(4); fxSparks(targets[0].x, targets[0].y, 30, 10, '#ffd28a', 160); fxSprite('spark_orange', targets[0].x, targets[0].y, { z: monsterHeight(targets[0]) * 0.5 - 52, scale: 1.2 }); }
 }
 
 function noFury() {
@@ -279,7 +280,8 @@ function useSkill(slot) {
     case 'berserk':
       p.buffs.berserk = v.dur;
       recalcStats(p);
-      SFX.play('warcry');
+      SFX.play('berserk');
+      fxSprite('shield_orange', p.x, p.y, { follow: p, life: v.dur, scale: 0.75, alpha: 0.4, fade: 0.6 });
       fxRing(p.x, p.y, 10, 120, 0.6, '#ff3a22', 6);
       fxEmbers(p.x, p.y, 30, '#ff3a22', 30);
       UI.message('광폭화!', '#ff5a3a');
@@ -328,10 +330,11 @@ function updateLeap(dt) {
     const v = l.v;
     SFX.play('boom');
     fxShake(9);
-    fxRing(p.x, p.y, 10, v.radius, 0.45, '#e9c68a', 6);
+    fxSprite('quake', p.x, p.y, { layer: 'ground', scale: v.radius / 80 });
+    fxRing(p.x, p.y, 10, v.radius, 0.45, '#e9c68a', 4);
     fxDust(p.x, p.y, 18);
     fxDecal('crack', p.x, p.y, 1.4);
-    for (let i = 0; i < 9; i++) {
+    if (!spriteSet('effects', 'quake')) for (let i = 0; i < 9; i++) {
       const an = (i / 9) * TAU;
       fxRock(p.x + Math.cos(an) * v.radius * 0.55, p.y + Math.sin(an) * v.radius * 0.55, 0.8);
     }
@@ -346,6 +349,7 @@ function warcry(v) {
   p.pose = 'roar'; p.poseT = 0; p.poseDur = 0.45;
   SFX.play('warcry');
   fxShake(6);
+  fxSprite('shield_orange', p.x, p.y, { follow: p, life: 0.55, scale: 0.6, scale1: 1.9, fade: 0.3 });
   fxRing(p.x, p.y, 20, v.radius, 0.6, '#ff6a3a', 7);
   fxRing(p.x, p.y, 10, v.radius * 0.7, 0.5, '#ffd27a', 4);
   for (const m of world.monsters) {
@@ -359,7 +363,8 @@ function slam(aim, v) {
   p.facing = a;
   p.pose = 'slam'; p.poseT = 0; p.poseDur = 0.4;
   world.waves.push({ x: p.x + Math.cos(a) * 26, y: p.y + Math.sin(a) * 26, a, dist: 0, len: v.length, v, hit: new Set(), next: 0, delay: 0.12 });
-  setTimeout(() => SFX.play('boom'), 110);
+  setTimeout(() => { SFX.play('spikes'); SFX.play('boom', 0.5); }, 110);
+  fxSprite('rupture', p.x + Math.cos(a) * 30, p.y + Math.sin(a) * 30, { dir: flareDir(a) % 3, layer: 'top', scale: 1.2 });
 }
 
 function updateWaves(dt) {
@@ -373,7 +378,7 @@ function updateWaves(dt) {
       const px = w.x + Math.cos(w.a) * w.next, py = w.y + Math.sin(w.a) * w.next;
       if (d.solidAt(px, py)) { w.next = w.len + 1; break; }
       const side = rand(-14, 14);
-      fxRock(px - Math.sin(w.a) * side, py + Math.cos(w.a) * side, 1);
+      if (!fxSprite('spikes', px - Math.sin(w.a) * side, py + Math.cos(w.a) * side, { layer: 'top', dir: flareDir(w.a), life: 0.5, scale: rand(0.7, 0.95) })) fxRock(px - Math.sin(w.a) * side, py + Math.cos(w.a) * side, 1);
       if (chance(0.5)) fxDust(px, py, 2);
       if (((w.next / 26) | 0) % 3 === 0) fxDecal('crack', px, py, 0.7);
       w.next += 26;
@@ -418,6 +423,8 @@ function updateWhirl(dt) {
   w.tick -= dt;
   if (w.tick <= 0) {
     w.tick = 0.18 / (1 + s.ias / 200);
+    const ra = Math.random() * TAU;
+    fxSprite('cleave', p.x + Math.cos(ra) * 24, p.y + Math.sin(ra) * 24, { dir: flareDir(ra), scale: 1.1, alpha: 0.7 });
     for (const m of world.monsters) {
       if (!m.dead && dist(p.x, p.y, m.x, m.y) < v.radius + m.r) playerStrike(m, v.mult, {});
     }
@@ -438,6 +445,7 @@ function drinkPotion() {
   p.healLeft += p.stats.maxLife * 0.45;
   p.healRate = p.stats.maxLife * 0.45 / 1.2;
   SFX.play('potion');
+  fxSprite('heal', p.x, p.y, { follow: p, scale: 0.9, alpha: 0.9 });
   fxSparks(p.x, p.y, 40, 12, '#ff5a5a', 80);
   if (!p.attack && !p.pose) { p.pose = 'drink'; p.poseT = 0; p.poseDur = 0.4; }
 }
@@ -458,7 +466,7 @@ function equipFromInventory(idx) {
   const ratio = p.life / p.stats.maxLife;
   recalcStats(p);
   p.life = Math.max(1, Math.min(p.stats.maxLife, ratio * p.stats.maxLife));
-  SFX.play('equip');
+  SFX.equip(item);
   Game.dirty = true;
 }
 
@@ -471,7 +479,7 @@ function unequip(key) {
   p.inventory[idx] = item;
   p.equipment[key] = null;
   recalcStats(p);
-  SFX.play('equip');
+  SFX.equip(item);
   Game.dirty = true;
   return true;
 }
@@ -511,7 +519,7 @@ function buyPotion() {
   if (p.gold < price) { UI.message('골드가 부족합니다', '#ff7a6a'); SFX.play('nope'); return; }
   p.gold -= price;
   p.potions++;
-  SFX.play('potion');
+  SFX.play('buyPotion');
 }
 
 // ── 레벨업 카드 ──
@@ -570,7 +578,7 @@ function playerDie() {
   p.life = 0;
   p.attack = p.leap = p.whirl = p.order = null;
   p.z = 0;
-  SFX.play('die');
+  SFX.play('pdie');
   fxBlood(p.x, p.y, 30, 30);
   fxDecal('blood', p.x, p.y, 1.4);
   Game.deathT = 1.4;

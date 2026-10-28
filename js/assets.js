@@ -79,12 +79,14 @@ function spriteSet(kind, name) { return HAS_FLARE ? (FLARE[kind] && FLARE[kind][
 // 스프라이트 한 프레임 그리기. 그림이 없으면 false
 function drawSpriteFrame(ctx, set, animName, dir, idx, x, y, scale = 1) {
   if (!set) return false;
-  const anim = set.anims[animName] || set.anims.stance;
-  const fr = anim && anim.f[dir] && anim.f[dir][idx];
+  const anim = set.anims[animName] || set.anims.stance || set.anims.power;
+  if (!anim) return false;
+  const row = anim.f[dir] && anim.f[dir][0] ? anim.f[dir] : anim.f[0];  // 방향이 적은 효과는 0번 방향 사용
+  const fr = row && row[idx];
   if (!fr) return false;
   const img = Assets.get(set.img);
   if (!img) return false;
-  const k = ART_K * scale;
+  const k = (2 / 3) / (set.scale || FLARE.scale) * scale;
   ctx.drawImage(img, fr[0], fr[1], fr[2], fr[3], x - fr[4] * k, y - fr[5] * k, fr[2] * k, fr[3] * k);
   return true;
 }

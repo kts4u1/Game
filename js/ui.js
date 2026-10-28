@@ -209,30 +209,38 @@ const UI = {
     const eqLabels = { weapon: '무기', helm: '투구', amulet: '목걸이', armor: '갑옷', ring1: '반지', ring2: '반지', gloves: '장갑', belt: '허리띠', boots: '장화' };
     const doll = EQUIP_KEYS.map(k => this.cellHtml(p.equipment[k], `data-eq="${k}" style="grid-area:${k}"`, eqLabels[k])).join('');
     const grid = p.inventory.map((it, i) => this.cellHtml(it, `data-inv="${i}"`)).join('');
-    let detail = '<p class="detail-empty">아이템을 누르면 자세한 정보가 여기 나옵니다. 두 번 누르면 바로 착용합니다.</p>';
+    let detail = '<p class="detail-empty">아이템을 누르면 자세한 정보가 여기 나오고, 아래에 착용·판매 버튼이 생깁니다. 두 번 누르면 바로 착용합니다.</p>';
+    let selRow = '';
     const sel = this.selected;
     if (sel && sel.item) {
       const it = sel.item;
-      let btns = '';
+      let btns;
       if (sel.kind === 'inv') {
-        btns = `<button data-act="equip" ${canEquip(it) ? '' : 'disabled'}>착용</button><button data-act="sell">판매 +${it.value}</button><button data-act="drop">버리기</button>`;
+        const can = canEquip(it);
+        btns = `<button class="btn-main" data-act="equip" ${can ? '' : 'disabled'}>${can ? '착용' : `레벨 ${it.req} 필요`}</button>`
+          + `<button data-act="sell">판매 <small>+${it.value}</small></button><button data-act="drop">버리기</button>`;
         const cmpKey = it.slot === 'ring' ? (p.equipment.ring1 ? 'ring1' : null) : it.slot;
         const cur = cmpKey ? p.equipment[cmpKey] : null;
         detail = `<div class="tt">${itemTooltipHtml(it)}</div>`;
         if (cur) detail += `<div class="tt tt-compare">${itemTooltipHtml(cur, { header: '착용 중', noValue: true })}</div>`;
       } else {
-        btns = '<button data-act="unequip">해제</button>';
+        btns = '<button class="btn-main" data-act="unequip">해제해서 가방에 넣기</button>';
         detail = `<div class="tt">${itemTooltipHtml(it, { noValue: true })}</div>`;
       }
-      detail = `<div class="detail-tips">${detail}</div><div class="detail-btns">${btns}</div>`;
+      detail = `<div class="detail-tips">${detail}</div>`;
+      selRow = `<div class="foot-sel">
+          <div class="foot-name" style="color:${RARITY[it.rarity].color}">${escapeHtml(it.name)}</div>
+          <div class="foot-btns">${btns}<button class="btn-x" data-act="deselect" aria-label="선택 해제">×</button></div>
+        </div>`;
     }
     const used = p.inventory.filter(Boolean).length;
     this.el['inv-panel'].querySelector('.panel-body').innerHTML = `
       <div class="doll">${doll}</div>
       <div class="inv-meta"><span>가방 ${used} / ${p.inventory.length}</span><span class="gold">${p.gold.toLocaleString()} 골드</span></div>
       <div class="grid">${grid}</div>
-      <div class="detail">${detail}</div>
-      <div class="inv-actions">
+      <div class="detail">${detail}</div>`;
+    this.el['inv-panel'].querySelector('.panel-foot').innerHTML = `${selRow}
+      <div class="foot-btns">
         <button data-act="buy">물약 구매 <small>${potionPrice()} 골드</small></button>
         <button data-act="sellnormal">일반 아이템 모두 판매</button>
       </div>`;
@@ -247,6 +255,7 @@ const UI = {
       else if (a === 'sell' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) sellInventory(i); this.selected = null; }
       else if (a === 'drop' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) dropInventory(i); this.selected = null; }
       else if (a === 'unequip' && sel) { if (unequip(sel.key)) this.selected = null; }
+      else if (a === 'deselect') this.selected = null;
       else if (a === 'buy') buyPotion();
       else if (a === 'sellnormal') sellAllNormal();
       this.hideTooltip();

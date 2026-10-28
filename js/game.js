@@ -48,7 +48,8 @@ const Game = {
     if (!HAS_FLARE) return;
     const el = $('load-status');
     const paths = [FLARE.tiles.dungeon.img, FLARE.tiles.cave.img, 'icons.webp', FLARE.hero.hand_axe.img, ...heroAssetPaths(null),
-      ...monsterAssetPaths(['zombie', 'skeleton', 'skeleton_archer', 'goblin'])];
+      ...monsterAssetPaths(['zombie', 'skeleton', 'skeleton_archer', 'goblin']),
+      ...Object.values(FLARE.effects || {}).map(e => e.img)];
     el.textContent = '그림 불러오는 중…';
     Assets.preload(paths, (n, total) => { el.textContent = `그림 불러오는 중 ${n} / ${total}`; })
       .then(() => { el.textContent = Object.keys(Assets.failed).length ? '일부 그림을 불러오지 못해 기본 그림으로 표시합니다' : ''; });
@@ -123,7 +124,7 @@ const Game = {
     UI.hideTitle();
     UI.closePanels();
     UI.el.death.hidden = true;
-    SFX.startDrone();
+    SFX.setAmbient(world.dungeon.theme.tiles);
   },
 
   startFloor(n) {
@@ -135,6 +136,7 @@ const Game = {
     if (R.themeName !== d.theme.name) buildThemeSprites(d.theme);
     prepareFloorArt(d);
     this.preloadFloor();
+    SFX.setAmbient(d.theme.tiles);
     FX.reset();
     R.camX = isoX(p.x, p.y);
     R.camY = isoY(p.x, p.y) - 30;
@@ -388,6 +390,16 @@ function update(dt) {
   if (!paused) {
     handleHeldInput(dt);
     updatePlayer(dt);
+    // 발소리와 심장 박동
+    const pl = player;
+    if (pl.moving && !pl.whirl && !pl.leap && !pl.dead) {
+      Game.stepT = (Game.stepT || 0) - dt * (pl.stats.speed / 185);
+      if (Game.stepT <= 0) { Game.stepT = 0.34; SFX.play('step'); }
+    }
+    if (!pl.dead && pl.life < pl.stats.maxLife * 0.25) {
+      Game.heartT = (Game.heartT || 0) - dt;
+      if (Game.heartT <= 0) { Game.heartT = 1.75; SFX.play('heartbeat'); }
+    } else Game.heartT = 0;
     updateMonsters(dt);
     updateProjectiles(dt);
     updateWaves(dt);

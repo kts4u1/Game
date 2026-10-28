@@ -282,6 +282,7 @@ function renderFrame(t, focus) {
     } else if (!props) drawDecor(ctx, dc);
   }
   drawFXGround(ctx);
+  drawFXSprites(ctx, 'ground');
   drawStairs(ctx, d.stairs, t, explored(d.stairs.x, d.stairs.y));
   drawHazards(ctx, t);
   for (const g of world.ground) if (explored(g.x, g.y)) drawGroundObject(ctx, g, t);
@@ -320,6 +321,7 @@ function renderFrame(t, focus) {
   }
   if (!atlas) for (const tc of d.torches) if (explored(tc.x, tc.y)) drawTorchBracket(ctx, tc);
   drawFXParticles(ctx);
+  drawFXSprites(ctx, 'top');
 
   // 3) 조명
   drawLighting(t, focus);
@@ -329,6 +331,7 @@ function renderFrame(t, focus) {
   ctx.globalCompositeOperation = 'lighter';
   for (const tc of d.torches) if (explored(tc.x, tc.y)) (atlas ? drawFlareFlame : drawTorchFlame)(ctx, tc, t);
   for (const pr of world.projectiles) if (pr.type === 'fireball') drawFireball(ctx, pr, t);
+  drawFXSprites(ctx, 'glow');
   if (p && p.whirl) drawWhirlArcs(ctx, p, t);
   if (d.stairs.open && explored(d.stairs.x, d.stairs.y)) drawStairsGlow(ctx, d.stairs, t);
   ctx.globalCompositeOperation = 'source-over';
@@ -604,8 +607,16 @@ function drawMonsterFallback(ctx, m, t, sx, sy) {
   ctx.restore();
 }
 
+const PROJ_SPRITE = { axe: 'throw_axe', arrow: 'arrows' };
+
 function drawProjectile(ctx, pr, t) {
   const sx = isoX(pr.x, pr.y), sy = isoY(pr.x, pr.y);
+  const fs = PROJ_SPRITE[pr.type] && spriteSet('effects', PROJ_SPRITE[pr.type]);
+  if (fs && Assets.ready(fs.img)) {
+    const a = fs.anims.power;
+    drawSpriteFrame(ctx, fs, 'power', flareDir(Math.atan2(pr.vy, pr.vx)), animIndex(a, (pr.t || 0) * 1000), sx, sy, pr.type === 'axe' ? 0.9 : 1);
+    return;
+  }
   drawShadow(ctx, sx, sy, 6, 2.5, 0.3);
   if (pr.type === 'axe') {
     ctx.save();
@@ -623,6 +634,11 @@ function drawProjectile(ctx, pr, t) {
 }
 
 function drawFireball(ctx, pr, t) {
+  const fs = spriteSet('effects', 'fireball');
+  if (fs && Assets.ready(fs.img)) {
+    drawSpriteFrame(ctx, fs, 'power', flareDir(Math.atan2(pr.vy, pr.vx)), animIndex(fs.anims.power, (pr.t || 0) * 1000), isoX(pr.x, pr.y), isoY(pr.x, pr.y), 0.8);
+    return;
+  }
   const sx = isoX(pr.x, pr.y), sy = isoY(pr.x, pr.y) - pr.z;
   const g = ctx.createRadialGradient(sx, sy, 1, sx, sy, 18);
   g.addColorStop(0, 'rgba(255,240,180,1)'); g.addColorStop(0.35, 'rgba(255,140,40,.9)'); g.addColorStop(1, 'rgba(255,60,10,0)');

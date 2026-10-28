@@ -106,6 +106,7 @@ function populateFloor() {
 }
 
 function aggroPack(m) {
+  if (!m.aggro && !m.dead) SFX.monster(m, 'ment');
   m.aggro = true;
   if (!m.pack) return;
   for (const o of world.monsters) if (o.pack === m.pack && !o.dead) o.aggro = true;
@@ -224,10 +225,10 @@ function resolveMonsterAttack(m) {
       owner: 'monster', type: m.ranged.proj, x: m.x + Math.cos(a) * 16, y: m.y + Math.sin(a) * 16,
       vx: Math.cos(a) * m.ranged.speed, vy: Math.sin(a) * m.ranged.speed, r: fire ? 10 : 6, dmg, src: m, life: 1.6, angle: a,
     });
-    SFX.play(fire ? 'fire' : 'arrow');
+    SFX.play(fire ? 'fire' : 'arrow', 0.8);
   } else {
+    SFX.monster(m, 'phys');
     if (dist(m.x, m.y, p.x, p.y) <= m.atkRange + p.r + 16) damagePlayer(dmg, m, { melee: true });
-    else SFX.play('swing');
   }
 }
 
@@ -268,17 +269,21 @@ function playerStrike(m, mult, opts = {}) {
     if (s.procLightning && chance(s.procLightning / 100)) { chainLightning(m); player.procCD = 0.3; }
     else if (s.procFireNova && chance(s.procFireNova / 100)) { fireNova(m.x, m.y); player.procCD = 0.3; }
   }
-  SFX.play(crit ? 'crit' : 'hit');
+  SFX.play(crit ? 'crit' : 'hit', 0.7);
+  if (!m.dead) SFX.monster(m, 'hit');
   return d;
 }
 
 function damageMonster(m, amount, crit, opts = {}) {
   if (m.dead) return;
+  m.overkill = crit && amount > m.maxLife * 0.5;
   m.life -= amount;
   m.hitFlash = 0.12;
   if (!m.aggro) aggroPack(m);
   fxText(m.x, m.y, crit ? `${amount}!` : `${amount}`, opts.color || (crit ? '#ffd24a' : '#f2ede4'), crit ? 22 : 15, { crit, z: monsterHeight(m) * 0.75 });
   const z = 30 * m.scale;
+  const bony = m.sprite && m.sprite.startsWith('skeleton');
+  fxSprite(crit ? 'spark_orange' : bony ? 'spark_blue' : 'spark_red', m.x + rand(-6, 6), m.y + rand(-6, 6), { z: monsterHeight(m) * 0.5 - 52, scale: crit ? 0.9 : 0.65 });
   if (m.type === 'skeleton' || m.type === 'archer') fxSparks(m.x, m.y, z, 4, '#e8e2d0', 120);
   else if (m.type === 'wraith') fxSparks(m.x, m.y, z, 5, '#7ff2ff', 120);
   else fxBlood(m.x, m.y, z, crit ? 10 : 5, m.type === 'zombie' ? '#4a5a1c' : '#8c1014');
@@ -291,11 +296,13 @@ function killMonster(m) {
   player.kills++;
   gainXp(m.xp);
   const bony = m.type === 'skeleton' || m.type === 'archer';
-  if (bony) { SFX.play('bones'); fxSparks(m.x, m.y, 20, 10, '#d8d1bd', 140); }
-  else { SFX.play('die'); fxBlood(m.x, m.y, 30, 16); fxDecal('blood', m.x, m.y, m.scale * rand(0.8, 1.2), m.type === 'zombie' ? 'rgba(40,52,14,.8)' : 'rgba(70,6,8,.8)'); }
+  SFX.monster(m, m.overkill ? 'critdie' : 'die');
+  if (bony) { fxSparks(m.x, m.y, 20, 10, '#d8d1bd', 140); }
+  else { fxBlood(m.x, m.y, 30, 16); fxDecal('blood', m.x, m.y, m.scale * rand(0.8, 1.2), m.type === 'zombie' ? 'rgba(40,52,14,.8)' : 'rgba(70,6,8,.8)'); }
   if (m.type === 'wraith') fxSparks(m.x, m.y, 30, 20, '#7ff2ff', 200);
   dropLoot(m.x, m.y, m.mlvl, m.tier);
   if (m.mods.includes('fire')) world.hazards.push({ x: m.x, y: m.y, r: 110, t: 0, delay: 0.7, dmg: m.dmg[1] * 1.2, src: m, kind: 'fire' });
+  if (m.tier === 3) fxSprite('blast', m.x, m.y, { scale: 1.1 });
   if (m.tier === 2) UI.message(`${m.name} 처치!`, RARITY[3].color);
   if (m.tier === 3) {
     world.dungeon.stairs.open = true;
@@ -324,7 +331,7 @@ function damagePlayer(amount, src, opts = {}) {
   UI.hurt();
   if (src && opts.melee) {
     if (s.thorns > 0 && !src.dead) damageMonster(src, s.thorns, false, { color: '#c7a0ff' });
-    if (src.mods && src.mods.includes('cold')) { p.slowT = 2; fxSparks(p.x, p.y, 30, 8, '#9fdcff', 100); }
+    if (src.mods && src.mods.includes('cold')) { p.slowT = 2; fxSparks(p.x, p.y, 30, 8, '#9fdcff', 100); fxSprite('freeze', p.x, p.y, { layer: 'top', scale: 0.7, alpha: 0.85 }); SFX.play('freeze'); }
     if (src.lifeSteal && !src.dead) src.life = Math.min(src.maxLife, src.life + dmg * src.lifeSteal);
   }
   if (p.life <= 0) playerDie();
@@ -336,6 +343,7 @@ function chainLightning(start) {
   let cur = start;
   const pts = [{ x: player.x, y: player.y, z: 40 }, { x: cur.x, y: cur.y }];
   playerStrike(cur, 0.8, { proc: true, color: '#bfe4ff' });
+  fxSprite('thunderstrike', cur.x, cur.y, { scale: 0.8 });
   for (let j = 0; j < 4; j++) {
     let best = null, bd = 230;
     for (const m of world.monsters) {
@@ -347,6 +355,7 @@ function chainLightning(start) {
     hit.add(best.id);
     pts.push({ x: best.x, y: best.y });
     playerStrike(best, 0.8, { proc: true, color: '#bfe4ff' });
+    fxSprite('thunderstrike', best.x, best.y, { scale: 0.7 });
     cur = best;
   }
   // 지그재그 번개 모양
@@ -364,8 +373,9 @@ function chainLightning(start) {
 }
 
 function fireNova(x, y) {
-  SFX.play('fire');
-  fxRing(x, y, 10, 150, 0.45, '#ff8a2a', 10);
+  SFX.play('burn');
+  fxSprite('blast', x, y, { scale: 1.0 });
+  fxRing(x, y, 10, 150, 0.45, '#ff8a2a', 6);
   fxEmbers(x, y, 30, '#ff8a2a', 90);
   fxDecal('scorch', x, y, 1.6);
   world.flashes.push({ x, y, r: 320, life: 0.35, color: [255, 140, 50] });
@@ -405,7 +415,7 @@ function spawnGround(kind, x, y, data) {
   world.ground.push(g);
   if (kind === 'item') {
     const r = g.item.rarity;
-    if (r === 3) { fxBeam(tx, ty, '#ffb84a', 4); SFX.play('unique'); UI.message(`유니크 아이템이 떨어졌습니다: ${g.item.name}`, RARITY[3].color); }
+    if (r === 3) { fxBeam(tx, ty, '#ffb84a', 4); SFX.play('unique'); SFX.play('rare'); fxSprite('sparkle', tx, ty, { life: 2.5, fade: 0.8 }); UI.message(`유니크 아이템이 떨어졌습니다: ${g.item.name}`, RARITY[3].color); }
     else if (r === 2) { fxBeam(tx, ty, '#f4e06d', 1.6); SFX.play('rare'); }
   }
   return g;
@@ -442,7 +452,8 @@ function pickupGround(g) {
     if (slot < 0) { UI.message('가방이 가득 찼습니다', '#ff7a6a'); SFX.play('nope'); return; }
     p.inventory[slot] = g.item;
     world.ground.splice(idx, 1);
-    SFX.play(g.item.rarity >= 2 ? 'rare' : 'pickup');
+    SFX.play('pickup');
+    if (g.item.rarity >= 2) SFX.synth(g.item.rarity === 3 ? 'unique' : 'rare');
     UI.message(`${g.item.name} 획득`, RARITY[g.item.rarity].color);
     UI.refreshPanels();
     Game.dirty = true;
@@ -457,6 +468,7 @@ function openChest(c) {
   if (c.open) return;
   c.open = true;
   SFX.play('chest');
+  fxSprite('sparkle', c.x, c.y, { life: 1.2, fade: 0.5 });
   fxSparks(c.x, c.y, 20, 14, '#ffd27a', 120);
   dropLoot(c.x, c.y, world.mlvl + 1, 4);
 }
@@ -471,13 +483,14 @@ function updateProjectiles(dt) {
   for (let i = world.projectiles.length - 1; i >= 0; i--) {
     const pr = world.projectiles[i];
     pr.life -= dt;
+    pr.t = (pr.t || 0) + dt;
     pr.x += pr.vx * dt; pr.y += pr.vy * dt;
     pr.spin += dt * 22;
     let dead = pr.life <= 0;
     if (!dead && d.solidAt(pr.x, pr.y)) {
       dead = true;
-      if (pr.type === 'fireball') { fxEmbers(pr.x, pr.y, 12); fxDecal('scorch', pr.x, pr.y, 0.5); }
-      else fxSparks(pr.x, pr.y, 25, 5, '#d8c9a0', 90);
+      if (pr.type === 'fireball') { fxEmbers(pr.x, pr.y, 12); fxDecal('scorch', pr.x, pr.y, 0.5); fxSprite('blast', pr.x, pr.y, { scale: 0.3 }); SFX.play('burn', 0.6); }
+      else { fxSparks(pr.x, pr.y, 25, 5, '#d8c9a0', 90); if (pr.type === 'arrow') SFX.play('arrowWall'); }
     }
     if (pr.type === 'fireball' && chance(0.6)) fxEmbers(pr.x, pr.y, 1, '#ff7a22', 4);
     if (!dead && pr.owner === 'player') {
@@ -494,7 +507,7 @@ function updateProjectiles(dt) {
     } else if (!dead && !p.dead && dist(p.x, p.y, pr.x, pr.y) < p.r + pr.r) {
       dead = true;
       damagePlayer(pr.dmg, pr.src, { fire: pr.type === 'fireball' });
-      if (pr.type === 'fireball') fxEmbers(pr.x, pr.y, 14);
+      if (pr.type === 'fireball') { fxEmbers(pr.x, pr.y, 14); fxSprite('blast', pr.x, pr.y, { scale: 0.3 }); SFX.play('burn', 0.6); }
     }
     if (dead) world.projectiles.splice(i, 1);
   }
@@ -509,14 +522,16 @@ function updateHazards(dt) {
     if (h.t < h.delay) continue;
     world.hazards.splice(i, 1);
     if (h.kind === 'fire') {
-      SFX.play('fire');
-      fxRing(h.x, h.y, 10, h.r, 0.4, '#ff8a2a', 10);
+      SFX.play('burn');
+      fxSprite('blast', h.x, h.y, { scale: h.r / 151 });
+      fxRing(h.x, h.y, 10, h.r, 0.4, '#ff8a2a', 6);
       fxEmbers(h.x, h.y, 30, '#ff7a22', 60);
       fxDecal('scorch', h.x, h.y, 1.3);
       world.flashes.push({ x: h.x, y: h.y, r: 280, life: 0.3, color: [255, 120, 40] });
     } else {
       SFX.play('boom');
-      fxRing(h.x, h.y, 10, h.r * 1.2, 0.5, '#ff5a3a', 10);
+      fxSprite('quake', h.x, h.y, { layer: 'ground', scale: h.r / 80 });
+      fxRing(h.x, h.y, 10, h.r * 1.2, 0.5, '#ff5a3a', 6);
       fxDust(h.x, h.y, 16);
       fxDecal('crack', h.x, h.y, 1.6);
       fxShake(10);
@@ -538,6 +553,8 @@ function gainXp(n) {
     p.life = p.stats.maxLife;
     p.fury = p.stats.maxFury;
     SFX.play('levelup');
+    fxSprite('sparkle', p.x, p.y, { follow: p, life: 1.4, fade: 0.5, scale: 1.2 });
+    fxSprite('heal', p.x, p.y, { follow: p, scale: 1.1 });
     fxRing(p.x, p.y, 10, 160, 0.9, '#ffd36a', 6);
     fxSparks(p.x, p.y, 40, 40, '#ffd36a', 200);
     UI.message(`레벨 ${p.level} 달성!`, '#ffd36a');
