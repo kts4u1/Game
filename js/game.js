@@ -2,6 +2,8 @@
 // ───────── 게임 루프 · 입력 · 층 이동 · 저장 ─────────
 
 const SAVE_KEY = 'pitbit-simyeon-save-v1';
+const SETTINGS_KEY = 'pitbit-simyeon-settings';
+const LOOT_FILTER_NAMES = ['모든 아이템', '마법 이상', '레어 이상'];
 
 const Input = {
   mx: 0, my: 0, world: { x: 0, y: 0 }, left: false, right: false, leftMode: null,
@@ -24,7 +26,7 @@ const Game = {
   state: 'title', time: 0, pendingLevels: 0, levelUpDelay: 0, deathT: 0, deathShown: false,
   dirty: false, saveT: 0, revealT: 0, godMode: false, cardsFirst: false, newConfirm: false,
   fontUI: "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
-  titleFocus: { x: 0, y: 0 }, titleA: 0, imgCache: {},
+  titleFocus: { x: 0, y: 0 }, titleA: 0, imgCache: {}, dungeonWorld: null, settings: { lootFilter: 0 },
 
   iconImage(item) {
     const key = `${item.icon}:${item.rarity}:${item.look || 0}`;
@@ -34,6 +36,7 @@ const Game = {
   },
 
   init() {
+    try { Object.assign(this.settings, JSON.parse(store.get(SETTINGS_KEY) || '{}')); } catch (e) { /* 무시 */ }
     initRender($('game'));
     UI.init();
     bindInput();
@@ -47,7 +50,8 @@ const Game = {
   preloadStart() {
     if (!HAS_FLARE) return;
     const el = $('load-status');
-    const paths = [FLARE.tiles.dungeon.img, FLARE.tiles.cave.img, 'icons.webp', FLARE.hero.hand_axe.img, ...heroAssetPaths(null),
+    const paths = [FLARE.tiles.dungeon.img, FLARE.tiles.cave.img, FLARE.tiles.grassland.img, 'icons.webp', FLARE.hero.hand_axe.img, ...heroAssetPaths(null),
+      ...Object.values(FLARE.npcs || {}).map(n => n.img),
       ...monsterAssetPaths(['zombie', 'skeleton', 'skeleton_archer', 'goblin']),
       ...Object.values(FLARE.effects || {}).map(e => e.img)];
     el.textContent = '그림 불러오는 중…';
@@ -59,7 +63,10 @@ const Game = {
   preloadFloor() {
     if (!HAS_FLARE) return;
     const sprites = [...new Set(world.monsters.map(m => m.sprite))];
+    // 소환되는 졸개 그림도 미리
+    if (world.monsters.some(m => m.abil.includes('summon'))) sprites.push('skeleton_weak');
     const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player)];
+    if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) paths.push(FLARE.npcs[n.sprite].img);
     if (paths.every(p => Assets.ready(p))) return;
     this.loading = true;
     Assets.preload(paths).then(() => { this.loading = false; });
@@ -84,7 +91,7 @@ const Game = {
     const s = this.loadSaveData();
     this.newConfirm = false;
     $('btn-new').textContent = '새 게임';
-    UI.showTitle(!!s, s ? `${s.floor}층 · 레벨 ${s.p.level}` : '');
+    UI.showTitle(!!s, s ? `${s.floor ? s.floor + '층' : '마을'} · 레벨 ${s.p.level}` : '');
   },
 
   newGame() {
@@ -95,7 +102,9 @@ const Game = {
     }
     player = createPlayer();
     this.pendingLevels = 0;
-    this.startFloor(1);
+    this.dungeonWorld = null;
+    Shop.buyback = [];
+    this.goTown('new');
     this.enterPlay();
     this.openCards(true);
   },
@@ -110,10 +119,15 @@ const Game = {
     p.equipment = Object.assign(p.equipment, d.equipment || {});
     p.inventory = (d.inventory || []).concat(new Array(40).fill(null)).slice(0, 40);
     p.kills = d.kills || 0;
+    p.deepest = d.deepest || s.floor || 1;
+    p.stash = (d.stash || []).concat(new Array(STASH_SIZE).fill(null)).slice(0, STASH_SIZE);
+    p.elixirs = d.elixirs || {};
     recalcStats(p);
     p.life = p.stats.maxLife;
     this.pendingLevels = 0;
-    this.startFloor(s.floor);
+    this.dungeonWorld = null;
+    Shop.buyback = [];
+    if (s.floor) this.startFloor(s.floor); else this.goTown('start');
     this.enterPlay();
     if (!Object.keys(p.skills).length) this.openCards(true);
   },
@@ -127,14 +141,14 @@ const Game = {
     SFX.setAmbient(world.dungeon.theme.tiles);
   },
 
-  startFloor(n) {
-    world = makeWorld(n);
-    populateFloor();
+  // 새 층(또는 마을)에 플레이어를 세우고 그림·소리·카메라를 맞춤
+  arrive(x, y) {
     const p = player, d = world.dungeon;
-    p.x = d.start.x; p.y = d.start.y; p.z = 0;
-    p.order = p.path = p.attack = p.leap = p.whirl = null;
+    p.x = x; p.y = y; p.z = 0;
+    p.order = p.path = p.attack = p.leap = p.whirl = p.tp = null;
+    p.dead = false;
     if (R.themeName !== d.theme.name) buildThemeSprites(d.theme);
-    prepareFloorArt(d);
+    if (!d.art) prepareFloorArt(d);
     this.preloadFloor();
     SFX.setAmbient(d.theme.tiles);
     FX.reset();
@@ -142,13 +156,66 @@ const Game = {
     R.camY = isoY(p.x, p.y) - 30;
     d.reveal(p.x, p.y, 9);
     UI.setFloor();
+  },
+
+  startFloor(n) {
+    world = makeWorld(n);
+    populateFloor();
+    const p = player, d = world.dungeon;
+    const prevDeep = p.deepest || 1;
+    p.deepest = Math.max(prevDeep, n);
+    this.arrive(d.start.x, d.start.y);
     UI.banner(`${n}층 · ${d.theme.name}`, isBossFloor(n) ? `보스가 계단을 지키고 있습니다 · 몬스터 레벨 ${world.mlvl}` : `몬스터 레벨 ${world.mlvl}`);
+    if (n > prevDeep && n > 1 && (n - 1) % 5 === 0) UI.message(`${n}층 웨이포인트가 열렸습니다. 마을의 심연의 문에서 바로 올 수 있습니다.`, '#8fd0ff');
     this.save();
+  },
+
+  // 마을로 감. how: new 새 게임, start 이어하기, portal 귀환 차원문, death 부활
+  goTown(how) {
+    world = makeWorld(0);
+    populateFloor();
+    const d = world.dungeon, p = player;
+    const at = how === 'portal' || how === 'death' ? d.portalSpot : d.start;
+    this.arrive(at.x + (how === 'portal' ? -40 : 0), at.y + (how === 'portal' ? 30 : 0));
+    p.poisonT = 0; p.slowT = 0;
+    Shop.restock();
+    UI.banner(d.theme.name, how === 'new' ? '심연의 문(가운데 빛나는 원)으로 들어가 던전으로 내려가세요' : '상인과 거래하고 장비를 정비하세요');
+    if (how === 'new') UI.message('상인을 누르면 거래할 수 있습니다. 던전에서는 T 키로 마을에 돌아올 수 있습니다.', '#e8d9a8');
+    this.save();
+  },
+
+  // 귀환 차원문을 통해 남겨 둔 던전으로 돌아감
+  returnToDungeon() {
+    const dw = this.dungeonWorld;
+    if (!dw || !dw.portal) { UI.message('열려 있는 차원문이 없습니다', '#c9c1b3'); return; }
+    world = dw;
+    SFX.play('teleporter');
+    this.arrive(dw.portal.x + 40, dw.portal.y + 20);
+    UI.banner(`${world.floor}층 · ${world.dungeon.theme.name}`, '차원문을 통해 돌아왔습니다');
+    this.save();
+  },
+
+  // 웨이포인트 이동
+  travel(f) {
+    this.dungeonWorld = null;
+    SFX.play('teleporter');
+    this.startFloor(f);
   },
 
   descend() {
     SFX.play('stairs');
+    this.dungeonWorld = null;
     this.startFloor(world.floor + 1);
+  },
+
+  saveSettings() { store.set(SETTINGS_KEY, JSON.stringify(this.settings)); },
+
+  // 바닥 아이템 표시: 전부 → 마법 이상 → 레어 이상
+  cycleLootFilter() {
+    this.settings.lootFilter = ((this.settings.lootFilter || 0) + 1) % 3;
+    this.saveSettings();
+    UI.message(`바닥 아이템 표시: ${LOOT_FILTER_NAMES[this.settings.lootFilter]}`, '#e8d9a8');
+    UI.syncMenu();
   },
 
   openCards(first) {
@@ -182,8 +249,11 @@ const Game = {
     if (!player || this.state === 'title' || !world) return;
     const p = player;
     const data = {
-      v: 1, floor: world.floor,
-      p: { level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, bonusLife: p.bonusLife, skills: p.skills, hotbar: p.hotbar, equipment: p.equipment, inventory: p.inventory, kills: p.kills },
+      v: 1, floor: world.town ? 0 : world.floor,
+      p: {
+        level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, bonusLife: p.bonusLife, skills: p.skills, hotbar: p.hotbar,
+        equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, elixirs: p.elixirs,
+      },
     };
     store.set(SAVE_KEY, JSON.stringify(data));
     this.dirty = false;
@@ -207,7 +277,10 @@ const Game = {
 
 function makeWorld(floor) {
   const dungeon = new Dungeon(floor);
-  return { floor, dungeon, mlvl: monsterLevelForFloor(floor), monsters: [], ground: [], projectiles: [], chests: [], hazards: [], waves: [], flashes: [] };
+  return {
+    floor, dungeon, town: floor === 0, mlvl: floor ? monsterLevelForFloor(floor) : 1, monsters: [], ground: [], projectiles: [],
+    chests: [], hazards: [], waves: [], flashes: [], pools: [], portal: null,
+  };
 }
 
 // ── 입력 ──
@@ -252,6 +325,8 @@ function bindInput() {
         if (free) useSkill(+k.slice(5) - 1);
         break;
       case 'KeyQ': if (free) drinkPotion(); break;
+      case 'KeyT': if (free) Town.castPortal(); break;
+      case 'KeyL': Game.cycleLootFilter(); break;
       case 'KeyI': UI.toggleMenu(false); UI.togglePanel('inv'); break;
       case 'KeyC': UI.toggleMenu(false); UI.togglePanel('char'); break;
       case 'Tab': R.showMap = !R.showMap; break;
@@ -274,6 +349,8 @@ function onLeftPress(shift) {
   else if (h && h.kind === 'monster') { p.order = { type: 'attack', target: h.ref }; Input.leftMode = 'attack'; }
   else if (h && h.kind === 'chest') { p.order = { type: 'chest', target: h.ref }; Input.leftMode = 'once'; }
   else if (h && h.kind === 'stairs') { p.order = { type: 'stairs' }; Input.leftMode = 'once'; }
+  else if (h && h.kind === 'npc') { p.order = { type: 'npc', target: h.ref }; Input.leftMode = 'once'; }
+  else if (h && h.kind === 'portal') { p.order = { type: 'portal', target: h.ref }; Input.leftMode = 'once'; }
   else {
     p.order = { type: 'move', x: Input.world.x, y: Input.world.y };
     Input.leftMode = 'move';
@@ -324,7 +401,7 @@ function updateHover() {
     if (!h) {
       let bd = Infinity;
       for (const m of world.monsters) {
-        if (m.dead || dist(m.x, m.y, p.x, p.y) > 1000) continue;
+        if (!hittable(m) || dist(m.x, m.y, p.x, p.y) > 1000) continue;
         const mh = monsterHeight(m);
         const sp = worldToScreen(m.x, m.y, mh * 0.45);
         const d = Math.hypot(sp.x - Input.mx, (sp.y - Input.my) * 0.7);
@@ -339,7 +416,27 @@ function updateHover() {
         if (Math.hypot(sp.x - Input.mx, sp.y - Input.my) < 28 * R.zoom + 6) { h = { kind: 'chest', ref: c }; break; }
       }
     }
-    if (!h) {
+    if (!h && world.portal) {
+      const sp = worldToScreen(world.portal.x, world.portal.y, 40);
+      if (Math.hypot(sp.x - Input.mx, (sp.y - Input.my) * 0.8) < 46 * R.zoom) h = { kind: 'portal', ref: world.portal };
+    }
+    if (!h && world.town) {
+      // 마을 사람·보관함·심연의 문
+      let bd = Infinity;
+      for (const n of world.dungeon.npcs) {
+        const hgt = n.sprite ? 70 : n.role === 'gate' ? 0 : 20;
+        const sp = worldToScreen(n.x, n.y, hgt * 0.6);
+        const rr = (n.role === 'gate' ? 70 : 34) * R.zoom;
+        const d = Math.hypot(sp.x - Input.mx, (sp.y - Input.my) * (n.role === 'gate' ? 1.9 : 0.7));
+        if (d < rr && d < bd) { bd = d; h = { kind: 'npc', ref: n }; }
+      }
+      const tp = Game.dungeonWorld && Game.dungeonWorld.portal ? world.dungeon.portalSpot : null;
+      if (!h && tp) {
+        const sp = worldToScreen(tp.x, tp.y, 40);
+        if (Math.hypot(sp.x - Input.mx, (sp.y - Input.my) * 0.8) < 46 * R.zoom) h = { kind: 'portal', ref: tp };
+      }
+    }
+    if (!h && !world.dungeon.stairs.none) {
       const st = world.dungeon.stairs;
       const sp = worldToScreen(st.x, st.y);
       if (Math.abs(sp.x - Input.mx) / (110 * R.zoom) + Math.abs(sp.y - Input.my) / (55 * R.zoom) < 1) h = { kind: 'stairs' };
@@ -347,7 +444,7 @@ function updateHover() {
   }
   const prev = Input.hover;
   Input.hover = h;
-  const cls = h ? (h.kind === 'monster' ? 'cur-attack' : 'cur-use') : '';
+  const cls = h ? (h.kind === 'monster' ? 'cur-attack' : h.kind === 'npc' && h.ref.role === 'talk' ? 'cur-talk' : 'cur-use') : '';
   if (R.canvas.dataset.cur !== cls) { R.canvas.dataset.cur = cls; R.canvas.className = cls; }
   // 바닥 아이템 툴팁
   if (UI.finePointer && h && h.kind === 'ground' && h.ref.kind === 'item') {
@@ -396,7 +493,7 @@ function update(dt) {
       Game.stepT = (Game.stepT || 0) - dt * (pl.stats.speed / 185);
       if (Game.stepT <= 0) { Game.stepT = 0.34; SFX.play('step'); }
     }
-    if (!pl.dead && pl.life < pl.stats.maxLife * 0.25) {
+    if (!pl.dead && !world.town && pl.life < pl.stats.maxLife * 0.25) {
       Game.heartT = (Game.heartT || 0) - dt;
       if (Game.heartT <= 0) { Game.heartT = 1.75; SFX.play('heartbeat'); }
     } else Game.heartT = 0;
@@ -404,7 +501,9 @@ function update(dt) {
     updateProjectiles(dt);
     updateWaves(dt);
     updateHazards(dt);
+    updatePools(dt);
     updateGround(dt);
+    if (world.town) updateTownNpcs(dt);
     updateFX(dt);
     for (let i = world.flashes.length - 1; i >= 0; i--) { world.flashes[i].life -= dt; if (world.flashes[i].life <= 0) world.flashes.splice(i, 1); }
     if (world.monsters.some(m => m.dead && m.deadT > 9)) world.monsters = world.monsters.filter(m => !(m.dead && m.deadT > 9));

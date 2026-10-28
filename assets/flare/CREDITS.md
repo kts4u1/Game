@@ -1,9 +1,9 @@
 # 그림 자원 저작자 표시 (Art credits)
 
-이 폴더의 그림(`hero/`, `monsters/`, `tiles/`, `effects/`, `icons.webp`)과 효과음(`sounds.js`)은
+이 폴더의 그림(`hero/`, `monsters/`, `npcs/`, `tiles/`, `effects/`, `icons.webp`)과 효과음(`sounds.js`)은
 **Flare: Empyrean Campaign** (flare-game) 프로젝트의 자원을 변환한 것입니다.
 
-- 원본: https://github.com/flareteam/flare-game (`mods/fantasycore`)
+- 원본: https://github.com/flareteam/flare-game (`mods/fantasycore`, `mods/empyrean_campaign`)
 - 저작권: Copyright © 2010-2013 Clint Bellanger. 각 기여자가 자신의 기여분에 대한 저작권을 가집니다.
 - 라이선스: [CC-BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (원 프로젝트가 이후 버전도 허용). 원문은 `LICENSE-CC-BY-SA-3.0.txt`
 - 파일별 상세 저작자: https://github.com/flareteam/flare-game/wiki/Credits
@@ -16,6 +16,8 @@
 - 원본의 70% 크기로 줄이고 새 아틀라스로 다시 묶음
 - PNG를 WebP로 변환
 - 게임 안에서 층 테마에 따라 타일에 색을 입힘 (초록, 붉은색, 보라색)
+- 일부 보스는 게임 안에서 색조를 바꿔 그림
+- 방향이 필요 없는 저주받은 무덤은 한 방향 프레임만 남김
 - 효과음 OGG를 모노 MP3로 변환해 base64로 `sounds.js`에 담음
 
 변환한 그림과 효과음도 같은 CC-BY-SA 3.0 조건으로 배포합니다. 이 라이선스는 그림·효과음에만 적용되며, 게임 코드(`js/`, `css/`, `index.html`, `tools/`)는 포함하지 않습니다.
@@ -32,11 +34,18 @@
 | --- | --- |
 | 야만용사 몸·머리 | `avatar/male/default_*`, `head_short` |
 | 투구·갑옷·장갑·장화 | `avatar/male/leather_*`, `chain_*`, `plate_*` |
-| 무기 | `avatar/male/hand_axe`, `battle_axe`, `longsword`, `greatsword`, `mace`, `war_hammer` |
-| 좀비, 해골 창병, 해골 석궁병, 해골 마법사 | `enemies/zombie`, `skeleton`, `skeleton_archer`, `skeleton_mage` |
-| 고블린, 개미귀신, 미노타우로스, 화염 비룡 | `enemies/goblin`, `antlion`, `minotaur`, `wyvern_fire` |
+| 무기 | `avatar/male/hand_axe`, `battle_axe`, `longsword`, `greatsword`, `mace`, `war_hammer`, `club`, `reinforced_club`, `maul`, `zweihander`, `infantry_axe`, `shortsword`, `dagger` |
+| 방패 | `avatar/male/buckler`, `shield`, `iron_buckler`, `kite_shield` |
+| 좀비, 해골 창병, 해골 석궁병, 해골 마법사, 해골 병사 | `enemies/zombie`, `skeleton`, `skeleton_archer`, `skeleton_mage`, `skeleton_weak` |
+| 고블린, 고블린 약탈자, 개미귀신, 새끼 개미귀신, 불개미, 서리 개미 | `enemies/goblin`, `goblin_elite`, `antlion`, `antlion_small`, `fire_ant`, `ice_ant` |
+| 미노타우로스, 화염·독·서리 비룡, 저주받은 무덤 | `enemies/minotaur`, `wyvern_fire`, `wyvern`, `wyvern_water`, `cursed_grave` |
+| 홉고블린, 홉고블린 궁수, 어둠의 망자, 갑각 개미귀신 | `empyrean_campaign/enemies/hobgoblin`, `hobgoblin_archer`, `zombie_dark`, `antlion_armored` |
+| 해골 기사, 해골 대마법사, 해골왕 (보스) | `empyrean_campaign/enemies/skeleton_knight_boss`, `skeleton_mage_boss`, `skeleton_mage_high_boss` |
+| 마을 사람, 오벨리스크 | `npcs/guild_man`, `knight`, `peasant_man1`, `peasant_man2`, `peasant_woman1`, `peasant_woman2`, `wandering_trader`, `return_obelisk1`, `empyrean_campaign/npcs/peddler_goblin` |
 | 던전·동굴 바닥과 벽, 화로, 상자, 계단, 뼈 | `tilesets/tileset_dungeon`, `tileset_cave` |
+| 마을 풀밭·돌길·나무·덤불·바위·천막·모루·모닥불·상자·묘비·돌 원 | `tilesets/tileset_grassland` |
 | 아이템·스킬 아이콘 | `icons/icons.png` |
 | 칼날 궤적, 지진, 화염 폭발, 가시, 주황 보호막, 낙뢰, 번개, 타격 불꽃, 치유, 반짝임, 냉기, 땅 갈라짐 | `powers/cleave`, `quake`, `blast`, `spikes`, `shield_orange`, `thunderstrike`, `lightning`, `spark_*`, `heal`, `sparkle`, `freeze`, `rupture` |
-| 투척 도끼, 화살, 화염구 | `powers/throw_axe`, `arrows`, `fireball` |
-| 효과음 | `soundfx/` 의 휘두르기, 함성, 지진, 가시, 화염, 번개, 물약, 레벨업, 금화, 장비, 상자, 계단, 발소리, 심장 박동, 동굴 배경음, 몬스터별 공격·피격·죽음·울음 |
+| 투척 도끼, 화살, 화염구, 얼음창, 독침, 마력구, 돌, 투척 단검, 창 | `powers/throw_axe`, `arrows`, `fireball`, `icicle`, `spit`, `plasmaball`, `stone`, `throw_knife`, `spear` |
+| 소환 마법진, 차원문 룬, 어둠 안개, 독 불꽃, 덫, 얼어붙음 | `powers/runes`, `runes_blue`, `dark_mist`, `spark_green`, `bear_trap`, `status_freeze` |
+| 효과음 | `soundfx/` 의 휘두르기, 함성, 지진, 가시, 화염, 번개, 물약, 레벨업, 금화, 장비, 방패 막기, 상자, 계단, 발소리, 심장 박동, 동굴·마을 배경음, 순간이동, 차원문, 상인 목소리, 몬스터별 공격·피격·죽음·울음, 무덤 |

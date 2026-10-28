@@ -8,6 +8,7 @@
 사용법:
     git clone --depth 1 https://github.com/flareteam/flare-game.git
     python3 -I tools/build_flare_assets.py flare-game/mods/fantasycore assets/flare
+    (일부 몬스터·NPC는 옆 폴더 mods/empyrean_campaign 에서 가져온다)
 
 Flare 그림 자원 라이선스: CC-BY-SA 3.0 (자세한 내용은 assets/flare/CREDITS.md)
 """
@@ -32,23 +33,51 @@ HERO_LAYERS = [
     'chain_coif', 'chain_cuirass', 'chain_greaves', 'chain_gloves', 'chain_boots',
     'plate_helm', 'plate_cuirass', 'plate_greaves', 'plate_gauntlets', 'plate_boots',
     'hand_axe', 'battle_axe', 'longsword', 'greatsword', 'mace', 'war_hammer',
+    'club', 'reinforced_club', 'maul', 'zweihander', 'infantry_axe', 'shortsword', 'dagger',
+    'buckler', 'shield', 'iron_buckler', 'kite_shield',
 ]
+# 몬스터: 이름 → (애니메이션, 모드 폴더, 저장 배율)
+EMP = 'empyrean_campaign'
 MONSTERS = {
-    'zombie': ['stance', 'run', 'swing', 'die'],
-    'skeleton': ['stance', 'run', 'swing', 'die'],
-    'skeleton_archer': ['stance', 'run', 'shoot', 'die'],
-    'skeleton_mage': ['stance', 'run', 'cast', 'die'],
-    'goblin': ['stance', 'run', 'swing', 'die'],
-    'antlion': ['stance', 'run', 'swing', 'die'],
-    'minotaur': ['stance', 'run', 'swing', 'die'],
-    'wyvern_fire': ['stance', 'run', 'swing', 'die'],
+    'zombie': (['stance', 'run', 'swing', 'die'], None, None),
+    'skeleton': (['stance', 'run', 'swing', 'die'], None, None),
+    'skeleton_archer': (['stance', 'run', 'shoot', 'die'], None, None),
+    'skeleton_mage': (['stance', 'run', 'cast', 'die'], None, None),
+    'goblin': (['stance', 'run', 'swing', 'die'], None, None),
+    'antlion': (['stance', 'run', 'swing', 'die'], None, None),
+    'minotaur': (['stance', 'run', 'swing', 'die'], None, None),
+    'wyvern_fire': (['stance', 'run', 'swing', 'die'], None, None),
+    # 새 몬스터
+    'hobgoblin': (['stance', 'run', 'swing', 'die'], EMP, None),
+    'hobgoblin_archer': (['stance', 'run', 'shoot', 'die'], EMP, None),
+    'zombie_dark': (['stance', 'run', 'swing', 'die', 'spawn'], EMP, None),
+    'skeleton_knight_boss': (['stance', 'run', 'swing', 'die'], EMP, 0.6),
+    'skeleton_mage_boss': (['stance', 'run', 'cast', 'die'], EMP, 0.6),
+    'skeleton_mage_high_boss': (['stance', 'run', 'cast', 'die'], EMP, 0.6),
+    'antlion_armored': (['stance', 'run', 'swing', 'die'], EMP, 0.6),
+    'antlion_small': (['stance', 'run', 'swing', 'die', 'spawn'], None, None),
+    'fire_ant': (['stance', 'run', 'swing', 'die', 'spawn'], None, None),
+    'ice_ant': (['stance', 'run', 'swing', 'die', 'spawn'], None, None),
+    'goblin_elite': (['stance', 'run', 'swing', 'die'], None, None),
+    'skeleton_weak': (['stance', 'run', 'swing', 'die'], None, None),
+    'cursed_grave': (['stance', 'cast', 'die'], None, None),  # 방향 1개만
+    'wyvern': (['stance', 'run', 'swing', 'die'], None, 0.55),
+    'wyvern_water': (['stance', 'run', 'swing', 'die'], None, 0.55),
+}
+# 마을 사람들 (서 있는 모습만)
+NPCS = {
+    'guild_man': None, 'knight': None, 'peasant_man1': None, 'peasant_man2': None,
+    'peasant_woman1': None, 'peasant_woman2': None, 'wandering_trader': None,
+    'return_obelisk1': None, 'peddler_goblin': EMP,
 }
 # 스킬·투사체·타격 효과 (animations/powers)
 EFFECTS = [
     'cleave', 'quake', 'blast', 'spikes', 'shield_orange', 'throw_axe', 'arrows', 'fireball',
     'thunderstrike', 'lightning', 'spark_red', 'spark_orange', 'spark_blue', 'heal', 'sparkle', 'freeze', 'rupture',
+    'spit', 'icicle', 'runes', 'runes_blue', 'dark_mist', 'spark_green', 'plasmaball', 'stone', 'throw_knife',
+    'spear', 'bear_trap', 'status_freeze',
 ]
-EFFECT_SCALE = {'blast': 0.5, 'quake': 0.6, 'shield_orange': 0.55, 'thunderstrike': 0.6}
+EFFECT_SCALE = {'blast': 0.5, 'quake': 0.6, 'shield_orange': 0.55, 'thunderstrike': 0.6, 'dark_mist': 0.5, 'runes': 0.6}
 
 # 효과음: 게임 안 이름 → soundfx 경로
 SOUNDS = {
@@ -64,6 +93,14 @@ SOUNDS = {
     'wood_open': 'wood_open', 'stairs': 'environment/stairs',
     'amb_drops': 'environment/cave_droplets_loop', 'amb_wind': 'environment/cave_wind_loop',
     'step1': 'steps/step_echo1', 'step2': 'steps/step_echo2', 'step3': 'steps/step_echo3', 'step4': 'steps/step_echo4',
+    'grave_attack': 'enemies/grave_attack', 'grave_die': 'enemies/grave_die', 'grave_hit': 'enemies/grave_hit',
+    'amb_birds': 'environment/bird_twitter_loop', 'teleporter': 'environment/teleporter', 'teleport': 'powers/teleport',
+    'block': 'powers/block', 'heal': 'powers/heal', 'stone_open': 'environment/stone_open', 'door': 'door_open',
+    'click': 'widget_activate', 'page': 'inventory/inventory_page', 'inv_book': 'inventory/inventory_book',
+    'fire_loop': 'environment/open_fire_loop',
+    'npc_m1': 'npcs/male_merchant_01', 'npc_m2': 'npcs/male_merchant_02', 'npc_m3': 'npcs/male_merchant_03',
+    'npc_m4': 'npcs/male_merchant_04', 'npc_f1': 'npcs/female_merchant_01', 'npc_f2': 'npcs/female_merchant_02',
+    'npc_f3': 'npcs/female_merchant_03', 'npc_f4': 'npcs/female_merchant_04',
 }
 for _m in ('zombie', 'skeleton', 'goblin', 'antlion', 'minotaur', 'wyvern'):
     for _k in ('hit', 'die', 'phys', 'ment', 'critdie'):
@@ -89,6 +126,22 @@ TILESETS = {
         'outer': [72, 76, 98], 'inner': [74], 'black': [66, 67, 74],
         'decor': [],
         'props': {},
+    },
+    # 마을: 풀밭, 돌길, 나무, 천막, 모루, 웨이포인트 고리
+    'grassland': {
+        'floor': list(range(16, 32)),
+        'path': [32, 33, 34, 35, 36, 37, 38, 39],
+        'trees': list(range(240, 256)),
+        'bushes': list(range(112, 128)),
+        'rocks': [128, 129, 130, 131],
+        'graves': [140, 141, 142, 143],
+        'fences': [104, 107],
+        'props': {
+            'tent': 72, 'tent2': 75, 'chest': 76, 'chestOpen': 77, 'crate': 96, 'crateOpen': 97,
+            'crates': 98, 'crates2': 99, 'wood': 100, 'wood2': 101, 'campfire': 102, 'anvil': 103,
+            'stump': 136, 'stumpAxe': 137, 'sign': 138, 'sign2': 139, 'pillar': 132, 'pillar2': 133,
+            'ring': 264, 'portal': 265,
+        },
     },
 }
 
@@ -157,7 +210,8 @@ def scaled(im, k=None):
     return im.resize((w, h), Image.LANCZOS)
 
 
-def build_sprite(base, anim_path, wanted, out_png, scale=None):
+def build_sprite(base, anim_path, wanted, out_png, scale=None, one_dir=False):
+    """one_dir: 방향이 상관없는 것(무덤 등)은 0번 방향만 저장"""
     scale = SCALE if scale is None else scale
     images, anims = parse_anim(anim_path)
     sheets = {}
@@ -178,7 +232,7 @@ def build_sprite(base, anim_path, wanted, out_png, scale=None):
         n = a['n']
         table = [[None] * n for _ in range(8)]
         for idx, d, x, y, w, h, ox, oy, key in a['frames']:
-            if idx >= n or d >= 8:
+            if idx >= n or d >= 8 or (one_dir and d):
                 continue
             src = sheet(key, anim)
             rect_key = (id(src), x, y, w, h)
@@ -270,15 +324,22 @@ def build_sounds(base, out_js):
 
 def main():
     base, out = sys.argv[1], sys.argv[2]
-    for sub in ('hero', 'monsters', 'tiles', 'effects'):
+    for sub in ('hero', 'monsters', 'npcs', 'tiles', 'effects'):
         os.makedirs(os.path.join(out, sub), exist_ok=True)
     manifest = {'scale': SCALE, 'hero': {}, 'monsters': {}, 'tiles': {}, 'effects': {}}
     for layer in HERO_LAYERS:
         manifest['hero'][layer] = build_sprite(base, os.path.join(base, 'animations', 'avatar', 'male', f'{layer}.txt'), HERO_ANIMS, os.path.join(out, 'hero', f'{layer}.webp'))
         print('hero', layer, manifest['hero'][layer]['size'])
-    for name, anims in MONSTERS.items():
-        manifest['monsters'][name] = build_sprite(base, os.path.join(base, 'animations', 'enemies', f'{name}.txt'), anims, os.path.join(out, 'monsters', f'{name}.webp'))
+    mods = os.path.dirname(os.path.abspath(base))
+    for name, (anims, mod, scale) in MONSTERS.items():
+        b = os.path.join(mods, mod) if mod else base
+        manifest['monsters'][name] = build_sprite(b, os.path.join(b, 'animations', 'enemies', f'{name}.txt'), anims, os.path.join(out, 'monsters', f'{name}.webp'), scale, name == 'cursed_grave')
         print('monster', name, manifest['monsters'][name]['size'])
+    manifest['npcs'] = {}
+    for name, mod in NPCS.items():
+        b = os.path.join(mods, mod) if mod else base
+        manifest['npcs'][name] = build_sprite(b, os.path.join(b, 'animations', 'npcs', f'{name}.txt'), ['stance'], os.path.join(out, 'npcs', f'{name}.webp'))
+        print('npc', name, manifest['npcs'][name]['size'])
     for name, spec in TILESETS.items():
         manifest['tiles'][name] = build_tileset(base, name, spec, os.path.join(out, 'tiles', f'{name}.webp'))
         print('tiles', name, manifest['tiles'][name]['size'])
@@ -291,7 +352,7 @@ def main():
     icons.save(os.path.join(out, 'icons.webp'), 'WEBP', quality=88, method=6)
     manifest['icons'] = {'size': 64, 'cols': icons.width // 64}
     # 하위 폴더 안의 그림 경로 계층
-    for k in ('hero', 'monsters', 'effects'):
+    for k in ('hero', 'monsters', 'npcs', 'effects'):
         for name, m in manifest[k].items():
             m['img'] = f'{k}/{name}.webp'
     for name, m in manifest['tiles'].items():

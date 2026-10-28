@@ -5,8 +5,8 @@ function createPlayer() {
   const p = {
     x: 0, y: 0, r: 14, z: 0, facing: 0.8, level: 1, xp: 0, life: 100, fury: 50, gold: 0, potions: 3, bonusLife: 0,
     skills: {}, hotbar: [null, null, null, null], cds: {},
-    equipment: { weapon: null, helm: null, amulet: null, armor: null, ring1: null, ring2: null, gloves: null, belt: null, boots: null },
-    inventory: new Array(40).fill(null),
+    equipment: { weapon: null, shield: null, helm: null, amulet: null, armor: null, ring1: null, ring2: null, gloves: null, belt: null, boots: null },
+    inventory: new Array(40).fill(null), stash: new Array(STASH_SIZE).fill(null), elixirs: {}, poisonT: 0, poisonDps: 0,
     walkPhase: 0, moving: false, attack: null, leap: null, whirl: null, pose: null, poseT: 0, poseDur: 0,
     buffs: {}, hurtT: 0, slowT: 0, potionCD: 0, healLeft: 0, healRate: 0, dead: false, order: null,
     path: null, pathKey: '', pathT: 0, stuck: 0, stats: {}, procCD: 0, kills: 0,
@@ -21,7 +21,9 @@ function recalcStats(p) {
   const s = {
     minDmg: 2, maxDmg: 5, aps: 1.2, armor: 0, life: 0, lifePct: 0, furyMax: 0, furyRegen: 0, lifeRegen: 0,
     crit: 5, critDmg: 50, lifeSteal: 0, moveSpeed: 0, mf: 0, gf: 0, xp: 0, thorns: 0, allSkills: 0,
-    dmgPct: 0, ias: 0, dmgFlat: 0, procLightning: 0, procFireNova: 0, armorPct: 0, regenPct: 0,
+    dmgPct: 0, ias: 0, dmgFlat: 0, procLightning: 0, procFireNova: 0, procFrostNova: 0, armorPct: 0, regenPct: 0,
+    fireDmg: 0, coldDmg: 0, lightDmg: 0, dmgUndead: 0, dmgReduce: 0, killLife: 0, killFury: 0, cdr: 0, furyCost: 0,
+    potionBoost: 0, blockChance: 0, resAll: 0, block: 0, skillBonus: {},
   };
   let reach = 56;
   for (const k of EQUIP_KEYS) {
@@ -29,11 +31,27 @@ function recalcStats(p) {
     if (!it) continue;
     if (it.dmg) {
       s.minDmg = it.dmg[0]; s.maxDmg = it.dmg[1]; s.aps = it.aps;
-      if (it.icon === 'greataxe' || it.icon === 'greatsword' || it.icon === 'hammer') reach = 66;
+      if (isTwoHanded(it)) reach = 66;
     }
     if (it.def) s.armor += it.def;
-    for (const a of it.affixes) { if (!a.local) s[a.stat] = (s[a.stat] || 0) + a.value; }
+    if (it.block) s.block += it.block;
+    for (const a of it.affixes) {
+      if (a.stat === 'skill') s.skillBonus[a.skill] = (s.skillBonus[a.skill] || 0) + a.value;
+      else if (!a.local) s[a.stat] = (s[a.stat] || 0) + a.value;
+    }
   }
+  // 세트 효과
+  const sets = setCounts(p.equipment);
+  for (const id in sets) {
+    const S = SETS[id];
+    if (!S) continue;
+    for (const n in S.bonus) if (sets[id] >= +n) for (const st in S.bonus[n]) s[st] = (s[st] || 0) + S.bonus[n][st];
+  }
+  // 마을에서 산 비약
+  const el = p.elixirs || {};
+  if (el.power > 0) s.dmgPct += 25;
+  if (el.iron > 0) { s.armorPct += 30; s.resAll += 15; }
+  if (el.luck > 0) { s.mf += 50; s.gf += 50; }
   p.stats = s;
   const pv = id => { const L = effLevel(p, id); return L ? SKILLS[id].vals(L) : null; };
   let v;
@@ -62,6 +80,10 @@ function recalcStats(p) {
   s.reach = reach;
   s.lifeSteal = Math.min(s.lifeSteal, 25);
   s.crit = Math.min(s.crit, 75);
+  s.block = p.equipment.shield ? Math.min(50, s.block + s.blockChance) : 0;
+  s.res = Math.min(75, s.resAll);
+  s.cdr = Math.min(40, s.cdr);
+  s.furyCost = Math.min(40, s.furyCost);
   p.life = Math.min(p.life, s.maxLife);
   p.fury = Math.min(p.fury, s.maxFury);
 }
@@ -128,6 +150,19 @@ function updatePlayer(dt) {
     if (p.buffs.berserk <= 0) { p.buffs.berserk = 0; recalcStats(p); }
     else if (chance(dt * 25)) fxEmbers(p.x, p.y, 1, '#ff3a22', 14);
   }
+  // 비약 남은 시간
+  for (const k in p.elixirs) {
+    if (p.elixirs[k] <= 0) continue;
+    p.elixirs[k] -= dt;
+    if (p.elixirs[k] <= 0) { p.elixirs[k] = 0; recalcStats(p); UI.message(`${ELIXIRS[k].name}의 효과가 끝났습니다`, '#c9c1b3'); }
+  }
+  // 중독: 방어력을 무시하고 서서히 피해 (원소 저항으로 줄어듦)
+  if (p.poisonT > 0) {
+    p.poisonT -= dt;
+    p.life -= p.poisonDps * (1 - p.stats.res / 100) * dt;
+    if (chance(dt * 6)) fxSparks(p.x, p.y, 40, 1, '#8aff5a', 40);
+    if (p.life <= 0) { playerDie(); return; }
+  }
   if (p.healLeft > 0) {
     const h = Math.min(p.healLeft, p.healRate * dt);
     p.healLeft -= h;
@@ -138,6 +173,13 @@ function updatePlayer(dt) {
   if (p.pose) { p.poseT += dt; if (p.poseT >= p.poseDur) p.pose = null; }
   p.moving = false;
 
+  if (p.tp) {
+    p.tp.t += dt;
+    if (chance(dt * 30)) fxSparks(p.x + rand(-20, 20), p.y + rand(-20, 20), rand(10, 70), 1, '#8fd0ff', 40);
+    if (Input.keyDir() !== null || (p.order && p.order.type === 'move')) { p.tp = null; UI.message('귀환이 취소되었습니다', '#c9c1b3'); }
+    else if (p.tp.t >= p.tp.dur) { p.tp = null; Town.castPortalDone(); }
+    return;
+  }
   if (p.leap) { updateLeap(dt); return; }
   if (p.whirl) { updateWhirl(dt); return; }
   if (p.attack) { updateAttack(dt); return; }
@@ -164,7 +206,7 @@ function updatePlayer(dt) {
       break;
     case 'attack': {
       const m = o.target;
-      if (!m || m.dead) { p.order = null; break; }
+      if (!m || !hittable(m)) { p.order = null; break; }
       const reach = s.reach + m.r;
       if (dist(p.x, p.y, m.x, m.y) <= reach) {
         startAttack(o.skill || 'basic', m);
@@ -180,6 +222,12 @@ function updatePlayer(dt) {
     case 'chest':
       if (o.target.open) { p.order = null; break; }
       if (navigate(p, o.target.x, o.target.y, dt, 42)) { openChest(o.target); p.order = null; }
+      break;
+    case 'npc':
+      if (navigate(p, o.target.x, o.target.y, dt, o.target.reach || 74)) { p.order = null; p.facing = angleTo(p.x, p.y, o.target.x, o.target.y); Town.interact(o.target); }
+      break;
+    case 'portal':
+      if (navigate(p, o.target.x, o.target.y, dt, 34)) { p.order = null; Town.usePortal(o.target); }
       break;
     case 'stairs': {
       const st = world.dungeon.stairs;
@@ -198,9 +246,9 @@ function startAttack(kind, target, ax, ay) {
   const p = player, s = p.stats;
   let dur = clamp(1 / s.apsTotal, 0.25, 1.4);
   if (kind === 'bash') {
-    const v = SKILLS.bash.vals(effLevel(p, 'bash'));
-    if (p.fury < v.cost) { kind = 'basic'; noFury(); }
-    else { p.fury -= v.cost; dur *= 1.1; }
+    const cost = skillCost(SKILLS.bash.vals(effLevel(p, 'bash')));
+    if (p.fury < cost) { kind = 'basic'; noFury(); }
+    else { p.fury -= cost; dur *= 1.1; }
   }
   const angle = target ? angleTo(p.x, p.y, target.x, target.y) : angleTo(p.x, p.y, ax, ay);
   p.facing = angle;
@@ -255,7 +303,7 @@ function useSkill(slot) {
   const aim = Input.world;
   if (id === 'whirlwind') {
     if (!p.whirl) {
-      if (p.fury < v.cost) { noFury(); return; }
+      if (p.fury < skillCost(v)) { noFury(); return; }
       p.attack = null; p.order = null;
       p.whirl = { slot, tick: 0, sfx: 0, v };
     }
@@ -269,7 +317,8 @@ function useSkill(slot) {
     else if (!p.attack) startAttack('bash', null, aim.x, aim.y);
     return;
   }
-  if (p.fury < v.cost) { noFury(); return; }
+  if (p.fury < skillCost(v)) { noFury(); return; }
+  if (world.town) { UI.message('마을에서는 싸울 수 없습니다', '#c9c1b3'); return; }
   p.whirl = null;
   p.attack = null;
   switch (id) {
@@ -287,14 +336,17 @@ function useSkill(slot) {
       UI.message('광폭화!', '#ff5a3a');
       break;
   }
-  p.fury -= v.cost;
-  p.cds[id] = v.cd;
+  p.fury -= skillCost(v);
+  p.cds[id] = v.cd * (1 - p.stats.cdr / 100);
 }
+
+// 분노 소모 (아이템의 '분노 소모 감소' 반영)
+function skillCost(v) { return v.cost * (1 - ((player && player.stats.furyCost) || 0) / 100); }
 
 function nearestMonsterNear(x, y, r) {
   let best = null, bd = r;
   for (const m of world.monsters) {
-    if (m.dead) continue;
+    if (!hittable(m)) continue;
     const d = dist(x, y, m.x, m.y);
     if (d < bd) { bd = d; best = m; }
   }
@@ -409,7 +461,7 @@ function throwAxes(aim, v) {
 function updateWhirl(dt) {
   const p = player, w = p.whirl, v = w.v, s = p.stats;
   if (!Input.slotHeld(w.slot) || p.fury <= 0) { p.whirl = null; return; }
-  p.fury = Math.max(0, p.fury - v.drain * dt);
+  p.fury = Math.max(0, p.fury - v.drain * (1 - s.furyCost / 100) * dt);
   const aim = Input.world;
   const dd = dist(p.x, p.y, aim.x, aim.y);
   if (dd > 14) {
@@ -442,8 +494,9 @@ function drinkPotion() {
   if (p.life >= p.stats.maxLife - 0.5) { UI.message('생명력이 가득 찼습니다', '#c9c1b3'); return; }
   p.potions--;
   p.potionCD = 0.8;
-  p.healLeft += p.stats.maxLife * 0.45;
-  p.healRate = p.stats.maxLife * 0.45 / 1.2;
+  const heal = p.stats.maxLife * 0.45 * (1 + p.stats.potionBoost / 100);
+  p.healLeft += heal;
+  p.healRate = heal / 1.2;
   SFX.play('potion');
   fxSprite('heal', p.x, p.y, { follow: p, scale: 0.9, alpha: 0.9 });
   fxSparks(p.x, p.y, 40, 12, '#ff5a5a', 80);
@@ -460,9 +513,25 @@ function equipFromInventory(idx) {
   if (!canEquip(item)) { UI.message(`레벨 ${item.req}부터 착용할 수 있습니다`, '#ff7a6a'); SFX.play('nope'); return; }
   let key = item.slot;
   if (item.slot === 'ring') key = !p.equipment.ring1 ? 'ring1' : !p.equipment.ring2 ? 'ring2' : 'ring1';
+  // 양손 무기와 방패는 함께 들 수 없음 → 다른 쪽을 가방으로
+  let bump = null;
+  if (key === 'weapon' && isTwoHanded(item) && p.equipment.shield) bump = 'shield';
+  if (key === 'shield' && isTwoHanded(p.equipment.weapon)) bump = 'weapon';
   const prev = p.equipment[key];
-  p.equipment[key] = item;
-  p.inventory[idx] = prev || null;
+  if (bump) {
+    const free = p.inventory.findIndex((x, i) => !x && i !== idx);
+    const room = prev ? free : idx;
+    if (room < 0) { UI.message(bump === 'shield' ? '양손 무기를 들려면 방패를 넣을 가방 칸이 필요합니다' : '방패를 들려면 양손 무기를 넣을 가방 칸이 필요합니다', '#ff7a6a'); SFX.play('nope'); return; }
+    const other = p.equipment[bump];
+    p.equipment[bump] = null;
+    p.equipment[key] = item;
+    p.inventory[idx] = prev || null;
+    p.inventory[prev ? free : idx] = other;
+    UI.message(bump === 'shield' ? '양손 무기를 들어 방패를 가방에 넣었습니다' : '방패를 들어 양손 무기를 가방에 넣었습니다', '#c9c1b3');
+  } else {
+    p.equipment[key] = item;
+    p.inventory[idx] = prev || null;
+  }
   const ratio = p.life / p.stats.maxLife;
   recalcStats(p);
   p.life = Math.max(1, Math.min(p.stats.maxLife, ratio * p.stats.maxLife));
@@ -489,6 +558,7 @@ function sellInventory(idx) {
   const item = p.inventory[idx];
   if (!item) return;
   p.gold += item.value;
+  Shop.addBuyback(item);
   p.inventory[idx] = null;
   SFX.play('gold');
   Game.dirty = true;
@@ -507,15 +577,15 @@ function dropInventory(idx) {
 function sellAllNormal() {
   const p = player;
   let n = 0, gold = 0;
-  p.inventory.forEach((it, i) => { if (it && it.rarity === 0) { gold += it.value; p.inventory[i] = null; n++; } });
+  p.inventory.forEach((it, i) => { if (it && it.rarity === 0 && !it.plus) { gold += it.value; p.inventory[i] = null; n++; } });
   if (n) { p.gold += gold; SFX.play('gold'); UI.message(`일반 아이템 ${n}개 판매: +${gold} 골드`, '#e8c35a'); Game.dirty = true; }
   else UI.message('판매할 일반 아이템이 없습니다', '#c9c1b3');
 }
 
-function potionPrice() { return 25 + world.floor * 5; }
+function potionPrice() { return 25 + ((player && player.deepest) || 1) * 5; }
 function buyPotion() {
   const p = player, price = potionPrice();
-  if (p.potions >= 12) { UI.message('물약은 12개까지 들 수 있습니다', '#c9c1b3'); return; }
+  if (p.potions >= MAX_POTIONS) { UI.message(`물약은 ${MAX_POTIONS}개까지 들 수 있습니다`, '#c9c1b3'); return; }
   if (p.gold < price) { UI.message('골드가 부족합니다', '#ff7a6a'); SFX.play('nope'); return; }
   p.gold -= price;
   p.potions++;
@@ -558,7 +628,7 @@ function learnSkill(id) {
   const p = player;
   if (id === '_life') p.bonusLife += 25;
   else if (id === '_gold') p.gold += 500;
-  else if (id === '_potion') p.potions = Math.min(12, p.potions + 3);
+  else if (id === '_potion') p.potions = Math.min(MAX_POTIONS, p.potions + 3);
   else {
     p.skills[id] = (p.skills[id] || 0) + 1;
     if (SKILLS[id].type === 'active' && !p.hotbar.includes(id)) {
@@ -589,14 +659,24 @@ function respawn() {
   const lost = Math.floor(p.gold * 0.1);
   p.gold -= lost;
   p.dead = false;
-  p.x = world.dungeon.start.x;
-  p.y = world.dungeon.start.y;
   p.life = p.stats.maxLife;
   p.fury = 30;
-  p.slowT = 0;
+  p.slowT = 0; p.poisonT = 0;
   p.healLeft = 0;
-  for (const m of world.monsters) { m.aggro = false; m.windup = 0; }
-  world.projectiles.length = 0;
-  world.hazards.length = 0;
-  UI.message(lost ? `부활했습니다. 골드 ${lost}을 잃었습니다.` : '부활했습니다.', '#c9c1b3');
+  if (!world.town) {
+    // 쓰러진 층은 그대로 두고, 층 입구로 가는 차원문을 남김
+    const d = world.dungeon;
+    for (const m of world.monsters) {
+      m.aggro = false; m.windup = 0; m.act = null; m.pending = null; m.air = false; m.z = 0;
+      m.hidden = !!m.ambushWait;
+      if (!m.dead) m.life = m.maxLife;
+    }
+    world.projectiles.length = 0;
+    world.hazards.length = 0;
+    world.pools.length = 0;
+    world.portal = { x: d.start.x + 50, y: d.start.y, kind: 'portal', t: 0 };
+    Game.dungeonWorld = world;
+    Game.goTown('death');
+  }
+  UI.message(lost ? `마을에서 깨어났습니다. 골드 ${lost}을 잃었습니다.` : '마을에서 깨어났습니다.', '#c9c1b3');
 }

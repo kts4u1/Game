@@ -92,15 +92,16 @@ function drawSpriteFrame(ctx, set, animName, dir, idx, x, y, scale = 1) {
 }
 
 // ── 주인공: 착용 장비 → Flare 레이어 ──
+// Flare engine/hero_layers.txt 순서 (방향별로 먼저 그릴 것부터)
 const HERO_LAYER_ORDER = [
-  ['main', 'feet', 'legs', 'hands', 'chest', 'head'],
-  ['main', 'feet', 'legs', 'hands', 'chest', 'head'],
-  ['main', 'feet', 'legs', 'hands', 'chest', 'head'],
-  ['feet', 'legs', 'hands', 'chest', 'head', 'main'],
-  ['feet', 'legs', 'hands', 'chest', 'head', 'main'],
-  ['feet', 'legs', 'hands', 'chest', 'head', 'main'],
-  ['feet', 'legs', 'hands', 'main', 'chest', 'head'],
-  ['main', 'feet', 'legs', 'hands', 'chest', 'head'],
+  ['main', 'feet', 'legs', 'hands', 'chest', 'off', 'head'],
+  ['main', 'feet', 'legs', 'hands', 'chest', 'off', 'head'],
+  ['main', 'feet', 'legs', 'hands', 'chest', 'off', 'head'],
+  ['feet', 'legs', 'hands', 'chest', 'off', 'head', 'main'],
+  ['feet', 'legs', 'hands', 'chest', 'off', 'head', 'main'],
+  ['feet', 'legs', 'hands', 'chest', 'off', 'head', 'main'],
+  ['feet', 'legs', 'hands', 'main', 'chest', 'head', 'off'],
+  ['main', 'feet', 'legs', 'hands', 'chest', 'head', 'off'],
 ];
 const GEAR_TIER = ['leather', 'chain', 'plate', 'plate'];
 const WEAPON_LAYER = { axe: 'hand_axe', greataxe: 'battle_axe', sword: 'longsword', greatsword: 'greatsword', mace: 'mace', hammer: 'war_hammer' };
@@ -114,10 +115,12 @@ function heroLayers(p) {
     legs: eq.armor ? { leather: 'leather_pants', chain: 'chain_greaves', plate: 'plate_greaves' }[t(eq.armor)] : 'default_legs',
     hands: eq.gloves ? { leather: 'leather_gloves', chain: 'chain_gloves', plate: 'plate_gauntlets' }[t(eq.gloves)] : 'default_hands',
     feet: eq.boots ? { leather: 'leather_boots', chain: 'chain_boots', plate: 'plate_boots' }[t(eq.boots)] : 'default_feet',
-    main: eq.weapon ? WEAPON_LAYER[eq.weapon.icon] || null : null,
+    main: eq.weapon ? baseLayer(eq.weapon) || WEAPON_LAYER[eq.weapon.icon] || null : null,
+    off: eq.shield ? baseLayer(eq.shield) || 'buckler' : null,
   };
 }
-const HERO_FALLBACK = { head: 'head_short', chest: 'default_chest', legs: 'default_legs', hands: 'default_hands', feet: 'default_feet', main: null };
+function baseLayer(it) { const b = BASE_INDEX[it.baseId]; return b && b.layer && FLARE.hero[b.layer] ? b.layer : null; }
+const HERO_FALLBACK = { head: 'head_short', chest: 'default_chest', legs: 'default_legs', hands: 'default_hands', feet: 'default_feet', main: null, off: null };
 
 function heroAssetPaths(p) {
   const out = Object.values(HERO_FALLBACK).filter(Boolean).map(n => FLARE.hero[n].img);
@@ -135,6 +138,7 @@ function heroPose(p, t) {
   if (p.leap) return at('swing', p.leap.t / p.leap.dur);
   if (p.attack) return at('swing', p.attack.t / p.attack.dur);
   if (p.pose === 'roar') return at('cast', p.poseT / p.poseDur);
+  if (p.tp) return at('cast', Math.min(0.6, p.tp.t / p.tp.dur));
   if (p.pose === 'throw' || p.pose === 'slam') return at('swing', p.poseT / p.poseDur);
   if (p.hurtT > 0 && !p.moving) return ['hit', 1, dir];
   if (p.moving) return ['run', Math.floor(p.walkPhase * 0.9) % anims.run.n, dir];
@@ -163,6 +167,11 @@ function monsterPose(m, set, t) {
   const atk = set.anims.swing ? 'swing' : set.anims.shoot ? 'shoot' : 'cast';
   const A = set.anims;
   if (m.dead) return ['die', animIndex(A.die, m.deadT * 1000, true), dir];
+  const act = m.act && m.act.kind;
+  if (act === 'emerge' && A.spawn) return ['spawn', animIndex(A.spawn, m.act.t * 1000, true), dir];
+  if ((act === 'charge' || act === 'dive' || act === 'flee' || act === 'burrow') && A.run) {
+    return ['run', Math.floor((m.walkPhase + t * (act === 'charge' ? 14 : 8)) * 0.75) % A.run.n, dir];
+  }
   if (m.windup > 0 && A[atk]) {
     const k = 1 - m.windup / m.windupDur;
     return [atk, Math.min(A[atk].n - 1, Math.floor(k * A[atk].n * 0.6)), dir];
@@ -172,8 +181,13 @@ function monsterPose(m, set, t) {
     const n = A[atk].n;
     return [atk, Math.min(n - 1, Math.floor(n * 0.6 + k * n * 0.4)), dir];
   }
-  if (m.moving) return ['run', Math.floor(m.walkPhase * 0.75) % A.run.n, dir];
+  if (m.moving && A.run) return ['run', Math.floor(m.walkPhase * 0.75) % A.run.n, dir];
   return ['stance', animIndex(A.stance, t * 1000 + m.seed * 300), dir];
+}
+
+// ── 마을 사람 ──
+function npcPose(n, set, t) {
+  return ['stance', animIndex(set.anims.stance, t * 1000 + n.seed * 500), flareDir(n.facing)];
 }
 
 function monsterAssetPaths(types) {
@@ -198,8 +212,10 @@ const SKILL_ICON = {
 const ICON_POTION = 64;
 
 function itemIconIndex(item) {
-  if (item.slot === 'ring') return [0, 202, 205, 207][item.rarity];
-  if (item.slot === 'amulet') return [0, 214, 212, 213][item.rarity];
+  if (item.slot === 'ring') return [198, 202, 205, 207, 204][item.rarity];
+  if (item.slot === 'amulet') return [212, 214, 212, 213, 215][item.rarity];
+  const b = BASE_INDEX[item.baseId];
+  if (b && b.ii != null) return b.ii;
   return ITEM_ICON[item.baseId] != null ? ITEM_ICON[item.baseId] : 0;
 }
 

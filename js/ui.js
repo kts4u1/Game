@@ -17,7 +17,7 @@ const UI = {
 
   init() {
     const ids = ['orb-life', 'orb-fury', 'xp-fill', 'xp-text', 'lvl-text', 'potion-slot', 'minimap', 'floor-name', 'floor-sub',
-      'gold-text', 'target', 'messages', 'banner', 'hurt', 'inv-panel', 'char-panel', 'levelup', 'title', 'death', 'menu', 'tooltip', 'slots'];
+      'gold-text', 'target', 'messages', 'banner', 'hurt', 'inv-panel', 'char-panel', 'shop-panel', 'levelup', 'title', 'death', 'menu', 'tooltip', 'slots'];
     for (const id of ids) this.el[id] = $(id);
     this.el.slotBtns = [...document.querySelectorAll('.slot[data-slot]')];
 
@@ -43,7 +43,9 @@ const UI = {
     if (HAS_FLARE) this.el['potion-slot'].querySelector('.ic').innerHTML = iconHtml(ICON_POTION);
     document.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
       const w = b.dataset.open;
-      if (w === 'menu') this.toggleMenu(); else this.togglePanel(w);
+      if (w === 'menu') this.toggleMenu();
+      else if (w === 'tp') Town.castPortal();
+      else this.togglePanel(w);
     }));
     document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => this.closePanels()));
     $('btn-new').addEventListener('click', () => { SFX.init(); Game.newGame(); });
@@ -51,6 +53,7 @@ const UI = {
     $('btn-respawn').addEventListener('click', () => { this.el.death.hidden = true; respawn(); });
     $('btn-resume').addEventListener('click', () => this.toggleMenu(false));
     $('btn-sound').addEventListener('click', () => this.toggleSound());
+    $('btn-loot').addEventListener('click', () => Game.cycleLootFilter());
     $('btn-quit').addEventListener('click', () => { Game.save(); this.toggleMenu(false); Game.toTitle(); });
 
     // 소지품 이벤트 위임
@@ -61,6 +64,10 @@ const UI = {
     inv.addEventListener('mouseout', e => { if (e.target.closest('[data-inv],[data-eq]')) this.hideTooltip(); });
     inv.addEventListener('contextmenu', e => { e.preventDefault(); this.onInvDbl(e); });
     document.addEventListener('pointermove', e => { if (!this.el.tooltip.hidden) this.placeTooltip(e.clientX, e.clientY); });
+    const shop = this.el['shop-panel'];
+    shop.addEventListener('click', e => Shop.onClick(e));
+    shop.addEventListener('mouseover', e => Shop.onHover(e));
+    shop.addEventListener('mouseout', e => { if (e.target.closest('[data-stock],[data-bb],[data-stash]')) this.hideTooltip(); });
     this.el.levelup.addEventListener('click', e => {
       const c = e.target.closest('.card');
       if (c) Game.chooseCard(c.dataset.id);
@@ -85,6 +92,7 @@ const UI = {
     set('gold', p.gold, v => { this.el['gold-text'].textContent = `${v.toLocaleString()} 골드`; });
     set('pot', p.potions, v => { this.el['potion-slot'].querySelector('.count').textContent = v; this.el['potion-slot'].classList.toggle('empty', v === 0); });
     set('lowlife', lifeK < 0.3, v => this.el['orb-life'].classList.toggle('low', v));
+    set('shopopen', !this.el['shop-panel'].hidden && !this.el['inv-panel'].hidden, v => document.body.classList.toggle('shop-open', v));
     // 스킬 슬롯
     p.hotbar.forEach((id, i) => {
       const b = this.el.slotBtns[i];
@@ -136,6 +144,7 @@ const UI = {
     if (m.tier === 1) tags.push('챔피언');
     if (m.tier === 2) tags.push('정예');
     if (m.tier === 3) tags.push('보스');
+    if (m.undead) tags.push('언데드');
     for (const mod of m.mods) tags.push(ELITE_MODS[mod].name);
     t.querySelector('.t-tags').textContent = tags.join(' · ');
   },
@@ -173,43 +182,67 @@ const UI = {
   },
 
   setFloor() {
-    this.el['floor-name'].textContent = `${world.floor}층 · ${world.dungeon.theme.name}`;
-    this.el['floor-sub'].textContent = `몬스터 레벨 ${world.mlvl}${isBossFloor(world.floor) ? ' · 보스 층' : ''}`;
+    if (world.town) {
+      this.el['floor-name'].textContent = world.dungeon.theme.name;
+      this.el['floor-sub'].textContent = `마을 · 가장 깊이 내려간 곳 ${player.deepest || 1}층`;
+    } else {
+      this.el['floor-name'].textContent = `${world.floor}층 · ${world.dungeon.theme.name}`;
+      this.el['floor-sub'].textContent = `몬스터 레벨 ${world.mlvl}${isBossFloor(world.floor) ? ' · 보스 층' : ''}`;
+    }
+    $('btn-tp').hidden = !!world.town;
   },
 
   // ── 패널 ──
-  anyPanel() { return !this.el['inv-panel'].hidden || !this.el['char-panel'].hidden; },
+  anyPanel() { return !this.el['inv-panel'].hidden || !this.el['char-panel'].hidden || !this.el['shop-panel'].hidden; },
   togglePanel(name) {
     const el = this.el[name + '-panel'];
     const open = el.hidden;
     el.hidden = !open;
+    // 왼쪽 칸은 하나만: 캐릭터 창을 열면 상점 창은 닫음
+    if (open && name === 'char' && !this.el['shop-panel'].hidden) { this.el['shop-panel'].hidden = true; Shop.close(); }
     if (open) { if (name === 'inv') this.renderInventory(); else this.renderCharacter(); }
     if (name === 'inv' && !open) { this.selected = null; this.hideTooltip(); }
+  },
+  openShop() {
+    this.el['char-panel'].hidden = true;
+    this.el['shop-panel'].hidden = false;
+    this.selected = null;
+    Shop.render();
+    // 웨이포인트 창 말고는 소지품도 함께 엶
+    if (Shop.npc.role !== 'gate') { this.el['inv-panel'].hidden = false; this.renderInventory(); }
   },
   closePanels() {
     this.el['inv-panel'].hidden = true;
     this.el['char-panel'].hidden = true;
+    this.el['shop-panel'].hidden = true;
+    Shop.close();
     this.selected = null;
     this.hideTooltip();
   },
   refreshPanels() {
     if (!this.el['inv-panel'].hidden) this.renderInventory();
     if (!this.el['char-panel'].hidden) this.renderCharacter();
+    if (!this.el['shop-panel'].hidden) Shop.render();
+  },
+  syncMenu() {
+    $('btn-sound').textContent = SFX.muted ? '소리 켜기 (M)' : '소리 끄기 (M)';
+    $('btn-loot').textContent = `바닥 아이템: ${LOOT_FILTER_NAMES[Game.settings.lootFilter || 0]} (L)`;
   },
 
   cellHtml(item, attrs, label) {
     if (!item) return `<div class="cell" ${attrs}>${label ? `<span class="cell-label">${label}</span>` : ''}</div>`;
-    const sel = (this.selected && this.selected.item === item) ? ' selected' : '';
+    const sel = (this.selected && this.selected.item === item) || (Shop.target === item && Shop.isOpen()) ? ' selected' : '';
     const bad = !canEquip(item) ? ' cant' : '';
-    return `<div class="cell r${item.rarity}${sel}${bad}" ${attrs}>${itemIconHtml(item)}</div>`;
+    return `<div class="cell r${item.rarity}${sel}${bad}" ${attrs}>${itemIconHtml(item)}${item.plus ? `<span class="plus">+${item.plus}</span>` : ''}</div>`;
   },
 
   renderInventory() {
     const p = player;
-    const eqLabels = { weapon: '무기', helm: '투구', amulet: '목걸이', armor: '갑옷', ring1: '반지', ring2: '반지', gloves: '장갑', belt: '허리띠', boots: '장화' };
+    const eqLabels = { weapon: '무기', shield: '방패', helm: '투구', amulet: '목걸이', armor: '갑옷', ring1: '반지', ring2: '반지', gloves: '장갑', belt: '허리띠', boots: '장화' };
     const doll = EQUIP_KEYS.map(k => this.cellHtml(p.equipment[k], `data-eq="${k}" style="grid-area:${k}"`, eqLabels[k])).join('');
     const grid = p.inventory.map((it, i) => this.cellHtml(it, `data-inv="${i}"`)).join('');
-    let detail = '<p class="detail-empty">아이템을 누르면 자세한 정보가 여기 나오고, 아래에 착용·판매 버튼이 생깁니다. 두 번 누르면 바로 착용합니다.</p>';
+    const sellOk = Shop.canSell(), stashOk = Shop.isOpen() && Shop.npc.role === 'stash';
+    let detail = `<p class="detail-empty">아이템을 누르면 자세한 정보가 여기 나오고, 아래에 버튼이 생깁니다. 두 번 누르면 바로 착용합니다.${sellOk || stashOk ? '' : ' 물건은 마을 상인에게 팔 수 있습니다.'}</p>`;
     let selRow = '';
     const sel = this.selected;
     if (sel && sel.item) {
@@ -218,7 +251,9 @@ const UI = {
       if (sel.kind === 'inv') {
         const can = canEquip(it);
         btns = `<button class="btn-main" data-act="equip" ${can ? '' : 'disabled'}>${can ? '착용' : `레벨 ${it.req} 필요`}</button>`
-          + `<button data-act="sell">판매 <small>+${it.value}</small></button><button data-act="drop">버리기</button>`;
+          + (sellOk ? `<button data-act="sell">판매 <small>+${it.value}</small></button>`
+            : stashOk ? '<button data-act="stash">보관함에 넣기</button>'
+            : '<button data-act="drop">버리기</button>');
         const cmpKey = it.slot === 'ring' ? (p.equipment.ring1 ? 'ring1' : null) : it.slot;
         const cur = cmpKey ? p.equipment[cmpKey] : null;
         detail = `<div class="tt">${itemTooltipHtml(it)}</div>`;
@@ -239,11 +274,8 @@ const UI = {
       <div class="inv-meta"><span>가방 ${used} / ${p.inventory.length}</span><span class="gold">${p.gold.toLocaleString()} 골드</span></div>
       <div class="grid">${grid}</div>
       <div class="detail">${detail}</div>`;
-    this.el['inv-panel'].querySelector('.panel-foot').innerHTML = `${selRow}
-      <div class="foot-btns">
-        <button data-act="buy">물약 구매 <small>${potionPrice()} 골드</small></button>
-        <button data-act="sellnormal">일반 아이템 모두 판매</button>
-      </div>`;
+    const general = sellOk ? '<div class="foot-btns"><button data-act="sellnormal">일반 아이템 모두 판매</button></div>' : '';
+    this.el['inv-panel'].querySelector('.panel-foot').innerHTML = `${selRow}${general}`;
   },
 
   onInvClick(e) {
@@ -252,12 +284,12 @@ const UI = {
     if (act) {
       const a = act.dataset.act, sel = this.selected;
       if (a === 'equip' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) equipFromInventory(i); this.selected = null; }
-      else if (a === 'sell' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) sellInventory(i); this.selected = null; }
+      else if (a === 'sell' && sel && Shop.canSell()) { const i = p.inventory.indexOf(sel.item); if (i >= 0) sellInventory(i); this.selected = null; }
+      else if (a === 'stash' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) Shop.stashPut(i); this.selected = null; }
       else if (a === 'drop' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) dropInventory(i); this.selected = null; }
       else if (a === 'unequip' && sel) { if (unequip(sel.key)) this.selected = null; }
       else if (a === 'deselect') this.selected = null;
-      else if (a === 'buy') buyPotion();
-      else if (a === 'sellnormal') sellAllNormal();
+      else if (a === 'sellnormal' && Shop.canSell()) sellAllNormal();
       this.hideTooltip();
       this.refreshPanels();
       return;
@@ -271,6 +303,7 @@ const UI = {
       const it = p.equipment[eq.dataset.eq];
       this.selected = it ? { kind: 'eq', item: it, key: eq.dataset.eq } : null;
     } else return;
+    if (this.selected) Shop.pickTarget(this.selected.item);
     this.renderInventory();
     // 터치 화면에서는 툴팁 대신 아래 상세 칸을 보여줌
     if (this.selected && !this.finePointer) this.el['inv-panel'].querySelector('.detail').scrollIntoView({ block: 'nearest' });
@@ -319,8 +352,19 @@ const UI = {
       ['방어력', `${s.armorTotal} (피해 ${red}% 감소)`], ['생명력 흡수', `${s.lifeSteal.toFixed(1)}%`],
       ['초당 회복', s.lifeRegenTotal.toFixed(1)], ['이동 속도', `+${s.moveSpeed}%`],
       ['가시 피해', s.thorns], ['마법 아이템 발견', `+${s.mf}%`], ['골드 획득', `+${s.gf}%`],
-      ['모든 스킬', s.allSkills ? `+${s.allSkills}` : '-'], ['처치 수', p.kills],
+      ['모든 스킬', s.allSkills ? `+${s.allSkills}` : '-'],
     ];
+    const opt = [
+      ['막기 확률', s.block, `${s.block}%`], ['원소 저항', s.res, `${s.res}%`], ['받는 피해 감소', s.dmgReduce, `-${s.dmgReduce}`],
+      ['화염 피해', s.fireDmg, `+${s.fireDmg}`], ['냉기 피해', s.coldDmg, `+${s.coldDmg}`], ['번개 피해', s.lightDmg, `1-${s.lightDmg}`],
+      ['언데드 추가 피해', s.dmgUndead, `+${s.dmgUndead}%`], ['처치 시 생명력', s.killLife, `+${s.killLife}`], ['처치 시 분노', s.killFury, `+${s.killFury}`],
+      ['재사용 대기시간', s.cdr, `-${s.cdr}%`], ['분노 소모', s.furyCost, `-${s.furyCost}%`], ['물약 회복량', s.potionBoost, `+${s.potionBoost}%`],
+    ];
+    for (const [k, v, txt] of opt) if (v) rows.push([k, txt]);
+    for (const id in ELIXIRS) if (p.elixirs[id] > 0) rows.push([ELIXIRS[id].name, `${Math.ceil(p.elixirs[id] / 60)}분 남음`]);
+    const sc = setCounts(p.equipment);
+    for (const id in sc) if (SETS[id]) rows.push([SETS[id].name, `${sc[id]}세트`]);
+    rows.push(['가장 깊은 층', `${p.deepest || 1}층`], ['처치 수', p.kills]);
     const ids = Object.keys(p.skills);
     const skills = ids.length ? ids.map(id => {
       const L = effLevel(p, id), base = p.skills[id];
@@ -389,7 +433,7 @@ const UI = {
     const m = this.el.menu;
     const open = force === undefined ? m.hidden : force;
     m.hidden = !open;
-    $('btn-sound').textContent = SFX.muted ? '소리 켜기 (M)' : '소리 끄기 (M)';
+    this.syncMenu();
   },
   toggleSound() {
     const muted = SFX.toggleMute();

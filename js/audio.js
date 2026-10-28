@@ -31,11 +31,23 @@ const SAMPLE_MAP = {
   rare: { keys: ['flying_loot'], vol: 0.6 },
   step: { keys: ['step1', 'step2', 'step3', 'step4'], vol: 0.16, rate: [0.9, 1.05] },
   heartbeat: { keys: ['heartbeat'], vol: 0.55 },
+  block: { keys: ['block'], vol: 0.6 },
+  spit: { keys: ['burn'], vol: 0.35, rate: [1.4, 1.6] },
+  teleport: { keys: ['teleport'], vol: 0.6 },
+  teleporter: { keys: ['teleporter'], vol: 0.7 },
+  revive: { keys: ['heal'], vol: 0.6 },
+  grave: { keys: ['grave_attack'], vol: 0.6 },
+  anvil: { keys: ['block', 'inv_metal'], vol: 0.8, rate: [0.8, 0.9] },
+  click: { keys: ['click'], vol: 0.5 },
 };
 // 몬스터 그림 → 효과음 이름 앞부분
 const MONSTER_SOUND = {
   zombie: 'zombie', skeleton: 'skeleton', skeleton_archer: 'skeleton', skeleton_mage: 'skeleton',
   goblin: 'goblin', antlion: 'antlion', minotaur: 'minotaur', wyvern_fire: 'wyvern',
+  hobgoblin: 'goblin', hobgoblin_archer: 'goblin', goblin_elite: 'goblin', zombie_dark: 'zombie',
+  skeleton_weak: 'skeleton', skeleton_knight_boss: 'skeleton', skeleton_mage_boss: 'skeleton', skeleton_mage_high_boss: 'skeleton',
+  antlion_small: 'antlion', antlion_armored: 'antlion', fire_ant: 'antlion', ice_ant: 'antlion',
+  wyvern: 'wyvern', wyvern_water: 'wyvern', cursed_grave: 'grave',
 };
 
 const SFX = {
@@ -138,6 +150,7 @@ const SFX = {
     if (!this.ctx || this.muted) return;
     const base = MONSTER_SOUND[m.sprite];
     let key = base && `${base}_${kind}`;
+    if (base === 'grave' && (kind === 'ment' || kind === 'phys')) key = 'grave_attack';
     if (key && !this.buffers[key] && kind === 'critdie') key = `${base}_die`;
     const gap = kind === 'hit' ? 0.18 : kind === 'ment' ? 1.2 : 0.06;
     if (!this.gate('m:' + key, gap)) return;
@@ -145,6 +158,12 @@ const SFX = {
     const big = m.tier === 3 ? 0.8 : 1;  // 보스는 낮은 목소리
     if (key && this.sample(key, (kind === 'hit' ? 0.45 : 0.6) * pv * vol, rand(0.92, 1.06) * big)) return;
     if (kind === 'die' || kind === 'critdie') this.synth(base === 'skeleton' ? 'bones' : 'die', pv);
+  },
+
+  // 마을 사람 목소리
+  voice(key) {
+    if (!this.ctx || this.muted || !this.gate('voice', 1.5)) return;
+    this.sample(key, 0.8);
   },
 
   // 장비 종류에 맞는 착용 소리
@@ -159,7 +178,7 @@ const SFX = {
 
   // ── 배경음: 던전은 물방울, 동굴은 바람 ──
   setAmbient(themeTiles) {
-    this.ambientKey = themeTiles === 'cave' ? 'amb_wind' : 'amb_drops';
+    this.ambientKey = themeTiles === 'grassland' ? 'amb_birds' : themeTiles === 'cave' ? 'amb_wind' : 'amb_drops';
     this.refreshAmbient();
   },
   refreshAmbient() {

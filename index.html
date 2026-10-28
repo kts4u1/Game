@@ -46,6 +46,7 @@
       <span id="lvl-text">레벨 1</span>
       <button data-open="char">캐릭터 <kbd>C</kbd></button>
       <button data-open="inv">소지품 <kbd>I</kbd></button>
+      <button data-open="tp" id="btn-tp">귀환 <kbd>T</kbd></button>
       <button data-open="menu">메뉴 <kbd>Esc</kbd></button>
     </div>
   </div>
@@ -56,6 +57,13 @@
 
 <section id="inv-panel" class="panel right" hidden>
   <header class="panel-head"><h2>소지품</h2><button class="x" data-close aria-label="닫기">×</button></header>
+  <div class="panel-body"></div>
+  <footer class="panel-foot"></footer>
+</section>
+
+<section id="shop-panel" class="panel left" hidden>
+  <header class="panel-head"><h2>상점</h2><button class="x" data-close aria-label="닫기">×</button></header>
+  <nav class="shop-tabs"></nav>
   <div class="panel-body"></div>
   <footer class="panel-foot"></footer>
 </section>
@@ -78,7 +86,7 @@
   <div class="title-wrap">
     <p class="eyebrow">야만용사 핵앤슬래시</p>
     <h1>핏빛 심연</h1>
-    <p class="tagline">끝없이 이어지는 지하 묘지로 내려가세요. 깊어질수록 적은 강해지고, 레어와 유니크 전리품이 쏟아집니다.</p>
+    <p class="tagline">국경 야영지에서 장비를 갖추고 끝없는 지하 묘지로 내려가세요. 깊어질수록 적은 강해지고, 레어·세트·유니크 전리품이 기다립니다.</p>
     <div class="title-btns">
       <button id="btn-continue" class="primary" hidden>이어하기 <small></small></button>
       <button id="btn-new">새 게임</button>
@@ -89,6 +97,7 @@
       <dt>1 – 4 · 오른쪽 클릭</dt><dd>스킬 (커서 방향)</dd>
       <dt>Shift + 클릭</dt><dd>제자리 공격</dd>
       <dt>Q</dt><dd>생명력 물약</dd>
+      <dt>T</dt><dd>마을로 가는 귀환 차원문</dd>
       <dt>I · C · Tab</dt><dd>소지품 · 캐릭터 · 지도</dd>
     </dl>
     <p id="load-status" class="load-status" aria-live="polite"></p>
@@ -99,7 +108,7 @@
 <div id="death" class="overlay" hidden>
   <div class="death-box">
     <h2>당신은 죽었습니다</h2>
-    <p>층 입구에서 다시 일어납니다. 가진 골드의 10%를 잃습니다.</p>
+    <p>마을에서 다시 일어납니다. 가진 골드의 10%를 잃고, 쓰러진 층의 입구로 가는 차원문이 열려 있습니다.</p>
     <button id="btn-respawn" class="primary">부활</button>
   </div>
 </div>
@@ -109,6 +118,7 @@
     <h2>일시정지</h2>
     <button id="btn-resume" class="primary">계속하기</button>
     <button id="btn-sound">소리 끄기 (M)</button>
+    <button id="btn-loot">바닥 아이템: 모든 아이템 (L)</button>
     <button id="btn-quit">저장하고 타이틀로</button>
     <p class="menu-note">진행 상황은 층을 내려갈 때와 레벨업할 때 자동 저장됩니다.</p>
   </div>
@@ -128,6 +138,8 @@
 <script src="js/audio.js"></script>
 <script src="js/effects.js"></script>
 <script src="js/entities.js"></script>
+<script src="js/monsterai.js"></script>
+<script src="js/town.js"></script>
 <script src="js/player.js"></script>
 <script src="js/render.js"></script>
 <script src="js/ui.js"></script>

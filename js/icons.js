@@ -229,6 +229,11 @@ function drawItemIcon(ctx, icon, rarity, look, S) {
       P([4, 20, 44, 20, 44, 30, 4, 30], look >= 1 ? '#6c7179' : leather, leatherD);
       ctx.strokeStyle = uniq ? '#f0d391' : '#c9a24a'; ctx.lineWidth = 2.5; ctx.strokeRect(19, 18, 10, 14);
       break;
+    case 'shield':
+      P([24, 6, 40, 12, 38, 30, 24, 44, 10, 30, 8, 12], look >= 1 ? metal : wood, metalD);
+      L(24, 10, 24, 40, 2, metalD);
+      circle(ctx, 24, 24, 4, metal);
+      break;
     case 'ring':
       ctx.strokeStyle = uniq ? '#e3c07a' : '#c9a24a'; ctx.lineWidth = 4;
       ctx.beginPath(); ctx.arc(24, 28, 11, 0, TAU); ctx.stroke();

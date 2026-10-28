@@ -54,6 +54,7 @@ function tileHash(x, y) { return (Math.imul(x, 73856093) ^ Math.imul(y, 19349663
 
 function prepareFloorArt(d) {
   if (!HAS_FLARE) return;
+  if (d.town) { prepareTownArt(d); return; }
   const set = FLARE.tiles[d.theme.tiles];
   const N = d.w * d.h;
   const floor = new Int16Array(N), wall = new Int16Array(N), low = new Uint8Array(N);
@@ -89,6 +90,54 @@ function prepareFloorArt(d) {
     }
   }
   d.art = { set, floor, wall, low };
+}
+
+// 마을: 풀밭·돌길 바닥, 숲 가장자리에 나무·덤불·바위
+function prepareTownArt(d) {
+  const set = FLARE.tiles.grassland;
+  const N = d.w * d.h;
+  const floor = new Int16Array(N), wall = new Int16Array(N), low = new Uint8Array(N), tall = new Uint8Array(N);
+  // 걸을 수 있는 칸에서의 거리 (숲 깊이)
+  const depth = new Uint8Array(N).fill(255);
+  const q = [];
+  for (let i = 0; i < N; i++) if (d.tiles[i] !== 2) { depth[i] = 0; q.push(i); }
+  for (let h = 0; h < q.length; h++) {
+    const c = q[h], cx = c % d.w, cy = (c / d.w) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= d.w || ny >= d.h) continue;
+      const ni = ny * d.w + nx;
+      if (depth[ni] !== 255) continue;
+      depth[ni] = depth[c] + 1;
+      q.push(ni);
+    }
+  }
+  for (let y = 0; y < d.h; y++) for (let x = 0; x < d.w; x++) {
+    const i = y * d.w + x, h = tileHash(x, y);
+    floor[i] = d.path[i] ? set.path[(h >>> 3) % set.path.length] : set.floor[(h >>> 2) % set.floor.length];
+    if (d.tiles[i] !== 2) continue;
+    // 숲 깊은 곳은 어둠에 묻히므로 나무를 덜 그림
+    const dp = depth[i], r = (h >>> 5) % 12;
+    if (dp === 1) {
+      if (r < 5) { wall[i] = set.trees[(h >>> 9) % set.trees.length]; tall[i] = 1; }
+      else if (r < 10) wall[i] = set.bushes[(h >>> 9) % set.bushes.length];
+      else wall[i] = set.rocks[(h >>> 9) % set.rocks.length];
+    } else if (dp <= 3) {
+      if (r < 5) { wall[i] = set.trees[(h >>> 9) % set.trees.length]; tall[i] = 1; }
+      else if (r < 7) wall[i] = set.bushes[(h >>> 9) % set.bushes.length];
+    } else if (dp === 4 && r < 3) { wall[i] = set.trees[(h >>> 9) % set.trees.length]; tall[i] = 1; }
+  }
+  d.art = { set, floor, wall, low, tall, depth };
+}
+
+// 마을 소품 (천막, 모루, 상자 …) 그리기
+function drawTownProp(ctx, pr) {
+  const img = Assets.get(FLARE.tiles.grassland.img);
+  if (!img) return;
+  const set = FLARE.tiles.grassland;
+  const id = set.props[pr.name] != null ? set.props[pr.name] : set[pr.name] ? set[pr.name][(pr.pick || 0) % set[pr.name].length] : null;
+  if (id == null) return;
+  drawTile(ctx, img, set, id, isoX(pr.x, pr.y), isoY(pr.x, pr.y));
 }
 
 function tileAtlas(d) {
@@ -230,7 +279,7 @@ function makeWallTile(theme, v) {
 function renderFrame(t, focus) {
   const ctx = R.ctx, dpr = R.dpr;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = '#050407';
+  ctx.fillStyle = world && world.town ? '#0b1009' : '#050407';
   ctx.fillRect(0, 0, R.canvas.width, R.canvas.height);
   if (!world) return;
   const d = world.dungeon;
@@ -266,7 +315,7 @@ function renderFrame(t, focus) {
       if (!tile || !d.explored[i]) continue;
       const ix = (tx - ty) * TILE, iy = (tx + ty) * TILE / 2;
       if (!onScreen(ix, iy + 32)) continue;
-      if (atlas) drawTile(ctx, atlas, set, d.art.floor[i], ix, iy + TILE / 2, kf);
+      if (atlas && !(d.town && d.art.depth[i] > 10)) drawTile(ctx, atlas, set, d.art.floor[i], ix, iy + TILE / 2, kf);
       else if (tile === 1) ctx.drawImage(R.sprites.floors[d.variant[i]], ix - 65, iy - 1);
       if (tile === 2) sorted.push({ d: (tx + ty + 1) * TILE, k: 0, tx, ty, ix, iy, i, v: d.variant[i] & 3 });
     }
@@ -283,9 +332,12 @@ function renderFrame(t, focus) {
   }
   drawFXGround(ctx);
   drawFXSprites(ctx, 'ground');
-  drawStairs(ctx, d.stairs, t, explored(d.stairs.x, d.stairs.y));
+  if (!d.stairs.none) drawStairs(ctx, d.stairs, t, explored(d.stairs.x, d.stairs.y));
+  if (d.town) drawTownGate(ctx, d, t);
+  drawPools(ctx, t);
+  for (const pt of portalsOf(world)) drawPortalBase(ctx, pt, t);
   drawHazards(ctx, t);
-  for (const g of world.ground) if (explored(g.x, g.y)) drawGroundObject(ctx, g, t);
+  for (const g of world.ground) if (explored(g.x, g.y) && groundVisible(g)) drawGroundObject(ctx, g, t);
 
   // 2) 벽 + 엔티티 깊이 정렬
   const p = player;
@@ -296,12 +348,24 @@ function renderFrame(t, focus) {
   for (const c of world.chests) if (explored(c.x, c.y)) sorted.push({ d: c.x + c.y, k: 4, c });
   for (const pr of world.projectiles) sorted.push({ d: pr.x + pr.y, k: 3, pr });
   if (atlas) for (const tc of d.torches) if (tc.kind === 'brazier' && explored(tc.bx, tc.by)) sorted.push({ d: tc.bx + tc.by, k: 5, tc });
+  if (d.town) {
+    for (const n of d.npcs) if (n.sprite) sorted.push({ d: n.x + n.y, k: 6, n });
+    for (const pr of d.props) sorted.push({ d: pr.x + pr.y, k: 7, pr });
+  }
   if (p && Game.state !== 'title') sorted.push({ d: p.x + p.y, k: 2 });
   sorted.sort((a, b) => a.d - b.d);
   const pIsoX = p ? isoX(p.x, p.y) : 0, pIsoY = p ? isoY(p.x, p.y) : 0, pDepth = p ? p.x + p.y : 0;
   const playing = p && Game.state !== 'title';
   for (const s of sorted) {
-    if (s.k === 0) {
+    if (s.k === 0 && d.town) {
+      // 마을 숲: 나무가 플레이어를 가리면 반투명
+      const id = atlas && d.art.wall[s.i];
+      if (!id) continue;
+      const tall = d.art.tall[s.i];
+      const dy = s.iy + TILE / 2 - pIsoY;
+      const fade = playing && tall && s.d > pDepth && Math.abs(s.ix - pIsoX) < 130 && dy > -20 && dy < 380;
+      drawTile(ctx, atlas, set, id, s.ix, s.iy + TILE / 2, ART_K, fade ? 0.35 : 1);
+    } else if (s.k === 0) {
       // 플레이어를 가리는 벽은 반투명
       const wallH = atlas ? 200 : WALL_H;
       const dy = s.iy + TILE / 2 - pIsoY;
@@ -318,6 +382,8 @@ function renderFrame(t, focus) {
     else if (s.k === 3) drawProjectile(ctx, s.pr, t);
     else if (s.k === 4) drawChest(ctx, s.c);
     else if (s.k === 5) drawProp(ctx, 'brazier', isoX(s.tc.bx, s.tc.by), isoY(s.tc.bx, s.tc.by));
+    else if (s.k === 6) drawNpc(ctx, s.n, t);
+    else if (s.k === 7) drawTownProp(ctx, s.pr);
   }
   if (!atlas) for (const tc of d.torches) if (explored(tc.x, tc.y)) drawTorchBracket(ctx, tc);
   drawFXParticles(ctx);
@@ -331,9 +397,11 @@ function renderFrame(t, focus) {
   ctx.globalCompositeOperation = 'lighter';
   for (const tc of d.torches) if (explored(tc.x, tc.y)) (atlas ? drawFlareFlame : drawTorchFlame)(ctx, tc, t);
   for (const pr of world.projectiles) if (pr.type === 'fireball') drawFireball(ctx, pr, t);
+  for (const pt of portalsOf(world)) drawPortalGlow(ctx, pt, t);
+  if (d.town) drawTownGlow(ctx, d, t);
   drawFXSprites(ctx, 'glow');
   if (p && p.whirl) drawWhirlArcs(ctx, p, t);
-  if (d.stairs.open && explored(d.stairs.x, d.stairs.y)) drawStairsGlow(ctx, d.stairs, t);
+  if (d.stairs.open && !d.stairs.none && explored(d.stairs.x, d.stairs.y)) drawStairsGlow(ctx, d.stairs, t);
   ctx.globalCompositeOperation = 'source-over';
   drawFXAdditive(ctx, t);
 
@@ -555,22 +623,46 @@ function drawWhirlArcs(ctx, p, t) {
 
 function drawMonster(ctx, m, t) {
   if (m.dead && m.deadT > 8) return;
-  const sx = isoX(m.x, m.y), sy = isoY(m.x, m.y);
+  const sx = isoX(m.x, m.y), sy0 = isoY(m.x, m.y);
   const s = m.scale;
+  // 땅속: 흙더미만 보임
+  if (m.hidden) {
+    if (m.ambushWait) return;
+    ctx.fillStyle = 'rgba(70,55,40,.75)';
+    ctx.beginPath(); ctx.ellipse(sx, sy0, 16 * s, 7 * s, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(110,90,65,.8)';
+    for (let i = 0; i < 4; i++) { const a = t * 6 + i * 1.6 + m.seed; circle(ctx, sx + Math.cos(a) * 9 * s, sy0 + Math.sin(a) * 3.5 * s - 2, 3, 'rgba(120,98,70,.9)'); }
+    return;
+  }
+  // 돌진 준비: 달려올 길을 바닥에 표시
+  if (m.chargeAim && m.windup > 0) {
+    const a = m.chargeAim.a, len = m.chargeAim.len, w = m.r + 10;
+    const k = 1 - m.windup / m.windupDur;
+    const pts = [[-w, 0], [w, 0], [w, len], [-w, len]].map(([u, v]) => {
+      const x = m.x + Math.cos(a) * v - Math.sin(a) * u, y = m.y + Math.sin(a) * v + Math.cos(a) * u;
+      return [isoX(x, y), isoY(x, y)];
+    });
+    ctx.fillStyle = `rgba(255,50,30,${0.12 + k * 0.18})`;
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts.slice(1)) ctx.lineTo(q[0], q[1]); ctx.closePath(); ctx.fill();
+  }
+  if (m.z > 0) drawShadow(ctx, sx, sy0, m.r * 1.4 * Math.max(0.4, 1 - m.z / 220), m.r * 0.6 * Math.max(0.4, 1 - m.z / 220), 0.5);
+  const sy = sy0 - (m.z || 0);
   if (!m.dead && m.tier > 0) {
     const col = m.tier === 1 ? '70,110,255' : m.tier === 2 ? '214,169,92' : '255,70,30';
     const pulse = 0.35 + Math.sin(t * 4 + m.seed) * 0.12;
-    const g = ctx.createRadialGradient(sx, sy, 2, sx, sy, 34 * s);
+    const g = ctx.createRadialGradient(sx, sy0, 2, sx, sy0, 34 * s);
     g.addColorStop(0, `rgba(${col},${pulse})`); g.addColorStop(1, `rgba(${col},0)`);
-    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy, 34 * s, 16 * s, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy0, 34 * s, 16 * s, 0, 0, TAU); ctx.fill();
   }
   const fs = monsterSprite(m);
   if (fs && Assets.ready(fs.img)) {
     const [anim, idx, dir] = monsterPose(m, fs, t);
     ctx.save();
     if (m.dead && m.deadT > 6) ctx.globalAlpha = Math.max(0, 1 - (m.deadT - 6) / 2);
+    if (m.act && m.act.kind === 'emerge' && !fs.anims.spawn) ctx.globalAlpha = Math.min(1, m.act.t / m.act.dur);
+    if (m.act && m.act.kind === 'burrow') ctx.globalAlpha = Math.max(0.15, 1 - m.act.t / 0.35);
     if (HAS_FILTER && m.hitFlash > 0 && !m.dead) ctx.filter = 'brightness(2.4)';
-    else if (HAS_FILTER && m.tier === 3 && m.pal.skin && m.sprite !== 'wyvern_fire') ctx.filter = 'hue-rotate(-20deg) saturate(1.4) brightness(0.9)';
+    else if (HAS_FILTER && m.tint) ctx.filter = m.tint;
     drawSpriteFrame(ctx, fs, anim, dir, idx, sx, sy, m.scale);
     ctx.restore();
   } else {
@@ -580,14 +672,16 @@ function drawMonster(ctx, m, t) {
     const top = monsterHeight(m);
     for (let i = 0; i < 3; i++) {
       const a = t * 6 + i * 2.1;
-      circle(ctx, sx + Math.cos(a) * 12 * s, sy - top + Math.sin(a) * 4, 2.2, '#ffe27a');
+      circle(ctx, sx + Math.cos(a) * 12 * s, sy0 - top + Math.sin(a) * 4, 2.2, '#ffe27a');
     }
   }
 }
 
-function monsterHeight(m) { return (MONSTERS[m.type].h || 70) * m.scale * (m.sprite === 'wyvern_fire' ? 0.85 : 1); }
+function monsterHeight(m) { return (MONSTERS[m.type].h || 70) * m.scale * (m.sprite === 'wyvern_fire' ? 0.85 : 1) + (m.z || 0); }
 
 // Flare 그림이 아직 없을 때 쓰는 코드 그림
+// 코드 그림이 없는 새 몬스터는 비슷한 모양으로 대신 그림
+const FALLBACK_DRAW = { swarm: 'wraith', hobgoblin: 'fallen', hobArcher: 'fallen', darkZombie: 'zombie', thief: 'fallen', fireAnt: 'wraith', iceAnt: 'wraith', wyvern: 'brute', iceWyvern: 'brute', armorAnt: 'wraith', grave: 'skeleton', boneling: 'skeleton', knight: 'skeleton', lich: 'shaman', lichKing: 'shaman' };
 function drawMonsterFallback(ctx, m, t, sx, sy) {
   const s = m.scale;
   if (!m.dead) drawShadow(ctx, sx, sy, m.r * 1.2, m.r * 0.5);
@@ -602,19 +696,20 @@ function drawMonsterFallback(ctx, m, t, sx, sy) {
   const fl = facesLeft(m.facing) ? -1 : 1;
   ctx.scale(fl * s, s);
   if (HAS_FILTER && m.hitFlash > 0 && !m.dead) ctx.filter = 'brightness(2.6)';
-  const draw = MONSTER_DRAW[m.type];
+  const draw = MONSTER_DRAW[m.type] || MONSTER_DRAW[FALLBACK_DRAW[m.type]];
   if (draw) draw(ctx, m, t, m.pal);
   ctx.restore();
 }
 
-const PROJ_SPRITE = { axe: 'throw_axe', arrow: 'arrows' };
+const PROJ_SPRITE = { axe: 'throw_axe', arrow: 'arrows', icicle: 'icicle', spit: 'spit', plasma: 'plasmaball', bolt: 'lightning' };
+const PROJ_SCALE = { axe: 0.9, icicle: 0.75, spit: 0.8, plasma: 0.6, bolt: 0.45 };
 
 function drawProjectile(ctx, pr, t) {
   const sx = isoX(pr.x, pr.y), sy = isoY(pr.x, pr.y);
   const fs = PROJ_SPRITE[pr.type] && spriteSet('effects', PROJ_SPRITE[pr.type]);
   if (fs && Assets.ready(fs.img)) {
     const a = fs.anims.power;
-    drawSpriteFrame(ctx, fs, 'power', flareDir(Math.atan2(pr.vy, pr.vx)), animIndex(a, (pr.t || 0) * 1000), sx, sy, pr.type === 'axe' ? 0.9 : 1);
+    drawSpriteFrame(ctx, fs, 'power', flareDir(Math.atan2(pr.vy, pr.vx)), animIndex(a, (pr.t || 0) * 1000), sx, sy, PROJ_SCALE[pr.type] || 1);
     return;
   }
   drawShadow(ctx, sx, sy, 6, 2.5, 0.3);
@@ -653,6 +748,13 @@ function collectLights(t, focus) {
   if (p && Game.state !== 'title') lights.push({ x: p.x, y: p.y, z: p.z * 0.5, r: 470, i: 1, c: p.buffs.berserk > 0 ? [255, 150, 120] : [255, 234, 208] });
   else lights.push({ x: focus.x, y: focus.y, r: 520, i: 0.9 });
   const d = world.dungeon;
+  if (d.town) lights.push({ x: d.center.x, y: d.center.y, r: 1300, i: 0.72, c: [255, 246, 228], flat: true });
+  for (const L of d.lights) {
+    const fl = L.flicker ? 0.88 + Math.sin(t * 11) * 0.06 + Math.sin(t * 5.7) * 0.05 : 1;
+    lights.push({ x: L.x, y: L.y, r: L.r * fl, i: L.i * fl, c: L.c });
+  }
+  for (const pt of portalsOf(world)) lights.push({ x: pt.x, y: pt.y, r: 240, i: 0.8, c: [110, 180, 255] });
+  for (const pl of world.pools) if (pl.kind === 'fire') lights.push({ x: pl.x, y: pl.y, r: 150, i: 0.5, c: [255, 130, 50] });
   for (const tc of d.torches) {
     if (d.art && !tc.kind) continue;
     if (dist(tc.x, tc.y, focus.x, focus.y) > 1100) continue;
@@ -660,12 +762,32 @@ function collectLights(t, focus) {
     const fl = 0.85 + Math.sin(t * 11 + tc.phase) * 0.06 + Math.sin(t * 5.7 + tc.phase) * 0.05;
     lights.push({ x: tc.lx, y: tc.ly, r: 300 * fl, i: 0.95 * fl, c: [255, 168, 92] });
   }
-  for (const pr of world.projectiles) if (pr.type === 'fireball') lights.push({ x: pr.x, y: pr.y, r: 170, i: 0.85, c: [255, 140, 60] });
+  for (const pr of world.projectiles) {
+    if (pr.type === 'fireball') lights.push({ x: pr.x, y: pr.y, r: 170, i: 0.85, c: [255, 140, 60] });
+    else if (pr.type === 'plasma' || pr.type === 'bolt') lights.push({ x: pr.x, y: pr.y, r: 130, i: 0.7, c: [170, 140, 255] });
+  }
   for (const f of world.flashes) lights.push({ x: f.x, y: f.y, r: f.r, i: Math.min(1, f.life * 4), c: f.color });
   for (const b of FX.beams) lights.push({ x: b.x, y: b.y, r: 160, i: 0.6, c: [255, 205, 130] });
-  if (d.stairs.open) lights.push({ x: d.stairs.x, y: d.stairs.y, r: 220, i: 0.75, c: [255, 96, 56] });
+  if (d.stairs.open && !d.stairs.none) lights.push({ x: d.stairs.x, y: d.stairs.y, r: 220, i: 0.75, c: [255, 96, 56] });
   for (const c of world.chests) if (!c.open && dist(c.x, c.y, focus.x, focus.y) < 900) lights.push({ x: c.x, y: c.y, r: 90, i: 0.35 });
   return lights;
+}
+
+function flatLightImage(c, k) {
+  const key = c.join(',') + ':' + k;
+  if (R.flatLight && R.flatLight.key === key) return R.flatLight.img;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 256;
+  const x = cv.getContext('2d');
+  const g = x.createRadialGradient(128, 128, 0, 128, 128, 128);
+  g.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${k})`);
+  g.addColorStop(0.6, `rgba(${c[0]},${c[1]},${c[2]},${k})`);
+  g.addColorStop(0.82, `rgba(${c[0]},${c[1]},${c[2]},${k * 0.4})`);
+  g.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
+  x.fillStyle = g;
+  x.fillRect(0, 0, 256, 256);
+  R.flatLight = { key, img: cv };
+  return cv;
 }
 
 // 절반 해상도 '빛 지도'에 색이 있는 빛을 더한 뒤, 장면에 곱하기(multiply)로 한 번에 합성
@@ -673,7 +795,8 @@ function drawLighting(t, focus) {
   const l = R.lctx, s = R.lightScale, ctx = R.ctx;
   l.setTransform(1, 0, 0, 1, 0, 0);
   l.globalCompositeOperation = 'source-over';
-  l.fillStyle = '#0b090f';
+  const amb = world.dungeon.ambient;
+  l.fillStyle = amb ? `rgb(${amb[0]},${amb[1]},${amb[2]})` : '#0b090f';
   l.fillRect(0, 0, R.light.width, R.light.height);
   l.globalCompositeOperation = 'lighter';
   for (const L of collectLights(t, focus)) {
@@ -682,13 +805,21 @@ function drawLighting(t, focus) {
     if (sp.x < -r || sp.y < -r || sp.x > R.W + r || sp.y > R.H + r) continue;
     const c = L.c || [255, 236, 214];
     const k = L.i;
+    if (L.flat) {
+      // 넓은 빛은 미리 그려 둔 그림을 늘려 씀 (큰 그라디언트를 매 프레임 칠하면 느림)
+      const img = flatLightImage(c, k);
+      const rs = r * s;
+      l.drawImage(img, sp.x * s - rs, sp.y * s - rs * 0.62, rs * 2, rs * 1.24);
+      continue;
+    }
     l.save();
     l.translate(sp.x * s, sp.y * s);
     l.scale(1, 0.62);
     const rs = r * s;
     const g = l.createRadialGradient(0, 0, 0, 0, 0, rs);
     g.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${k})`);
-    g.addColorStop(0.45, `rgba(${c[0]},${c[1]},${c[2]},${k * 0.62})`);
+    if (L.flat) { g.addColorStop(0.6, `rgba(${c[0]},${c[1]},${c[2]},${k})`); g.addColorStop(0.82, `rgba(${c[0]},${c[1]},${c[2]},${k * 0.4})`); }
+    else g.addColorStop(0.45, `rgba(${c[0]},${c[1]},${c[2]},${k * 0.62})`);
     g.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
     l.fillStyle = g;
     l.fillRect(-rs, -rs, rs * 2, rs * 2);
@@ -705,7 +836,7 @@ function drawOverheadBars(ctx) {
   const p = player;
   if (!p) return;
   for (const m of world.monsters) {
-    if (m.dead || (m.life >= m.maxLife && m.tier === 0)) continue;
+    if (m.dead || m.hidden || m.type === 'grave' && m.life >= m.maxLife || (m.life >= m.maxLife && m.tier === 0)) continue;
     if (dist(m.x, m.y, p.x, p.y) > 700) continue;
     const sp = worldToScreen(m.x, m.y, monsterHeight(m) + 8);
     const w = (m.tier ? 44 : 30) * Math.min(1.4, m.scale);
@@ -723,7 +854,19 @@ function drawLabels(ctx, explored) {
   ctx.font = '600 12px ' + Game.fontUI;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const list = world.ground.filter(g => explored(g.x, g.y) && dist(g.x, g.y, p.x, p.y) < 900);
+  if (world.town) drawTownLabels(ctx);
+  for (const pt of portalsOf(world)) {
+    if (dist(pt.x, pt.y, p.x, p.y) > 800) continue;
+    const sp = worldToScreen(pt.x, pt.y, 96);
+    const hov = Input.hover && Input.hover.kind === 'portal';
+    const label = world.town ? `${Game.dungeonWorld.floor}층으로 가는 차원문` : '마을로 가는 차원문';
+    ctx.font = '700 13px ' + Game.fontUI;
+    ctx.strokeStyle = 'rgba(0,0,0,.9)'; ctx.lineWidth = 3;
+    ctx.fillStyle = hov ? '#d8f0ff' : '#8fd0ff';
+    ctx.strokeText(label, sp.x, sp.y); ctx.fillText(label, sp.x, sp.y);
+  }
+  ctx.font = '600 12px ' + Game.fontUI;
+  const list = world.ground.filter(g => explored(g.x, g.y) && groundVisible(g) && dist(g.x, g.y, p.x, p.y) < 900);
   list.sort((a, b) => (b.kind === 'item' ? b.item.rarity : -1) - (a.kind === 'item' ? a.item.rarity : -1));
   const placed = [];
   for (const g of list) {
@@ -731,7 +874,7 @@ function drawLabels(ctx, explored) {
     let text, color;
     if (g.kind === 'gold') { text = `${g.amount} 골드`; color = '#e8d9a8'; }
     else if (g.kind === 'potion') { text = '생명력 물약'; color = '#ff7a7a'; }
-    else { text = g.item.name; color = RARITY[g.item.rarity].color; }
+    else { text = itemName(g.item); color = RARITY[g.item.rarity].color; }
     const w = ctx.measureText(text).width + 12, h = 18;
     const rect = { x: sp.x - w / 2, y: sp.y - h / 2, w, h };
     for (let k = 0; k < 8; k++) {
@@ -754,7 +897,7 @@ function drawLabels(ctx, explored) {
   }
   // 계단 표시
   const st = world.dungeon.stairs;
-  if (explored(st.x, st.y) && dist(st.x, st.y, p.x, p.y) < 700) {
+  if (!st.none && explored(st.x, st.y) && dist(st.x, st.y, p.x, p.y) < 700) {
     const sp = worldToScreen(st.x, st.y, 40);
     ctx.font = '700 13px ' + Game.fontUI;
     ctx.fillStyle = st.open ? '#ff9a6a' : '#9a9aa6';
@@ -799,18 +942,21 @@ function drawAutomap(ctx, cx, cy, s, alpha, big) {
     if (!t) continue;
     const mx = ox + (tx - ty) * s, my = oy + (tx + ty) * s / 2;
     if (!big && (mx < -s * 2 || my < -s || mx > cx * 2 + s * 2 || my > cy * 2 + s)) continue;
-    ctx.fillStyle = t === 2 ? '#b8a684' : 'rgba(90,80,70,.55)';
+    ctx.fillStyle = d.town ? (t === 2 ? 'rgba(40,70,35,.7)' : d.path[i] ? 'rgba(170,160,140,.8)' : 'rgba(110,140,80,.75)') : t === 2 ? '#b8a684' : 'rgba(90,80,70,.55)';
     ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx + s, my + s / 2); ctx.lineTo(mx, my + s); ctx.lineTo(mx - s, my + s / 2); ctx.closePath(); ctx.fill();
   }
   ctx.globalAlpha = 1;
+  const dot = (x, y, r, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(ox + (x - y) / TILE * s, oy + (x + y) / TILE * s / 2, r, 0, TAU); ctx.fill(); };
+  if (d.town) for (const n of d.npcs) if (n.role !== 'talk') dot(n.x, n.y, big ? 4 : 2.5, n.role === 'gate' ? '#8fd0ff' : '#ffd36a');
+  for (const pt of portalsOf(world)) dot(pt.x, pt.y, big ? 5 : 3, '#6fb8ff');
   const st = d.stairs;
-  if (d.explored[Math.floor(st.y / TILE) * d.w + Math.floor(st.x / TILE)]) {
+  if (!st.none && d.explored[Math.floor(st.y / TILE) * d.w + Math.floor(st.x / TILE)]) {
     const mx = ox + (st.x - st.y) / TILE * s, my = oy + (st.x + st.y) / TILE * s / 2;
     ctx.fillStyle = st.open ? '#ff5a2a' : '#8a8a96';
     ctx.beginPath(); ctx.arc(mx, my, big ? 6 : 3.5, 0, TAU); ctx.fill();
   }
   for (const m of world.monsters) {
-    if (m.dead || dist(m.x, m.y, p.x, p.y) > 520) continue;
+    if (m.dead || m.hidden || dist(m.x, m.y, p.x, p.y) > 520) continue;
     const mx = ox + (m.x - m.y) / TILE * s, my = oy + (m.x + m.y) / TILE * s / 2;
     ctx.fillStyle = m.tier ? '#ffb84a' : '#d8342a';
     ctx.fillRect(mx - 1.5, my - 1.5, 3, 3);
@@ -818,4 +964,140 @@ function drawAutomap(ctx, cx, cy, s, alpha, big) {
   ctx.fillStyle = '#7ad0ff';
   ctx.beginPath(); ctx.arc(cx, cy, big ? 5 : 3, 0, TAU); ctx.fill();
   ctx.restore();
+}
+
+// ── 차원문 ──
+function portalsOf(w) {
+  if (w.town) return Game.dungeonWorld && Game.dungeonWorld.portal ? [w.dungeon.portalSpot] : [];
+  return w.portal ? [w.portal] : [];
+}
+function drawPortalBase(ctx, pt, t) {
+  const sx = isoX(pt.x, pt.y), sy = isoY(pt.x, pt.y);
+  const g = ctx.createRadialGradient(sx, sy, 2, sx, sy, 50);
+  g.addColorStop(0, 'rgba(20,40,80,.8)'); g.addColorStop(1, 'rgba(20,40,80,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(sx, sy, 50, 25, 0, 0, TAU); ctx.fill();
+  const fs = spriteSet('effects', 'runes_blue');
+  if (fs && Assets.ready(fs.img)) drawSpriteFrame(ctx, fs, 'power', 0, animIndex(fs.anims.power, t * 1000), sx, sy, 0.8);
+}
+// 서 있는 푸른 소용돌이 (더하기 합성)
+function drawPortalGlow(ctx, pt, t) {
+  const sx = isoX(pt.x, pt.y), sy = isoY(pt.x, pt.y) - 52;
+  const pulse = 1 + Math.sin(t * 3) * 0.05;
+  const g = ctx.createRadialGradient(sx, sy, 2, sx, sy, 54 * pulse);
+  g.addColorStop(0, 'rgba(200,235,255,.75)'); g.addColorStop(0.45, 'rgba(70,140,255,.45)'); g.addColorStop(1, 'rgba(40,80,255,0)');
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(0.55, 1);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, 54 * pulse, 0, TAU); ctx.fill();
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 3; i++) {
+    const a0 = t * (2.4 + i * 0.7) + i * 2.1;
+    ctx.strokeStyle = `rgba(160,215,255,${0.55 - i * 0.12})`;
+    ctx.beginPath(); ctx.arc(0, 0, 18 + i * 11, a0, a0 + 2.2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ── 마을 ──
+function drawTownGate(ctx, d, t) {
+  const gt = d.gate;
+  const img = Assets.get(FLARE.tiles.grassland.img);
+  if (!img) return;
+  const set = FLARE.tiles.grassland;
+  drawTile(ctx, img, set, set.props.portal, isoX(gt.x, gt.y), isoY(gt.x, gt.y));
+}
+function drawTownGlow(ctx, d, t) {
+  const gt = d.gate, sx = isoX(gt.x, gt.y), sy = isoY(gt.x, gt.y);
+  const a = 0.22 + Math.sin(t * 2.2) * 0.08;
+  const g = ctx.createRadialGradient(sx, sy, 4, sx, sy, 90);
+  g.addColorStop(0, `rgba(120,200,255,${a})`); g.addColorStop(1, 'rgba(120,200,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(sx, sy, 90, 45, 0, 0, TAU); ctx.fill();
+  // 모닥불
+  for (const L of d.lights) {
+    if (!L.fire) continue;
+    const fx = isoX(L.x, L.y), fy = isoY(L.x, L.y) - 16;
+    const fl = Math.sin(t * 13) * 0.15 + Math.sin(t * 7.3) * 0.1;
+    const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, 34 * (1 + fl * 0.3));
+    fg.addColorStop(0, 'rgba(255,200,110,.6)'); fg.addColorStop(0.5, 'rgba(255,120,40,.25)'); fg.addColorStop(1, 'rgba(255,80,20,0)');
+    ctx.fillStyle = fg;
+    ctx.fillRect(fx - 50, fy - 50, 100, 100);
+    ctx.fillStyle = '#ffb04a';
+    ctx.beginPath(); ctx.moveTo(fx - 7, fy + 4); ctx.quadraticCurveTo(fx - 8, fy - 8, fx + fl * 10, fy - 20); ctx.quadraticCurveTo(fx + 8, fy - 8, fx + 7, fy + 4); ctx.closePath(); ctx.fill();
+    if (chance(0.15)) { const w = fromIso(fx, fy); FX.particles.push({ kind: 'ember', add: true, x: w.x + rand(-4, 4), y: w.y + rand(-4, 4), z: 0, vx: rand(-10, 10), vy: rand(-10, 10), vz: rand(40, 90), g: -10, life: rand(0.5, 1.1), size: rand(1, 2.2), color: '#ffa04a' }); }
+  }
+}
+function drawNpc(ctx, n, t) {
+  const sx = isoX(n.x, n.y), sy = isoY(n.x, n.y);
+  const set = spriteSet('npcs', n.sprite);
+  const hov = Input.hover && Input.hover.ref === n;
+  if (set && Assets.ready(set.img)) {
+    ctx.save();
+    if (hov && HAS_FILTER) ctx.filter = 'brightness(1.3)';
+    const [anim, idx, dir] = npcPose(n, set, t);
+    drawSpriteFrame(ctx, set, anim, dir, idx, sx, sy);
+    ctx.restore();
+    return;
+  }
+  drawShadow(ctx, sx, sy, 14, 6, 0.4);
+  ctx.fillStyle = '#6b5a44'; ctx.fillRect(sx - 8, sy - 50, 16, 46);
+  circle(ctx, sx, sy - 58, 8, '#c78c5d');
+}
+function drawPools(ctx, t) {
+  for (const pl of world.pools) {
+    const sx = isoX(pl.x, pl.y), sy = isoY(pl.x, pl.y);
+    const a = Math.min(1, pl.t / 0.3, (pl.dur - pl.t) / 0.6);
+    const c = pl.kind === 'poison' ? '90,200,60' : '255,120,40';
+    const g = ctx.createRadialGradient(sx, sy, 2, sx, sy, pl.r * 1.4);
+    g.addColorStop(0, `rgba(${c},${0.55 * a})`); g.addColorStop(0.7, `rgba(${c},${0.3 * a})`); g.addColorStop(1, `rgba(${c},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(sx, sy, pl.r * 1.4, pl.r * 0.7, 0, 0, TAU); ctx.fill();
+    for (let i = 0; i < 3; i++) {
+      const k = ((t * 0.7 + i / 3 + pl.x * 0.01) % 1);
+      ctx.strokeStyle = `rgba(${c},${(1 - k) * 0.5 * a})`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(sx + Math.sin(i * 2.3) * pl.r * 0.4, sy + Math.cos(i * 1.7) * pl.r * 0.2, 4 + k * 12, 2 + k * 6, 0, 0, TAU); ctx.stroke();
+    }
+  }
+}
+// 마을 사람 이름표와 말풍선 (화면 좌표)
+function drawTownLabels(ctx) {
+  const p = player, d = world.dungeon;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const n of d.npcs) {
+    if (dist(n.x, n.y, p.x, p.y) > 760) continue;
+    const hov = Input.hover && Input.hover.ref === n;
+    const z = n.sprite ? (n.role === 'gate' ? 150 : 112) : n.role === 'gate' ? 40 : 58;
+    const sp = worldToScreen(n.x, n.y, z);
+    const shop = n.role !== 'talk';
+    ctx.font = `${hov ? 800 : 700} ${hov ? 14 : 12}px ${Game.fontUI}`;
+    ctx.strokeStyle = 'rgba(0,0,0,.9)'; ctx.lineWidth = 3;
+    ctx.fillStyle = hov ? '#fff2c4' : n.role === 'gate' ? '#8fd0ff' : shop ? '#e8c35a' : '#d8cfbd';
+    ctx.strokeText(n.name, sp.x, sp.y); ctx.fillText(n.name, sp.x, sp.y);
+    if (n.say) {
+      ctx.font = '500 13px ' + Game.fontUI;
+      const lines = wrapText(ctx, n.say.text, 230);
+      const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 20, h = lines.length * 18 + 12;
+      const bx = sp.x - w / 2, by = sp.y - 16 - h;
+      ctx.globalAlpha = Math.min(1, n.say.t * 2);
+      ctx.fillStyle = 'rgba(16,12,9,.92)'; ctx.strokeStyle = '#8a7350'; ctx.lineWidth = 1;
+      ctx.fillRect(bx, by, w, h); ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
+      ctx.beginPath(); ctx.moveTo(sp.x - 6, by + h); ctx.lineTo(sp.x, by + h + 7); ctx.lineTo(sp.x + 6, by + h); ctx.fill();
+      ctx.fillStyle = '#efe4cc';
+      lines.forEach((l, i) => ctx.fillText(l, sp.x, by + 15 + i * 18));
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+function wrapText(ctx, text, maxW) {
+  const words = text.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const tryL = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(tryL).width > maxW && cur) { lines.push(cur); cur = w; } else cur = tryL;
+  }
+  if (cur) lines.push(cur);
+  return lines;
 }

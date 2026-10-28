@@ -8,7 +8,9 @@ class Dungeon {
     this.theme = themeForFloor(floor);
     this.w = 70;
     this.h = 70;
-    this.generate();
+    this.lights = [];
+    if (floor === 0) generateTown(this);  // 마을 (town.js)
+    else this.generate();
   }
 
   idx(x, y) { return y * this.w + x; }
