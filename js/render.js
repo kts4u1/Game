@@ -40,12 +40,88 @@ function screenToWorld(sx, sy) {
 function facesLeft(a) { return Math.cos(a) - Math.sin(a) < 0; }
 
 // ── 테마별 타일 스프라이트 ──
+// 코드로 그린 타일은 Flare 타일 그림이 아직 없을 때 대신 쓰임
 function buildThemeSprites(theme) {
   const floors = [], walls = [];
   for (let v = 0; v < 8; v++) floors.push(makeFloorTile(theme, v));
   for (let v = 0; v < 4; v++) walls.push(makeWallTile(theme, v));
   R.sprites = { floors, walls };
   R.themeName = theme.name;
+}
+
+// Flare 타일셋에서 층의 칸마다 쓸 타일 번호를 정함
+function tileHash(x, y) { return (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(x + y, 83492791)) >>> 0; }
+
+function prepareFloorArt(d) {
+  if (!HAS_FLARE) return;
+  const set = FLARE.tiles[d.theme.tiles];
+  const N = d.w * d.h;
+  const floor = new Int16Array(N), wall = new Int16Array(N), low = new Uint8Array(N);
+  const torchAt = new Map();
+  for (const tc of d.torches) torchAt.set(d.idx(tc.tx, tc.ty), tc);
+  const variant = (list, h) => (h % 6 === 0 && list.length > 2) ? list[2 + (h >>> 4) % (list.length - 2)] : list[(h >>> 3) % Math.min(2, list.length)];
+  for (let y = 0; y < d.h; y++) for (let x = 0; x < d.w; x++) {
+    const i = d.idx(x, y), t = d.tiles[i];
+    if (!t) continue;
+    const h = tileHash(x, y);
+    floor[i] = (t === 1 && set.floorDecor.length && h % 37 === 0) ? set.floorDecor[(h >>> 5) % set.floorDecor.length] : set.floor[(h >>> 2) % set.floor.length];
+    if (t !== 2) continue;
+    const se = d.walkable(x + 1, y), sw = d.walkable(x, y + 1), dg = d.walkable(x + 1, y + 1);
+    const tc = torchAt.get(i);
+    if (se && sw) wall[i] = set.outer[h % set.outer.length];
+    else if (se) wall[i] = tc && set.torchSE.length ? set.torchSE[0] : variant(set.wallSE, h);
+    else if (sw) wall[i] = tc && set.torchSW.length ? set.torchSW[0] : variant(set.wallSW, h);
+    else if (dg) wall[i] = set.inner[h % set.inner.length];
+    else { wall[i] = set.black[h % set.black.length]; low[i] = 1; }
+  }
+  // 횃불: 던전은 벽걸이 횃불 타일, 동굴은 바닥에 세운 화로
+  for (const tc of d.torches) {
+    const i = d.idx(tc.tx, tc.ty);
+    const cx = (tc.tx - tc.ty) * TILE, cy = (tc.tx + tc.ty) * TILE / 2 + TILE / 2;
+    if (set.torchSE.includes(wall[i])) { tc.kind = 'sconce'; tc.fx = cx + 3; tc.fy = cy - 105; }
+    else if (set.torchSW.includes(wall[i])) { tc.kind = 'sconce'; tc.fx = cx - 5; tc.fy = cy - 105; }
+    else {
+      tc.kind = 'brazier';
+      const fx = tc.face === 'right' ? tc.tx + 1 : tc.tx, fy = tc.face === 'right' ? tc.ty : tc.ty + 1;
+      tc.bx = (fx + 0.5) * TILE; tc.by = (fy + 0.5) * TILE;
+      tc.lx = tc.bx; tc.ly = tc.by;
+      tc.fx = isoX(tc.bx, tc.by) - 2; tc.fy = isoY(tc.bx, tc.by) - 34;
+    }
+  }
+  d.art = { set, floor, wall, low };
+}
+
+function tileAtlas(d) {
+  if (!d.art) return null;
+  return Assets.tintedAtlas(d.art.set.img, d.theme.tint);
+}
+function propsAtlas() { return HAS_FLARE ? Assets.get(FLARE.tiles.dungeon.img) : null; }
+
+function drawTile(ctx, img, set, id, cx, cy, k = ART_K, alpha = 1) {
+  const r = set.rects[id];
+  if (!r) return;
+  if (alpha !== 1) ctx.globalAlpha = alpha;
+  ctx.drawImage(img, r[0], r[1], r[2], r[3], cx - r[4] * k, cy - r[5] * k, r[2] * k, r[3] * k);
+  if (alpha !== 1) ctx.globalAlpha = 1;
+}
+// 방 앞쪽(화면 아래쪽) 벽은 디아블로처럼 낮게 잘라서 그림 — 방 안이 가려지지 않게
+function drawLowWall(ctx, img, set, id, cx, cy) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx - 72, cy - 300); ctx.lineTo(cx - 72, cy); ctx.lineTo(cx - 64, cy);
+  ctx.lineTo(cx, cy + 32); ctx.lineTo(cx + 64, cy); ctx.lineTo(cx + 72, cy); ctx.lineTo(cx + 72, cy - 300);
+  ctx.closePath();
+  ctx.clip();
+  drawTile(ctx, img, set, id, cx, cy + 148);
+  ctx.restore();
+}
+
+function drawProp(ctx, name, cx, cy, alpha = 1) {
+  const img = propsAtlas();
+  if (!img) return false;
+  const set = FLARE.tiles.dungeon;
+  drawTile(ctx, img, set, set.props[name], cx, cy, ART_K, alpha);
+  return true;
 }
 
 function diamond(x) {
@@ -171,15 +247,18 @@ function renderFrame(t, focus) {
 
   // 보이는 타일 범위
   const hw = R.W / 2 / z + 140, hh = R.H / 2 / z + 160;
-  const corners = [[R.camX - hw, R.camY - hh], [R.camX + hw, R.camY - hh], [R.camX - hw, R.camY + hh + WALL_H], [R.camX + hw, R.camY + hh + WALL_H]].map(c => fromIso(c[0], c[1]));
+  const corners = [[R.camX - hw, R.camY - hh], [R.camX + hw, R.camY - hh], [R.camX - hw, R.camY + hh + 230], [R.camX + hw, R.camY + hh + 230]].map(c => fromIso(c[0], c[1]));
   const x0 = Math.max(0, Math.floor(Math.min(...corners.map(c => c.x)) / TILE));
   const x1 = Math.min(d.w - 1, Math.ceil(Math.max(...corners.map(c => c.x)) / TILE));
   const y0 = Math.max(0, Math.floor(Math.min(...corners.map(c => c.y)) / TILE));
   const y1 = Math.min(d.h - 1, Math.ceil(Math.max(...corners.map(c => c.y)) / TILE));
-  const onScreen = (ix, iy) => Math.abs(ix - R.camX) < hw && Math.abs(iy - R.camY) < hh + WALL_H;
+  const onScreen = (ix, iy) => Math.abs(ix - R.camX) < hw && iy - R.camY > -hh && iy - R.camY < hh + 230;
 
   // 1) 바닥
   const sorted = [];
+  const atlas = tileAtlas(d);
+  const set = atlas ? d.art.set : null;
+  const kf = ART_K * 1.02;  // 타일 사이 머리카락 같은 틈이 생기지 않게 살짝 겹침
   for (let ty = y0; ty <= y1; ty++) {
     for (let tx = x0; tx <= x1; tx++) {
       const i = ty * d.w + tx;
@@ -187,13 +266,21 @@ function renderFrame(t, focus) {
       if (!tile || !d.explored[i]) continue;
       const ix = (tx - ty) * TILE, iy = (tx + ty) * TILE / 2;
       if (!onScreen(ix, iy + 32)) continue;
-      if (tile === 1) ctx.drawImage(R.sprites.floors[d.variant[i]], ix - 65, iy - 1);
-      else sorted.push({ d: (tx + ty + 1) * TILE, k: 0, tx, ty, ix, iy, v: d.variant[i] & 3 });
+      if (atlas) drawTile(ctx, atlas, set, d.art.floor[i], ix, iy + TILE / 2, kf);
+      else if (tile === 1) ctx.drawImage(R.sprites.floors[d.variant[i]], ix - 65, iy - 1);
+      if (tile === 2) sorted.push({ d: (tx + ty + 1) * TILE, k: 0, tx, ty, ix, iy, i, v: d.variant[i] & 3 });
     }
   }
   const explored = (x, y) => d.explored[Math.floor(y / TILE) * d.w + Math.floor(x / TILE)];
 
-  for (const dc of d.decor) if (explored(dc.x, dc.y)) drawDecor(ctx, dc);
+  const props = propsAtlas();
+  for (const dc of d.decor) {
+    if (!explored(dc.x, dc.y)) continue;
+    if (props && d.art && d.art.set.decor.length) {
+      const dl = d.art.set.decor;
+      drawTile(ctx, props, FLARE.tiles.dungeon, dl[tileHash(dc.x | 0, dc.y | 0) % dl.length], isoX(dc.x, dc.y), isoY(dc.x, dc.y));
+    } else if (!props) drawDecor(ctx, dc);
+  }
   drawFXGround(ctx);
   drawStairs(ctx, d.stairs, t, explored(d.stairs.x, d.stairs.y));
   drawHazards(ctx, t);
@@ -207,23 +294,31 @@ function renderFrame(t, focus) {
   }
   for (const c of world.chests) if (explored(c.x, c.y)) sorted.push({ d: c.x + c.y, k: 4, c });
   for (const pr of world.projectiles) sorted.push({ d: pr.x + pr.y, k: 3, pr });
+  if (atlas) for (const tc of d.torches) if (tc.kind === 'brazier' && explored(tc.bx, tc.by)) sorted.push({ d: tc.bx + tc.by, k: 5, tc });
   if (p && Game.state !== 'title') sorted.push({ d: p.x + p.y, k: 2 });
   sorted.sort((a, b) => a.d - b.d);
   const pIsoX = p ? isoX(p.x, p.y) : 0, pIsoY = p ? isoY(p.x, p.y) : 0, pDepth = p ? p.x + p.y : 0;
+  const playing = p && Game.state !== 'title';
   for (const s of sorted) {
     if (s.k === 0) {
       // 플레이어를 가리는 벽은 반투명
-      let fade = false;
-      if (p && Game.state !== 'title' && s.d > pDepth && Math.abs(s.ix - pIsoX) < 120 && s.iy - pIsoY < 40 && s.iy - pIsoY > -120) fade = true;
-      if (fade) ctx.globalAlpha = 0.32;
-      ctx.drawImage(R.sprites.walls[s.v], s.ix - 65, s.iy - 1 - WALL_H);
-      ctx.globalAlpha = 1;
+      const wallH = atlas ? 200 : WALL_H;
+      const dy = s.iy + TILE / 2 - pIsoY;
+      const fade = playing && s.d > pDepth && Math.abs(s.ix - pIsoX) < (atlas ? 150 : 120) && dy > -30 && dy < wallH + 40;
+      if (atlas && d.art.low[s.i]) drawLowWall(ctx, atlas, set, d.art.wall[s.i], s.ix, s.iy + TILE / 2);
+      else if (atlas) drawTile(ctx, atlas, set, d.art.wall[s.i], s.ix, s.iy + TILE / 2, ART_K, fade ? 0.3 : 1);
+      else {
+        if (fade) ctx.globalAlpha = 0.32;
+        ctx.drawImage(R.sprites.walls[s.v], s.ix - 65, s.iy - 1 - WALL_H);
+        ctx.globalAlpha = 1;
+      }
     } else if (s.k === 1) drawMonster(ctx, s.m, t);
     else if (s.k === 2) drawPlayer(ctx, p, t);
     else if (s.k === 3) drawProjectile(ctx, s.pr, t);
     else if (s.k === 4) drawChest(ctx, s.c);
+    else if (s.k === 5) drawProp(ctx, 'brazier', isoX(s.tc.bx, s.tc.by), isoY(s.tc.bx, s.tc.by));
   }
-  for (const tc of d.torches) if (explored(tc.x, tc.y)) drawTorchBracket(ctx, tc);
+  if (!atlas) for (const tc of d.torches) if (explored(tc.x, tc.y)) drawTorchBracket(ctx, tc);
   drawFXParticles(ctx);
 
   // 3) 조명
@@ -232,7 +327,7 @@ function renderFrame(t, focus) {
   // 4) 빛나는 효과 (어둠 위에 더함)
   ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (R.W / 2 + R.shx - R.camX * z), dpr * (R.H / 2 + R.shy - R.camY * z));
   ctx.globalCompositeOperation = 'lighter';
-  for (const tc of d.torches) if (explored(tc.x, tc.y)) drawTorchFlame(ctx, tc, t);
+  for (const tc of d.torches) if (explored(tc.x, tc.y)) (atlas ? drawFlareFlame : drawTorchFlame)(ctx, tc, t);
   for (const pr of world.projectiles) if (pr.type === 'fireball') drawFireball(ctx, pr, t);
   if (p && p.whirl) drawWhirlArcs(ctx, p, t);
   if (d.stairs.open && explored(d.stairs.x, d.stairs.y)) drawStairsGlow(ctx, d.stairs, t);
@@ -270,6 +365,19 @@ function drawDecor(ctx, dc) {
 function drawStairs(ctx, st, t, seen) {
   if (!seen) return;
   const sx = isoX(st.x, st.y), sy = isoY(st.x, st.y);
+  const props = propsAtlas();
+  if (props) {
+    // 바닥으로 꺼지는 계단 구덩이 (그림 중심을 계단 위치에 맞춤)
+    const set = FLARE.tiles.dungeon, r = set.rects[set.props.stairs], k = ART_K * 0.75;
+    ctx.drawImage(props, r[0], r[1], r[2], r[3], sx - r[2] * k / 2, sy - r[3] * k / 2, r[2] * k, r[3] * k);
+    if (!st.open) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)';
+      ctx.beginPath(); ctx.ellipse(sx, sy, 120, 60, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#6c6c76'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(sx - 70, sy - 24); ctx.lineTo(sx + 70, sy + 24); ctx.moveTo(sx + 70, sy - 24); ctx.lineTo(sx - 70, sy + 24); ctx.stroke();
+    }
+    return;
+  }
   for (let i = 0; i < 4; i++) {
     const s = 1 - i * 0.2;
     ctx.fillStyle = ['#1a1412', '#120d0b', '#0b0807', '#030202'][i];
@@ -311,6 +419,19 @@ function drawHazards(ctx, t) {
 function drawGroundObject(ctx, g, t) {
   const sx = isoX(g.x, g.y), sy = isoY(g.x, g.y);
   drawShadow(ctx, sx, sy, 10, 4, 0.35);
+  if (Assets.ready('icons.webp')) {
+    const idx = g.kind === 'gold' ? 88 : g.kind === 'potion' ? ICON_POTION : itemIconIndex(g.item);
+    const size = g.kind === 'item' ? 30 : 22;
+    if (g.kind === 'item' && g.item.rarity > 0) {
+      const col = RARITY[g.item.rarity].color;
+      const gr = ctx.createRadialGradient(sx, sy - g.z - 12, 2, sx, sy - g.z - 12, 22);
+      gr.addColorStop(0, col + '66'); gr.addColorStop(1, col + '00');
+      ctx.fillStyle = gr;
+      ctx.fillRect(sx - 22, sy - g.z - 34, 44, 44);
+    }
+    drawIcon(ctx, idx, sx - size / 2, sy - g.z - size + 4, size);
+    return;
+  }
   ctx.save();
   ctx.translate(sx, sy - g.z);
   if (g.kind === 'gold') {
@@ -328,6 +449,7 @@ function drawGroundObject(ctx, g, t) {
 
 function drawChest(ctx, c) {
   const sx = isoX(c.x, c.y), sy = isoY(c.x, c.y);
+  if (drawProp(ctx, c.open ? 'chestOpen' : 'chest', sx, sy)) return;
   drawShadow(ctx, sx, sy + 2, 22, 9, 0.5);
   ctx.save();
   ctx.translate(sx, sy);
@@ -364,6 +486,25 @@ function drawTorchFlame(ctx, tc, t) {
   if (chance(0.04)) fxEmbers(tc.x, tc.y, 1, '#ff9a3a', 2);
 }
 
+// 횃불 불꽃 (벽걸이 횃불 / 화로) — 더하기 합성 단계에서 그림
+function drawFlareFlame(ctx, tc, t) {
+  if (!tc.kind) return;
+  const fl = Math.sin(t * 13 + tc.phase) * 0.15 + Math.sin(t * 7.3 + tc.phase) * 0.1;
+  const r = tc.kind === 'brazier' ? 30 : 22;
+  const g = ctx.createRadialGradient(tc.fx, tc.fy, 0, tc.fx, tc.fy, r * (1 + fl * 0.3));
+  g.addColorStop(0, 'rgba(255,190,90,.55)'); g.addColorStop(0.4, 'rgba(255,120,40,.25)'); g.addColorStop(1, 'rgba(255,80,20,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(tc.fx - r * 1.4, tc.fy - r * 1.4, r * 2.8, r * 2.8);
+  if (tc.kind === 'sconce') {
+    ctx.fillStyle = '#ffb04a';
+    ctx.beginPath(); ctx.moveTo(tc.fx - 3, tc.fy); ctx.quadraticCurveTo(tc.fx - 4, tc.fy - 6, tc.fx + fl * 8, tc.fy - 12); ctx.quadraticCurveTo(tc.fx + 4, tc.fy - 6, tc.fx + 3, tc.fy); ctx.closePath(); ctx.fill();
+  }
+  if (chance(0.05)) {
+    const w = fromIso(tc.fx, tc.fy);
+    FX.particles.push({ kind: 'ember', add: true, x: w.x + rand(-3, 3), y: w.y + rand(-3, 3), z: 0, vx: rand(-10, 10), vy: rand(-10, 10), vz: rand(30, 70), g: -10, life: rand(0.4, 0.9), size: rand(1, 2), color: '#ff9a3a' });
+  }
+}
+
 function drawPlayer(ctx, p, t) {
   const sx = isoX(p.x, p.y), sy = isoY(p.x, p.y);
   const shadowK = 1 - p.z / 160;
@@ -371,6 +512,17 @@ function drawPlayer(ctx, p, t) {
     const g = ctx.createRadialGradient(sx, sy, 2, sx, sy, 40);
     g.addColorStop(0, 'rgba(255,40,20,.45)'); g.addColorStop(1, 'rgba(255,40,20,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy, 40, 20, 0, 0, TAU); ctx.fill();
+  }
+  if (HAS_FLARE && Assets.ready(FLARE.hero.default_chest.img)) {
+    if (p.z > 0) drawShadow(ctx, sx, sy, 17 * shadowK, 7 * shadowK);
+    ctx.save();
+    if (HAS_FILTER) {
+      if (p.hurtT > 0) ctx.filter = 'brightness(1.6) sepia(1) saturate(4) hue-rotate(-40deg)';
+      else if (p.buffs.berserk > 0) ctx.filter = 'saturate(1.5) brightness(1.1) hue-rotate(-12deg)';
+    }
+    drawHeroFlare(ctx, p, t, sx, sy - p.z);
+    ctx.restore();
+    return;
   }
   drawShadow(ctx, sx, sy, 17 * shadowK, 7 * shadowK);
   ctx.save();
@@ -409,6 +561,32 @@ function drawMonster(ctx, m, t) {
     g.addColorStop(0, `rgba(${col},${pulse})`); g.addColorStop(1, `rgba(${col},0)`);
     ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy, 34 * s, 16 * s, 0, 0, TAU); ctx.fill();
   }
+  const fs = monsterSprite(m);
+  if (fs && Assets.ready(fs.img)) {
+    const [anim, idx, dir] = monsterPose(m, fs, t);
+    ctx.save();
+    if (m.dead && m.deadT > 6) ctx.globalAlpha = Math.max(0, 1 - (m.deadT - 6) / 2);
+    if (HAS_FILTER && m.hitFlash > 0 && !m.dead) ctx.filter = 'brightness(2.4)';
+    else if (HAS_FILTER && m.tier === 3 && m.pal.skin && m.sprite !== 'wyvern_fire') ctx.filter = 'hue-rotate(-20deg) saturate(1.4) brightness(0.9)';
+    drawSpriteFrame(ctx, fs, anim, dir, idx, sx, sy, m.scale);
+    ctx.restore();
+  } else {
+    drawMonsterFallback(ctx, m, t, sx, sy);
+  }
+  if (m.stun > 0 && !m.dead) {
+    const top = monsterHeight(m);
+    for (let i = 0; i < 3; i++) {
+      const a = t * 6 + i * 2.1;
+      circle(ctx, sx + Math.cos(a) * 12 * s, sy - top + Math.sin(a) * 4, 2.2, '#ffe27a');
+    }
+  }
+}
+
+function monsterHeight(m) { return (MONSTERS[m.type].h || 70) * m.scale * (m.sprite === 'wyvern_fire' ? 0.85 : 1); }
+
+// Flare 그림이 아직 없을 때 쓰는 코드 그림
+function drawMonsterFallback(ctx, m, t, sx, sy) {
+  const s = m.scale;
   if (!m.dead) drawShadow(ctx, sx, sy, m.r * 1.2, m.r * 0.5);
   ctx.save();
   ctx.translate(sx, sy);
@@ -424,12 +602,6 @@ function drawMonster(ctx, m, t) {
   const draw = MONSTER_DRAW[m.type];
   if (draw) draw(ctx, m, t, m.pal);
   ctx.restore();
-  if (m.stun > 0 && !m.dead) {
-    for (let i = 0; i < 3; i++) {
-      const a = t * 6 + i * 2.1;
-      circle(ctx, sx + Math.cos(a) * 12 * s, sy - 66 * s + Math.sin(a) * 4, 2.2, '#ffe27a');
-    }
-  }
 }
 
 function drawProjectile(ctx, pr, t) {
@@ -466,6 +638,7 @@ function collectLights(t, focus) {
   else lights.push({ x: focus.x, y: focus.y, r: 520, i: 0.9 });
   const d = world.dungeon;
   for (const tc of d.torches) {
+    if (d.art && !tc.kind) continue;
     if (dist(tc.x, tc.y, focus.x, focus.y) > 1100) continue;
     if (!d.explored[Math.floor(tc.y / TILE) * d.w + Math.floor(tc.x / TILE)]) continue;
     const fl = 0.85 + Math.sin(t * 11 + tc.phase) * 0.06 + Math.sin(t * 5.7 + tc.phase) * 0.05;
@@ -518,7 +691,7 @@ function drawOverheadBars(ctx) {
   for (const m of world.monsters) {
     if (m.dead || (m.life >= m.maxLife && m.tier === 0)) continue;
     if (dist(m.x, m.y, p.x, p.y) > 700) continue;
-    const sp = worldToScreen(m.x, m.y, 70 * m.scale * (m.type === 'brute' ? 1.25 : 1) * (m.type === 'fallen' ? 0.8 : 1));
+    const sp = worldToScreen(m.x, m.y, monsterHeight(m) + 8);
     const w = (m.tier ? 44 : 30) * Math.min(1.4, m.scale);
     ctx.fillStyle = 'rgba(0,0,0,.7)';
     ctx.fillRect(sp.x - w / 2 - 1, sp.y - 1, w + 2, 5);

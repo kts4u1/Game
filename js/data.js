@@ -312,15 +312,15 @@ const UNIQUES = [
 
 // ── 몬스터 ──
 const MONSTERS = {
-  zombie:   { name: '좀비', life: 16, dmg: [3, 6], speed: 55, r: 15, atkRange: 40, atkCD: 1.5, windup: 0.45, xp: 9, minFloor: 1, weight: 3 },
-  skeleton: { name: '해골 전사', life: 12, dmg: [2, 5], speed: 95, r: 13, atkRange: 40, atkCD: 1.1, windup: 0.35, xp: 8, minFloor: 1, weight: 3 },
-  archer:   { name: '해골 궁수', life: 10, dmg: [2, 4], speed: 80, r: 13, atkCD: 1.9, windup: 0.5, xp: 9, minFloor: 1, weight: 2,
+  zombie:   { name: '좀비', sprite: 'zombie', h: 90, life: 16, dmg: [3, 6], speed: 55, r: 15, atkRange: 40, atkCD: 1.5, windup: 0.45, xp: 9, minFloor: 1, weight: 3 },
+  skeleton: { name: '해골 창병', sprite: 'skeleton', h: 88, life: 12, dmg: [2, 5], speed: 95, r: 14, atkRange: 46, atkCD: 1.1, windup: 0.35, xp: 8, minFloor: 1, weight: 3 },
+  archer:   { name: '해골 석궁병', sprite: 'skeleton_archer', h: 88, life: 10, dmg: [2, 4], speed: 80, r: 14, atkCD: 1.9, windup: 0.5, xp: 9, minFloor: 1, weight: 2,
               ranged: { range: 340, proj: 'arrow', speed: 430, keep: 170 } },
-  fallen:   { name: '타락자', life: 7, dmg: [1, 4], speed: 125, r: 11, atkRange: 34, atkCD: 0.9, windup: 0.25, xp: 5, minFloor: 1, weight: 3, pack: [5, 8] },
-  shaman:   { name: '타락자 주술사', life: 14, dmg: [3, 6], speed: 70, r: 12, atkCD: 2.4, windup: 0.55, xp: 14, minFloor: 2, weight: 0,
+  fallen:   { name: '고블린', sprite: 'goblin', h: 52, life: 7, dmg: [1, 4], speed: 125, r: 11, atkRange: 34, atkCD: 0.9, windup: 0.25, xp: 5, minFloor: 1, weight: 3, pack: [5, 8] },
+  shaman:   { name: '해골 마법사', sprite: 'skeleton_mage', h: 92, life: 14, dmg: [3, 6], speed: 70, r: 13, atkCD: 2.4, windup: 0.55, xp: 14, minFloor: 2, weight: 0,
               ranged: { range: 320, proj: 'fireball', speed: 300, keep: 200 } },
-  wraith:   { name: '망령', life: 18, dmg: [4, 7], speed: 135, r: 14, atkRange: 40, atkCD: 1.0, windup: 0.3, xp: 14, minFloor: 4, weight: 2, lifeSteal: 0.5 },
-  brute:    { name: '지옥 짐승', life: 55, dmg: [8, 14], speed: 72, r: 22, atkRange: 50, atkCD: 1.8, windup: 0.6, xp: 30, minFloor: 6, weight: 1.5 },
+  wraith:   { name: '개미귀신', sprite: 'antlion', h: 50, life: 18, dmg: [4, 7], speed: 135, r: 17, atkRange: 42, atkCD: 1.0, windup: 0.3, xp: 14, minFloor: 4, weight: 2, lifeSteal: 0.5 },
+  brute:    { name: '미노타우로스', sprite: 'minotaur', h: 130, life: 55, dmg: [8, 14], speed: 72, r: 22, atkRange: 52, atkCD: 1.8, windup: 0.6, xp: 30, minFloor: 6, weight: 1.5 },
 };
 
 const ELITE_MODS = {
@@ -336,19 +336,19 @@ const UNIQUE_NAME_A = ['썩은', '피투성이', '검은', '광기의', '저주�
 const UNIQUE_NAME_B = ['그르막', '바쉬토', '크라즈', '무드락', '고렉', '스카르', '토르그', '라즈쿨', '드라고', '카스무'];
 
 const BOSSES = [
-  { name: '도살자 모르그', type: 'brute', scale: 1.7, pal: { skin: '#7d1d14', shade: '#4a0f0a', horn: '#d9cfb8' } },
-  { name: '해골 군주 바르곤', type: 'skeleton', scale: 2.0, pal: { bone: '#c9c3e0', boneShade: '#7d7898', eye: '#8af' } },
-  { name: '역병의 어미', type: 'zombie', scale: 2.0, pal: { skin: '#6b8a3a', shade: '#3e5a1e', rag: '#2e2a14' } },
-  { name: '심연의 군주 아즈라크', type: 'brute', scale: 1.9, pal: { skin: '#3d1650', shade: '#200a2c', horn: '#ff8c3a' } },
+  { name: '도살자 모르그', type: 'brute', sprite: 'minotaur', scale: 1.35, pal: { skin: '#7d1d14', shade: '#4a0f0a', horn: '#d9cfb8' } },
+  { name: '해골 군주 바르곤', type: 'skeleton', sprite: 'skeleton', scale: 1.6, pal: { bone: '#c9c3e0', boneShade: '#7d7898', eye: '#8af' } },
+  { name: '역병의 어미', type: 'zombie', sprite: 'zombie', scale: 1.6, pal: { skin: '#6b8a3a', shade: '#3e5a1e', rag: '#2e2a14' } },
+  { name: '심연의 비룡 아즈라크', type: 'brute', sprite: 'wyvern_fire', scale: 1.4, pal: { skin: '#3d1650', shade: '#200a2c', horn: '#ff8c3a' } },
 ];
 
 // ── 층별 테마 ──
 const THEMES = [
-  { name: '어둠의 묘지', floor: ['#3b3a42', '#36353d', '#302f37'], grout: '#1b1a20', top: '#55535e', left: '#2a2930', right: '#3a3942', brick: '#1d1c22', moss: null },
-  { name: '망자의 동굴', floor: ['#4a3c2e', '#43362a', '#3c3125'], grout: '#1f1912', top: '#5f4e3b', left: '#30261b', right: '#41352a', brick: '#221a12', moss: null },
-  { name: '버려진 성채', floor: ['#323b35', '#2d3630', '#28302b'], grout: '#151a17', top: '#4b5650', left: '#262d29', right: '#343d38', brick: '#161b18', moss: '#3d5a2a' },
-  { name: '불타는 심연', floor: ['#3b2522', '#341f1c', '#2d1a17'], grout: '#120807', top: '#4f2f2a', left: '#26130f', right: '#381c17', brick: '#140806', lava: true },
-  { name: '혼돈의 성역', floor: ['#2f2639', '#2a2133', '#231b2c'], grout: '#100b15', top: '#463a55', left: '#1f1828', right: '#2d243a', brick: '#120d18', lava: true },
+  { name: '어둠의 묘지', tiles: 'dungeon', tint: null, floor: ['#3b3a42', '#36353d', '#302f37'], grout: '#1b1a20', top: '#55535e', left: '#2a2930', right: '#3a3942', brick: '#1d1c22', moss: null },
+  { name: '망자의 동굴', tiles: 'cave', tint: null, floor: ['#4a3c2e', '#43362a', '#3c3125'], grout: '#1f1912', top: '#5f4e3b', left: '#30261b', right: '#41352a', brick: '#221a12', moss: null },
+  { name: '버려진 성채', tiles: 'dungeon', tint: '#9fb39a', floor: ['#323b35', '#2d3630', '#28302b'], grout: '#151a17', top: '#4b5650', left: '#262d29', right: '#343d38', brick: '#161b18', moss: '#3d5a2a' },
+  { name: '불타는 심연', tiles: 'cave', tint: '#ff8f6e', floor: ['#3b2522', '#341f1c', '#2d1a17'], grout: '#120807', top: '#4f2f2a', left: '#26130f', right: '#381c17', brick: '#140806', lava: true },
+  { name: '혼돈의 성역', tiles: 'dungeon', tint: '#b9a0e0', floor: ['#2f2639', '#2a2133', '#231b2c'], grout: '#100b15', top: '#463a55', left: '#1f1828', right: '#2d243a', brick: '#120d18', lava: true },
 ];
 function themeForFloor(f) { return THEMES[Math.min(THEMES.length - 1, Math.floor((f - 1) / 3))]; }
 function monsterLevelForFloor(f) { return 1 + Math.round((f - 1) * 1.5); }

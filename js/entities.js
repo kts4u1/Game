@@ -19,7 +19,7 @@ function spawnMonster(type, x, y, mlvl, tier = 0, opts = {}) {
   const lm = 1 + 0.45 * k + 0.02 * k * k;
   const dm = 1 + 0.26 * k + 0.008 * k * k;
   const m = {
-    id: uid(), type, x, y, r: T.r, mlvl, tier, mods: opts.mods || [], pack: opts.pack || 0,
+    id: uid(), type, sprite: opts.sprite || T.sprite, x, y, r: T.r, mlvl, tier, mods: opts.mods || [], pack: opts.pack || 0,
     name: T.name, life: T.life * lm, dmg: [T.dmg[0] * dm, T.dmg[1] * dm], speed: T.speed * rand(0.92, 1.08),
     atkRange: T.atkRange || 40, atkCD: T.atkCD, windupDur: T.windup, ranged: T.ranged || null,
     xp: T.xp * (1 + 0.5 * k), aggro: false, atkTimer: rand(0.2, 1), windup: 0, strikeT: 0, stun: 0, slow: 0,
@@ -94,7 +94,7 @@ function populateFloor() {
     const B = BOSSES[(f / 5 - 1) % BOSSES.length];
     const r = d.stairsRoom;
     const pos = d.randomPointInRoom(r, 2);
-    world.monsters.push(spawnMonster(B.type, pos.x, pos.y, world.mlvl + 3, 3, { name: B.name, scale: B.scale, pal: B.pal, pack: packId++ }));
+    world.monsters.push(spawnMonster(B.type, pos.x, pos.y, world.mlvl + 3, 3, { name: B.name, scale: B.scale, pal: B.pal, sprite: B.sprite, pack: packId++ }));
     d.stairs.open = false;
   }
   // 보물 상자
@@ -277,7 +277,7 @@ function damageMonster(m, amount, crit, opts = {}) {
   m.life -= amount;
   m.hitFlash = 0.12;
   if (!m.aggro) aggroPack(m);
-  fxText(m.x, m.y, crit ? `${amount}!` : `${amount}`, opts.color || (crit ? '#ffd24a' : '#f2ede4'), crit ? 22 : 15, { crit, z: 52 * m.scale });
+  fxText(m.x, m.y, crit ? `${amount}!` : `${amount}`, opts.color || (crit ? '#ffd24a' : '#f2ede4'), crit ? 22 : 15, { crit, z: monsterHeight(m) * 0.75 });
   const z = 30 * m.scale;
   if (m.type === 'skeleton' || m.type === 'archer') fxSparks(m.x, m.y, z, 4, '#e8e2d0', 120);
   else if (m.type === 'wraith') fxSparks(m.x, m.y, z, 5, '#7ff2ff', 120);

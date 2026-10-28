@@ -36,11 +36,11 @@
   <div id="bar">
     <div id="xp"><div id="xp-fill"></div><span id="xp-text"></span></div>
     <div id="slots">
-      <button class="slot" data-slot="0" aria-label="스킬 1"><img alt="" hidden><span class="key">1</span><span class="lv"></span><div class="cd"></div></button>
-      <button class="slot" data-slot="1" aria-label="스킬 2"><img alt="" hidden><span class="key">2</span><span class="lv"></span><div class="cd"></div></button>
-      <button class="slot" data-slot="2" aria-label="스킬 3"><img alt="" hidden><span class="key">3</span><span class="lv"></span><div class="cd"></div></button>
-      <button class="slot" data-slot="3" aria-label="스킬 4"><img alt="" hidden><span class="key">4</span><span class="lv"></span><div class="cd"></div></button>
-      <button class="slot potion" id="potion-slot" aria-label="생명력 물약"><span class="flask"></span><span class="key">Q</span><span class="count">0</span></button>
+      <button class="slot" data-slot="0" aria-label="스킬 1"><span class="ic"></span><span class="key">1</span><span class="lv"></span><div class="cd"></div></button>
+      <button class="slot" data-slot="1" aria-label="스킬 2"><span class="ic"></span><span class="key">2</span><span class="lv"></span><div class="cd"></div></button>
+      <button class="slot" data-slot="2" aria-label="스킬 3"><span class="ic"></span><span class="key">3</span><span class="lv"></span><div class="cd"></div></button>
+      <button class="slot" data-slot="3" aria-label="스킬 4"><span class="ic"></span><span class="key">4</span><span class="lv"></span><div class="cd"></div></button>
+      <button class="slot potion" id="potion-slot" aria-label="생명력 물약"><span class="ic"><span class="flask"></span></span><span class="key">Q</span><span class="count">0</span></button>
     </div>
     <div id="menu-row">
       <span id="lvl-text">레벨 1</span>
@@ -90,6 +90,8 @@
       <dt>Q</dt><dd>생명력 물약</dd>
       <dt>I · C · Tab</dt><dd>소지품 · 캐릭터 · 지도</dd>
     </dl>
+    <p id="load-status" class="load-status" aria-live="polite"></p>
+    <p class="credit">그림: <a href="https://github.com/flareteam/flare-game" target="_blank" rel="noopener">Flare 프로젝트</a> (Clint Bellanger 외, CC-BY-SA 3.0) · 자세한 저작자 표시는 assets/flare/CREDITS.md</p>
   </div>
 </div>
 
@@ -114,11 +116,13 @@
 <div id="tooltip" hidden></div>
 <!--GAME-BODY-END-->
 
+<script src="assets/flare/manifest.js"></script>
 <script src="js/util.js"></script>
 <script src="js/data.js"></script>
 <script src="js/items.js"></script>
 <script src="js/dungeon.js"></script>
 <script src="js/sprites.js"></script>
+<script src="js/assets.js"></script>
 <script src="js/icons.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/effects.js"></script>

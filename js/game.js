@@ -39,7 +39,30 @@ const Game = {
     bindInput();
     this.buildTitleWorld();
     this.showTitle();
+    this.preloadStart();
     requestAnimationFrame(loop);
+  },
+
+  // 시작에 필요한 그림(타일, 아이콘, 기본 몸, 1층 몬스터)을 미리 불러옴
+  preloadStart() {
+    if (!HAS_FLARE) return;
+    const el = $('load-status');
+    const paths = [FLARE.tiles.dungeon.img, FLARE.tiles.cave.img, 'icons.webp', FLARE.hero.hand_axe.img, ...heroAssetPaths(null),
+      ...monsterAssetPaths(['zombie', 'skeleton', 'skeleton_archer', 'goblin'])];
+    el.textContent = '그림 불러오는 중…';
+    Assets.preload(paths, (n, total) => { el.textContent = `그림 불러오는 중 ${n} / ${total}`; })
+      .then(() => { el.textContent = Object.keys(Assets.failed).length ? '일부 그림을 불러오지 못해 기본 그림으로 표시합니다' : ''; });
+  },
+
+  // 이 층에 나오는 몬스터와 착용 장비 그림을 불러오는 동안 잠시 멈춤
+  preloadFloor() {
+    if (!HAS_FLARE) return;
+    const sprites = [...new Set(world.monsters.map(m => m.sprite))];
+    const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player)];
+    if (paths.every(p => Assets.ready(p))) return;
+    this.loading = true;
+    Assets.preload(paths).then(() => { this.loading = false; });
+    setTimeout(() => { this.loading = false; }, 8000);
   },
 
   buildTitleWorld() {
@@ -48,6 +71,7 @@ const Game = {
     populateFloor();
     world.dungeon.explored.fill(1);
     buildThemeSprites(world.dungeon.theme);
+    prepareFloorArt(world.dungeon);
     const r = world.dungeon.startRoom;
     this.titleCenter = { x: (r.cx + 0.5) * TILE, y: (r.cy + 0.5) * TILE };
     this.titleFocus = { x: this.titleCenter.x, y: this.titleCenter.y };
@@ -109,6 +133,8 @@ const Game = {
     p.x = d.start.x; p.y = d.start.y; p.z = 0;
     p.order = p.path = p.attack = p.leap = p.whirl = null;
     if (R.themeName !== d.theme.name) buildThemeSprites(d.theme);
+    prepareFloorArt(d);
+    this.preloadFloor();
     FX.reset();
     R.camX = isoX(p.x, p.y);
     R.camY = isoY(p.x, p.y) - 30;
@@ -297,10 +323,10 @@ function updateHover() {
       let bd = Infinity;
       for (const m of world.monsters) {
         if (m.dead || dist(m.x, m.y, p.x, p.y) > 1000) continue;
-        const hgt = m.type === 'brute' ? 40 : m.type === 'fallen' ? 20 : 28;
-        const sp = worldToScreen(m.x, m.y, hgt * m.scale);
-        const d = Math.hypot(sp.x - Input.mx, (sp.y - Input.my) * 0.8);
-        const rr = (24 * m.scale + 4) * R.zoom + 6;
+        const mh = monsterHeight(m);
+        const sp = worldToScreen(m.x, m.y, mh * 0.45);
+        const d = Math.hypot(sp.x - Input.mx, (sp.y - Input.my) * 0.7);
+        const rr = Math.max(22, mh * 0.38) * R.zoom + 6;
         if (d < rr && d < bd) { bd = d; h = { kind: 'monster', ref: m }; }
       }
     }
@@ -314,7 +340,7 @@ function updateHover() {
     if (!h) {
       const st = world.dungeon.stairs;
       const sp = worldToScreen(st.x, st.y);
-      if (Math.abs(sp.x - Input.mx) < 60 * R.zoom && Math.abs(sp.y - Input.my) < 30 * R.zoom) h = { kind: 'stairs' };
+      if (Math.abs(sp.x - Input.mx) / (110 * R.zoom) + Math.abs(sp.y - Input.my) / (55 * R.zoom) < 1) h = { kind: 'stairs' };
     }
   }
   const prev = Input.hover;
@@ -358,7 +384,7 @@ function update(dt) {
     return;
   }
   updateHover();
-  const paused = Game.state !== 'playing' || !UI.el.menu.hidden || UI.anyPanel();
+  const paused = Game.state !== 'playing' || !UI.el.menu.hidden || UI.anyPanel() || Game.loading;
   if (!paused) {
     handleHeldInput(dt);
     updatePlayer(dt);

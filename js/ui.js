@@ -3,6 +3,14 @@
 
 const $ = id => document.getElementById(id);
 
+// Flare 아이콘이 있으면 CSS 스프라이트, 없으면 코드로 그린 아이콘
+function skillIconHtml(id) {
+  return HAS_FLARE ? iconHtml(SKILL_ICON[id] != null ? SKILL_ICON[id] : 0, 'skill') : `<img src="${skillIcon(id)}" alt="">`;
+}
+function itemIconHtml(item) {
+  return HAS_FLARE ? iconHtml(itemIconIndex(item), 'item') : `<img src="${itemIcon(item)}" alt="">`;
+}
+
 const UI = {
   el: {}, last: {}, selected: null, mapT: 0, hoverSlot: null, cards: null,
   finePointer: window.matchMedia ? window.matchMedia('(pointer: fine)').matches : true,
@@ -32,6 +40,7 @@ const UI = {
       b.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') this.skillTooltip(i, b); });
     });
     this.el['potion-slot'].addEventListener('pointerdown', e => { e.preventDefault(); drinkPotion(); });
+    if (HAS_FLARE) this.el['potion-slot'].querySelector('.ic').innerHTML = iconHtml(ICON_POTION);
     document.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
       const w = b.dataset.open;
       if (w === 'menu') this.toggleMenu(); else this.togglePanel(w);
@@ -80,9 +89,7 @@ const UI = {
     p.hotbar.forEach((id, i) => {
       const b = this.el.slotBtns[i];
       set('slot' + i, id + ':' + (id ? effLevel(p, id) : 0), () => {
-        const img = b.querySelector('img');
-        if (id) img.src = skillIcon(id); else img.removeAttribute('src');
-        img.hidden = !id;
+        b.querySelector('.ic').innerHTML = id ? skillIconHtml(id) : '';
         b.querySelector('.lv').textContent = id ? effLevel(p, id) : '';
         b.classList.toggle('filled', !!id);
       });
@@ -194,7 +201,7 @@ const UI = {
     if (!item) return `<div class="cell" ${attrs}>${label ? `<span class="cell-label">${label}</span>` : ''}</div>`;
     const sel = (this.selected && this.selected.item === item) ? ' selected' : '';
     const bad = !canEquip(item) ? ' cant' : '';
-    return `<div class="cell r${item.rarity}${sel}${bad}" ${attrs}><img src="${itemIcon(item)}" alt=""></div>`;
+    return `<div class="cell r${item.rarity}${sel}${bad}" ${attrs}>${itemIconHtml(item)}</div>`;
   },
 
   renderInventory() {
@@ -309,7 +316,7 @@ const UI = {
     const skills = ids.length ? ids.map(id => {
       const L = effLevel(p, id), base = p.skills[id];
       const sk = SKILLS[id];
-      return `<li><img src="${skillIcon(id)}" alt=""><div><div class="sk-name">${sk.name} <span class="sk-lv">Lv ${L}${L > base ? ` <em>(+${L - base})</em>` : ''}</span></div><p>${sk.desc(sk.vals(L))}</p></div></li>`;
+      return `<li><span class="sk-icon">${skillIconHtml(id)}</span><div><div class="sk-name">${sk.name} <span class="sk-lv">Lv ${L}${L > base ? ` <em>(+${L - base})</em>` : ''}</span></div><p>${sk.desc(sk.vals(L))}</p></div></li>`;
     }).join('') : '<li class="detail-empty">아직 배운 스킬이 없습니다.</li>';
     this.el['char-panel'].querySelector('.panel-body').innerHTML = `
       <dl class="stats">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>
@@ -354,7 +361,7 @@ const UI = {
     lu.querySelector('.lu-cards').innerHTML = cards.map((id, i) => {
       if (id.startsWith('_')) {
         const b = BONUS_CARDS.find(x => x.id === id);
-        return `<button class="card bonus" data-id="${id}"><span class="card-n">${i + 1}</span><div class="card-type">보너스</div><img class="card-icon" src="${skillIcon(id)}" alt=""><div class="card-name">${b.name}</div><div class="card-key">${b.key}</div><p class="card-desc">${b.desc}</p></button>`;
+        return `<button class="card bonus" data-id="${id}"><span class="card-n">${i + 1}</span><div class="card-type">보너스</div><span class="card-icon">${skillIconHtml(id)}</span><div class="card-name">${b.name}</div><div class="card-key">${b.key}</div><p class="card-desc">${b.desc}</p></button>`;
       }
       const sk = SKILLS[id];
       const lv = p.skills[id] || 0;
@@ -363,7 +370,7 @@ const UI = {
       const type = sk.type === 'active' ? '액티브' : '패시브';
       const tag = lv ? `Lv ${lv} → ${lv + 1}` : '새 기술';
       const key = lv ? `${sk.key(sk.vals(lv + bonus))} → ${sk.key(nv)}` : sk.key(nv);
-      return `<button class="card ${sk.type}${lv ? '' : ' new'}" data-id="${id}"><span class="card-n">${i + 1}</span><div class="card-type">${type} · ${tag}</div><img class="card-icon" src="${skillIcon(id)}" alt=""><div class="card-name">${sk.name}</div><div class="card-key">${key}</div><p class="card-desc">${sk.desc(nv)}</p></button>`;
+      return `<button class="card ${sk.type}${lv ? '' : ' new'}" data-id="${id}"><span class="card-n">${i + 1}</span><div class="card-type">${type} · ${tag}</div><span class="card-icon">${skillIconHtml(id)}</span><div class="card-name">${sk.name}</div><div class="card-key">${key}</div><p class="card-desc">${sk.desc(nv)}</p></button>`;
     }).join('');
     lu.hidden = false;
   },
