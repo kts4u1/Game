@@ -121,11 +121,12 @@ const Town = {
   },
   castPortalDone() {
     const p = player, d = world.dungeon;
-    let spot = { x: p.x + 50, y: p.y };
+    // 차원문은 플레이어 옆의 넓은 빈자리에 (벽 너머가 아니게 시야도 확인), 없으면 발밑에
+    let spot = { x: p.x, y: p.y };
     for (let i = 0; i < 8; i++) {
-      const a = i / 8 * TAU;
+      const a = Math.PI / 4 + i / 8 * TAU;
       const q = { x: p.x + Math.cos(a) * 55, y: p.y + Math.sin(a) * 55 };
-      if (!d.circleBlocked(q.x, q.y, 20)) { spot = q; break; }
+      if (!d.circleBlocked(q.x, q.y, 26) && d.clearPath(p.x, p.y, q.x, q.y, 12)) { spot = q; break; }
     }
     world.portal = { x: spot.x, y: spot.y, kind: 'portal', t: 0 };
     Game.dungeonWorld = world;

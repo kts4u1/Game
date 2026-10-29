@@ -173,6 +173,11 @@ function updatePlayer(dt) {
   if (p.pose) { p.poseT += dt; if (p.poseT >= p.poseDur) p.pose = null; }
   p.moving = false;
 
+  // 안전장치: 어떤 이유로든 벽 안에 끼었으면 가장 가까운 빈자리로 빼냄
+  if (!p.leap && world.dungeon.circleBlocked(p.x, p.y, p.r * 0.8)) {
+    const s2 = world.dungeon.freeSpot(p.x, p.y, p.r);
+    p.x = s2.x; p.y = s2.y; p.path = null;
+  }
   if (p.tp) {
     p.tp.t += dt;
     if (chance(dt * 30)) fxSparks(p.x + rand(-20, 20), p.y + rand(-20, 20), rand(10, 70), 1, '#8fd0ff', 40);

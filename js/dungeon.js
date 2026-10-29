@@ -147,6 +147,20 @@ class Dungeon {
   circleBlocked(x, y, r) {
     return this.solidAt(x - r, y - r) || this.solidAt(x + r, y - r) || this.solidAt(x - r, y + r) || this.solidAt(x + r, y + r);
   }
+  // (x, y)에서 가장 가까운, 반지름 r 원이 들어갈 빈자리 (벽에 끼지 않게)
+  freeSpot(x, y, r, maxR = 360) {
+    if (!this.circleBlocked(x, y, r)) return { x, y };
+    for (let rad = 8; rad <= maxR; rad += 8) {
+      const n = Math.max(8, Math.round(rad / 6));
+      const off = Math.random() * TAU;
+      for (let k = 0; k < n; k++) {
+        const a = off + k / n * TAU;
+        const qx = x + Math.cos(a) * rad, qy = y + Math.sin(a) * rad;
+        if (!this.circleBlocked(qx, qy, r)) return { x: qx, y: qy };
+      }
+    }
+    return { x: this.start.x, y: this.start.y };
+  }
   // 축 분리 이동으로 벽을 따라 미끄러지기
   moveCircle(e, dx, dy) {
     const r = e.r * 0.8;

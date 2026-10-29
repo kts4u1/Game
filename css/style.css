@@ -314,6 +314,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   letter-spacing: .06em; background: linear-gradient(#ffd9b0 0%, #e2353e 45%, #5a0508 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 4px 0 #000) drop-shadow(0 0 30px rgba(180, 20, 20, .6));
 }
+.title-en { margin: -2px 0 14px; font-family: var(--font-display); font-size: clamp(11px, 1.6vw, 14px); letter-spacing: .55em; color: #b9925a; text-shadow: 0 1px 2px #000; }
 .tagline { color: var(--ink-dim); line-height: 1.7; margin: 0 auto 24px; max-width: 34em; text-wrap: pretty; }
 .title-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .overlay button.primary { background: linear-gradient(#8a1c14, #4a0a08); border-color: #c0503a; color: #fff1dc; }

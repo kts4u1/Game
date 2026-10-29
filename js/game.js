@@ -144,7 +144,8 @@ const Game = {
   // 새 층(또는 마을)에 플레이어를 세우고 그림·소리·카메라를 맞춤
   arrive(x, y) {
     const p = player, d = world.dungeon;
-    p.x = x; p.y = y; p.z = 0;
+    const spot = d.freeSpot(x, y, p.r);  // 벽 안에 서지 않게
+    p.x = spot.x; p.y = spot.y; p.z = 0;
     p.order = p.path = p.attack = p.leap = p.whirl = p.tp = null;
     p.dead = false;
     if (R.themeName !== d.theme.name) buildThemeSprites(d.theme);
@@ -190,7 +191,13 @@ const Game = {
     if (!dw || !dw.portal) { UI.message('열려 있는 차원문이 없습니다', '#c9c1b3'); return; }
     world = dw;
     SFX.play('teleporter');
-    this.arrive(dw.portal.x + 40, dw.portal.y + 20);
+    // 차원문 바로 앞(빈자리)에 나타남
+    const d = dw.dungeon, pt = dw.portal;
+    let at = null;
+    for (const [ox, oy] of [[40, 20], [20, 40], [45, -10], [-10, 45], [-40, -20], [-20, -40]]) {
+      if (!d.circleBlocked(pt.x + ox, pt.y + oy, player.r) && d.clearPath(pt.x, pt.y, pt.x + ox, pt.y + oy, 10)) { at = { x: pt.x + ox, y: pt.y + oy }; break; }
+    }
+    this.arrive(at ? at.x : pt.x, at ? at.y : pt.y);
     UI.banner(`${world.floor}층 · ${world.dungeon.theme.name}`, '차원문을 통해 돌아왔습니다');
     this.save();
   },
