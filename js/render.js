@@ -292,7 +292,7 @@ function renderFrame(t, focus) {
   R.shx = (Math.random() - 0.5) * FX.shake;
   R.shy = (Math.random() - 0.5) * FX.shake;
   const z = R.zoom;
-  ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (R.W / 2 + R.shx - R.camX * z), dpr * (R.H / 2 + R.shy - R.camY * z));
+  setXform(ctx, dpr * z, dpr * z, dpr * (R.W / 2 + R.shx - R.camX * z), dpr * (R.H / 2 + R.shy - R.camY * z));
 
   // 보이는 타일 범위
   const hw = R.W / 2 / z + 140, hh = R.H / 2 / z + 160;
@@ -330,14 +330,14 @@ function renderFrame(t, focus) {
       drawTile(ctx, props, FLARE.tiles.dungeon, dl[tileHash(dc.x | 0, dc.y | 0) % dl.length], isoX(dc.x, dc.y), isoY(dc.x, dc.y));
     } else if (!props) drawDecor(ctx, dc);
   }
-  drawFXGround(ctx);
-  drawFXSprites(ctx, 'ground');
-  if (!d.stairs.none) drawStairs(ctx, d.stairs, t, explored(d.stairs.x, d.stairs.y));
-  if (d.town) drawTownGate(ctx, d, t);
-  drawPools(ctx, t);
-  for (const pt of portalsOf(world)) drawPortalBase(ctx, pt, t);
-  drawHazards(ctx, t);
-  for (const g of world.ground) if (explored(g.x, g.y) && groundVisible(g)) drawGroundObject(ctx, g, t);
+  safeDraw(ctx, () => drawFXGround(ctx));
+  safeDraw(ctx, () => drawFXSprites(ctx, 'ground'));
+  if (!d.stairs.none) safeDraw(ctx, () => drawStairs(ctx, d.stairs, t, explored(d.stairs.x, d.stairs.y)));
+  if (d.town) safeDraw(ctx, () => drawTownGate(ctx, d, t));
+  safeDraw(ctx, () => drawPools(ctx, t));
+  for (const pt of portalsOf(world)) safeDraw(ctx, () => drawPortalBase(ctx, pt, t));
+  safeDraw(ctx, () => drawHazards(ctx, t));
+  for (const g of world.ground) if (explored(g.x, g.y) && groundVisible(g)) safeDraw(ctx, () => drawGroundObject(ctx, g, t));
 
   // 2) 벽 + 엔티티 깊이 정렬
   const p = player;
@@ -358,7 +358,7 @@ function renderFrame(t, focus) {
   const playing = p && Game.state !== 'title';
   for (const s of sorted) {
     // 그림 하나에 문제가 있어도 나머지(캐릭터, 몬스터, 조명)는 계속 그림
-    try { drawSorted(ctx, s); } catch (err) { if (!R.drawErr) { R.drawErr = true; console.error(err); } }
+    safeDraw(ctx, () => drawSorted(ctx, s));
   }
   function drawSorted(ctx, s) {
     if (s.k === 0 && d.town) {
@@ -392,32 +392,48 @@ function renderFrame(t, focus) {
   ctx.globalAlpha = 1;
   ctx.filter = 'none';
   if (!atlas) for (const tc of d.torches) if (explored(tc.x, tc.y)) drawTorchBracket(ctx, tc);
-  drawFXParticles(ctx);
-  drawFXSprites(ctx, 'top');
+  safeDraw(ctx, () => drawFXParticles(ctx));
+  safeDraw(ctx, () => drawFXSprites(ctx, 'top'));
 
   // 3) 조명
-  drawLighting(t, focus);
+  safeDraw(ctx, () => drawLighting(t, focus));
 
   // 4) 빛나는 효과 (어둠 위에 더함)
-  ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (R.W / 2 + R.shx - R.camX * z), dpr * (R.H / 2 + R.shy - R.camY * z));
+  setXform(ctx, dpr * z, dpr * z, dpr * (R.W / 2 + R.shx - R.camX * z), dpr * (R.H / 2 + R.shy - R.camY * z));
   ctx.globalCompositeOperation = 'lighter';
-  for (const tc of d.torches) if (explored(tc.x, tc.y)) (atlas ? drawFlareFlame : drawTorchFlame)(ctx, tc, t);
-  for (const pr of world.projectiles) if (pr.type === 'fireball') drawFireball(ctx, pr, t);
-  for (const pt of portalsOf(world)) drawPortalGlow(ctx, pt, t);
-  if (d.town) drawTownGlow(ctx, d, t);
-  drawFXSprites(ctx, 'glow');
-  if (p && p.whirl) drawWhirlArcs(ctx, p, t);
-  if (d.stairs.open && !d.stairs.none && explored(d.stairs.x, d.stairs.y)) drawStairsGlow(ctx, d.stairs, t);
+  safeDraw(ctx, () => {
+    for (const tc of d.torches) if (explored(tc.x, tc.y)) (atlas ? drawFlareFlame : drawTorchFlame)(ctx, tc, t);
+    for (const pr of world.projectiles) if (pr.type === 'fireball') drawFireball(ctx, pr, t);
+    for (const pt of portalsOf(world)) drawPortalGlow(ctx, pt, t);
+    if (d.town) drawTownGlow(ctx, d, t);
+    drawFXSprites(ctx, 'glow');
+    if (p && p.whirl) drawWhirlArcs(ctx, p, t);
+    if (d.stairs.open && !d.stairs.none && explored(d.stairs.x, d.stairs.y)) drawStairsGlow(ctx, d.stairs, t);
+  });
   ctx.globalCompositeOperation = 'source-over';
-  drawFXAdditive(ctx, t);
+  safeDraw(ctx, () => drawFXAdditive(ctx, t));
 
   // 5) 화면 좌표 오버레이
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  drawOverheadBars(ctx);
-  drawLabels(ctx, explored);
-  drawDamageTexts(ctx);
+  setXform(ctx, dpr, dpr, 0, 0);
+  safeDraw(ctx, () => drawOverheadBars(ctx));
+  safeDraw(ctx, () => drawLabels(ctx, explored));
+  safeDraw(ctx, () => drawDamageTexts(ctx));
   if (R.showMap) drawAutomap(ctx, R.W / 2, R.H / 2, 7, 0.55, true);
 }
+
+// 그리기 한 부분에서 오류가 나도 화면의 나머지는 계속 그림 (같은 오류는 한 번만 기록)
+function safeDraw(ctx, fn) {
+  try { fn(); }
+  catch (err) {
+    const key = String(err && err.message);
+    R.drawErrs = R.drawErrs || new Set();
+    if (!R.drawErrs.has(key)) { R.drawErrs.add(key); console.error(err); }
+    if (R.curT) ctx.setTransform(R.curT[0], 0, 0, R.curT[1], R.curT[2], R.curT[3]);
+    ctx.globalAlpha = 1; ctx.filter = 'none';
+  }
+}
+// 지금 쓰는 화면 변환을 기억해 두고 적용 (오류 뒤 되돌리기용)
+function setXform(ctx, sx, sy, tx, ty) { R.curT = [sx, sy, tx, ty]; ctx.setTransform(sx, 0, 0, sy, tx, ty); }
 
 function drawDecor(ctx, dc) {
   const sx = isoX(dc.x, dc.y), sy = isoY(dc.x, dc.y);
@@ -483,7 +499,8 @@ function drawStairsGlow(ctx, st, t) {
 
 function drawHazards(ctx, t) {
   for (const h of world.hazards) {
-    const k = h.t / h.delay;
+    if (h.t < 0) continue;  // 시차를 두고 떨어지는 공격은 차례가 올 때까지 표시하지 않음
+    const k = clamp(h.t / h.delay, 0, 1);
     const sx = isoX(h.x, h.y), sy = isoY(h.x, h.y);
     const col = h.kind === 'fire' ? '255,120,40' : h.kind === 'frost' ? '140,200,255' : h.kind === 'shock' ? '180,150,255' : '255,40,30';
     ctx.fillStyle = `rgba(${col},${0.12 + k * 0.2})`;
