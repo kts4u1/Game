@@ -355,7 +355,7 @@ const Shop = {
     const hint = t => `<p class="shop-hint">${t}</p>`;
 
     if (n.role === 'smith' && this.tab === 'buy') {
-      body = gold + hint('물건을 누르면 자세히 보고 살 수 있습니다. 소지품 창에서 가방의 물건을 누르면 팔 수 있습니다.')
+      body = gold + hint('물건을 누르면 자세히 보고 살 수 있습니다. 소지품 창에서 가방의 물건을 <b>Shift + 클릭</b>하거나 이 창으로 끌어다 놓으면 바로 팝니다.')
         + `<div class="grid">${this.stock.map((it, i) => cell(it, `data-stock="${i}"`, this.buyPrice(it))).join('')}</div>`
         + `<div class="foot-btns"><button data-act="restock">물건 새로 들여오기 <small>${this.restockPrice()} 골드</small></button></div>`;
       if (this.buyback.length) body += `<h3>판 물건 되사기</h3><div class="grid">${this.buyback.map((it, i) => cell(it, `data-bb="${i}"`, it.value)).join('')}</div>`;
@@ -385,7 +385,7 @@ const Shop = {
           return `<li><span class="sl-icon">${iconHtml(E.ii)}</span><div class="sl-main"><div class="sl-name">${E.name}${left}</div><div class="sl-desc">${E.desc}</div></div>
             <div class="sl-btns"><button data-elixir="${id}">마시기 <small>${E.price(this.level())}</small></button></div></li>`;
         }).join('')}
-      </ul>` + hint('소지품 창에서 가방의 물건을 누르면 팔 수 있습니다.');
+      </ul>` + hint('소지품 창에서 가방의 물건을 <b>Shift + 클릭</b>하거나 이 창으로 끌어다 놓으면 바로 팝니다.');
     } else if (n.role === 'gambler') {
       body = gold + hint('어떤 물건이 나올지는 열어 봐야 압니다. 대부분 마법 아이템이지만, 레어·세트·유니크가 나오기도 합니다.')
         + `<div class="gamble-grid">${GAMBLE_SLOTS.map(sl => `<button data-gamble="${sl}"><span class="gb-icon">${iconHtml(GAMBLE_ICON[sl])}</span><span class="gb-name">${SLOT_NAMES[sl]}</span><small>${this.gamblePrice(sl).toLocaleString()} 골드</small></button>`).join('')}</div>`;
@@ -454,7 +454,7 @@ const Shop = {
     const st = t.closest('[data-stock]'), bb = t.closest('[data-bb]'), sh = t.closest('[data-stash]');
     if (st) { const it = this.stock[+st.dataset.stock]; this.sel = it ? { item: it, list: 'stock' } : null; }
     else if (bb) { const it = this.buyback[+bb.dataset.bb]; this.sel = it ? { item: it, list: 'bb' } : null; }
-    else if (sh) { UI.tapCell({ c: 'stash', i: +sh.dataset.stash }); return; }
+    else if (sh) { if (e.shiftKey) UI.shiftClick({ c: 'stash', i: +sh.dataset.stash }); else UI.tapCell({ c: 'stash', i: +sh.dataset.stash }); return; }
     else return;
     this.refresh();
   },

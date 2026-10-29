@@ -384,3 +384,4 @@ body.item-dragging, body.item-dragging * { cursor: grabbing !important; }
 .inv-meta { align-items: center; gap: 8px; }
 .inv-meta .mini-btn { margin-left: auto; }
 .detail-empty b { color: var(--ink-dim); font-weight: 700; }
+.shop-hint b { color: var(--ink); font-weight: 700; }

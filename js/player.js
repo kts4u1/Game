@@ -676,7 +676,7 @@ function rollCards(first) {
     const lv = p.skills[id] || 0;
     if (lv >= SKILLS[id].max) return false;
     if (SKILLS[id].type === 'active' && !lv && learnedActives.length >= 4) return false;
-    if (first && SKILLS[id].type !== 'active') return false;
+    if (first && (SKILLS[id].type !== 'active' || id === 'berserk')) return false;  // 첫 기술은 공격 기술로
     return true;
   });
   const weight = id => {

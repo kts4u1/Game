@@ -251,7 +251,7 @@ const UI = {
     const grid = p.inventory.map((it, i) => this.cellHtml(it, `data-inv="${i}"`)).join('');
     const sellOk = Shop.canSell(), stashOk = Shop.isOpen() && Shop.npc.role === 'stash';
     const hint = this.finePointer
-      ? '아이템을 누르면 자세한 정보와 버튼이 나옵니다. <b>두 번 누르거나 오른쪽 클릭</b>하면 바로 착용·해제하고, <b>끌어다 놓으면</b> 장비 칸이나 가방의 다른 칸으로 옮겨집니다.'
+      ? '아이템을 누르면 자세한 정보와 버튼이 나옵니다. <b>두 번 누르거나 오른쪽 클릭</b>하면 바로 착용·해제하고, <b>끌어다 놓으면</b> 장비 칸이나 가방의 다른 칸으로 옮겨집니다. 상인 창이 열려 있을 때 <b>Shift + 클릭</b>하면 바로 팝니다.'
       : '아이템을 누르면 자세한 정보와 버튼이 나옵니다. <b>두 번 누르면</b> 바로 착용·해제하고, <b>길게 누른 채 끌면</b> 다른 칸으로 옮겨집니다. 아래 <b>옮기기</b> 버튼으로도 옮길 수 있습니다.';
     let detail = `<p class="detail-empty">${hint}${sellOk || stashOk ? '' : ' 물건은 마을 상인에게 팔 수 있습니다.'}</p>`;
     let selRow = '';
@@ -317,7 +317,26 @@ const UI = {
     }
     const cell = e.target.closest('[data-inv],[data-eq]');
     if (!cell) return;
+    if (e.shiftKey) { this.shiftClick(cellLoc(cell)); return; }
     this.tapCell(cellLoc(cell));
+  },
+
+  // Shift + 클릭: 상인 창이 열려 있으면 바로 판매, 보관함이 열려 있으면 넣기·꺼내기
+  shiftClick(loc) {
+    const p = player, it = itemAt(loc);
+    if (!it) return;
+    this.moveFrom = null;
+    if (loc.c === 'stash') Shop.stashTake(loc.i);
+    else if (loc.c === 'eq') { UI.message('착용 중인 물건은 먼저 벗어야 팔 수 있습니다', '#ff7a6a'); SFX.play('nope'); }
+    else if (Shop.canSell()) {
+      sellInventory(loc.i);
+      this.message(`${itemName(it)} 판매 +${it.value} 골드 (대장장이에게서 되살 수 있음)`, '#e8c35a');
+    } else if (Shop.isOpen() && Shop.npc.role === 'stash') Shop.stashPut(loc.i);
+    else { this.message('Shift+클릭 판매는 마을 상인 창을 연 상태에서 됩니다', '#c9c1b3'); SFX.play('nope'); }
+    if (this.selected && this.selected.item === it) this.selected = null;
+    if (Shop.sel && Shop.sel.item === it) Shop.sel = null;
+    this.hideTooltip();
+    this.refreshPanels();
   },
 
   // 칸을 눌렀을 때: 옮기기 중이면 옮기고, 같은 물건을 빠르게 두 번 누르면 바로 착용·해제, 아니면 선택

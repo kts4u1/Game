@@ -27,7 +27,7 @@ function spawnMonster(type, x, y, mlvl, tier = 0, opts = {}) {
     id: uid(), type, sprite: opts.sprite || T.sprite, x, y, r: T.r, mlvl, tier, mods: opts.mods || [], pack: opts.pack || 0,
     name: T.name, life: T.life * lm, dmg: [T.dmg[0] * dm, T.dmg[1] * dm], speed: T.speed * rand(0.92, 1.08),
     atkRange: T.atkRange || 40, atkCD: T.atkCD || 2, windupDur: T.windup || 0.5, baseWindup: T.windup || 0.5, ranged: T.ranged || null,
-    xp: T.xp * (1 + 0.5 * k), aggro: false, atkTimer: rand(0.2, 1), windup: 0, strikeT: 0, stun: 0, slow: 0,
+    xp: T.xp * 0.85 * (1 + 0.5 * k), aggro: false, atkTimer: rand(0.2, 1), windup: 0, strikeT: 0, stun: 0, slow: 0,
     kvx: 0, kvy: 0, hitFlash: 0, dead: false, deadT: 0, walkPhase: Math.random() * 10, moving: false,
     facing: Math.random() * TAU, seed: Math.random() * 10, losT: Math.random() * 0.3, hasLos: false,
     scale: 1, pal: {}, lifeSteal: T.lifeSteal || 0, flowT: 0, stuckT: 0,
@@ -56,18 +56,30 @@ function spawnMonster(type, x, y, mlvl, tier = 0, opts = {}) {
   return m;
 }
 
-function spawnPack(room, type, tier, packId) {
+// 몬스터 밀도: 처음 몇 층은 조금 덜, 5층부터 최대
+function floorDensity(f) { return f <= 1 ? 0.7 : f === 2 ? 0.8 : f <= 4 ? 0.9 : 1; }
+
+// 무리 크기: 기본 4–7마리, 무리 지어 다니는 종류는 data.js의 pack 값보다 30% 많게
+function packSize(type, tier) {
+  const T = MONSTERS[type];
+  const dens = floorDensity(world.floor);
+  let n = T.pack ? Math.max(3, Math.round(randInt(T.pack[0], T.pack[1]) * 1.3 * dens)) : Math.max(3, Math.round(randInt(4, 7) * dens));
+  if (type === 'brute') n = randInt(2, 3);
+  if (type === 'wraith') n = randInt(3, 5);
+  if (tier === 1) n = Math.max(type === 'swarm' ? 5 : 3, Math.min(n, world.floor <= 2 ? 3 : 5));
+  return n;
+}
+
+function spawnPack(room, type, tier, packId, at, count) {
   const d = world.dungeon;
   const T = MONSTERS[type];
-  let n = T.pack ? randInt(T.pack[0], T.pack[1]) : randInt(3, 5);
-  if (type === 'brute') n = randInt(1, 3);
-  if (type === 'wraith') n = randInt(2, 4);
-  if (tier === 1) n = Math.max(type === 'swarm' ? 4 : 2, Math.min(n, 4));
-  const c = d.randomPointInRoom(room, 2);
+  const n = count || packSize(type, tier);
+  const c = at || d.randomPointInRoom(room, 2);
+  const spread = Math.min(110, 60 + n * 6);
   const place = () => {
-    for (let a = 0; a < 10; a++) {
-      const tx = c.x + rand(-70, 70), ty = c.y + rand(-70, 70);
-      if (!d.circleBlocked(tx, ty, 16)) return { x: tx, y: ty };
+    for (let a = 0; a < 12; a++) {
+      const tx = c.x + rand(-spread, spread), ty = c.y + rand(-spread, spread);
+      if (!d.circleBlocked(tx, ty, 16) && d.los(c.x, c.y, tx, ty)) return { x: tx, y: ty };
     }
     return { x: c.x, y: c.y };
   };
@@ -112,7 +124,8 @@ function populateFloor() {
   const uniqueRoom = f >= 2 && uniqCands.length ? pick(uniqCands) : null;
   let packId = 1;
   for (const r of rooms) {
-    const packs = 1 + (r.w * r.h > 70 ? 1 : 0) + (chance(0.3) ? 1 : 0);
+    const area = r.w * r.h, dens = floorDensity(f);
+    const packs = 1 + (area > 56 && chance(dens) ? 1 : 0) + (area > 100 && chance(dens) ? 1 : 0) + (chance(0.45 * dens) ? 1 : 0);
     for (let k = 0; k < packs; k++) {
       const type = weightedPick(types, t => MONSTERS[t].weight);
       spawnPack(r, type, k === 0 && champRooms.includes(r) ? 1 : 0, packId++);
@@ -130,6 +143,13 @@ function populateFloor() {
         world.monsters.push(spawnMonster(type, p.x, p.y, world.mlvl + 1, 0, { pack: pid }));
       }
     }
+  }
+  // 통로를 떠도는 작은 무리
+  const wander = corridorSpots(Math.min(9, Math.round((4 + Math.floor(f / 2)) * floorDensity(f))));
+  const roamers = types.filter(t => !MONSTERS[t].stationary);
+  for (const pt of wander) {
+    const type = weightedPick(roamers.length ? roamers : types, t => MONSTERS[t].weight);
+    spawnPack(null, type, 0, packId++, pt, MONSTERS[type].pack ? Math.max(3, packSize(type, 0) - 2) : randInt(2, 4));
   }
   // 저주받은 무덤: 부수기 전까지 해골 병사를 계속 불러냄
   if (f >= 3 && chance(0.55)) {
@@ -150,6 +170,27 @@ function populateFloor() {
     const p = d.randomPointInRoom(r, 1);
     world.chests.push({ x: p.x, y: p.y, open: false, t: 0 });
   }
+}
+
+// 방 밖의 통로 칸 중에서 시작 지점과 멀고 서로 떨어진 곳들
+function corridorSpots(n) {
+  const d = world.dungeon;
+  const inRoom = (x, y) => d.rooms.some(r => x >= r.x - 1 && x <= r.x + r.w && y >= r.y - 1 && y <= r.y + r.h);
+  const s = d.startRoom;
+  const cand = [];
+  for (let y = 1; y < d.h - 1; y++) for (let x = 1; x < d.w - 1; x++) {
+    if (!d.walkable(x, y) || inRoom(x, y)) continue;
+    if (Math.abs(x - s.cx) + Math.abs(y - s.cy) < 12) continue;
+    cand.push({ x, y });
+  }
+  shuffle(cand);
+  const out = [];
+  for (const c of cand) {
+    if (out.some(o => Math.abs(o.tx - c.x) + Math.abs(o.ty - c.y) < 10)) continue;
+    out.push({ tx: c.x, ty: c.y, x: (c.x + 0.5) * TILE, y: (c.y + 0.5) * TILE });
+    if (out.length >= n) break;
+  }
+  return out;
 }
 
 function aggroPack(m) {
@@ -561,7 +602,7 @@ function frostNova(x, y) {
 function dropLoot(x, y, mlvl, tier, extraGold = 0) {
   const s = player.stats;
   let items = 0, gold = 0, potion = 0, minRarity = 0;
-  if (tier === 0) { items = chance(0.07) ? 1 : 0; gold = 0.2; potion = 0.06; }
+  if (tier === 0) { items = chance(0.04) ? 1 : 0; gold = 0.14; potion = 0.045; }
   else if (tier === 1) { items = chance(0.45) ? 1 : 0; gold = 0.7; potion = 0.25; }
   else if (tier === 2) { items = 2; gold = 1; potion = 0.6; minRarity = 1; }
   else if (tier === 3) { items = 3; gold = 1; potion = 1; minRarity = 2; }
