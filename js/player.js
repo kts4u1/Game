@@ -506,36 +506,111 @@ function drinkPotion() {
 // ── 소지품 ──
 function canEquip(item) { return player.level >= item.req; }
 
-function equipFromInventory(idx) {
+// ── 아이템 위치: { c: 'inv' | 'eq' | 'stash', i: 칸 번호, k: 장비 칸 이름 } ──
+function itemAt(loc) {
   const p = player;
-  const item = p.inventory[idx];
-  if (!item) return;
-  if (!canEquip(item)) { UI.message(`레벨 ${item.req}부터 착용할 수 있습니다`, '#ff7a6a'); SFX.play('nope'); return; }
-  let key = item.slot;
-  if (item.slot === 'ring') key = !p.equipment.ring1 ? 'ring1' : !p.equipment.ring2 ? 'ring2' : 'ring1';
-  // 양손 무기와 방패는 함께 들 수 없음 → 다른 쪽을 가방으로
-  let bump = null;
-  if (key === 'weapon' && isTwoHanded(item) && p.equipment.shield) bump = 'shield';
-  if (key === 'shield' && isTwoHanded(p.equipment.weapon)) bump = 'weapon';
-  const prev = p.equipment[key];
-  if (bump) {
-    const free = p.inventory.findIndex((x, i) => !x && i !== idx);
-    const room = prev ? free : idx;
-    if (room < 0) { UI.message(bump === 'shield' ? '양손 무기를 들려면 방패를 넣을 가방 칸이 필요합니다' : '방패를 들려면 양손 무기를 넣을 가방 칸이 필요합니다', '#ff7a6a'); SFX.play('nope'); return; }
-    const other = p.equipment[bump];
-    p.equipment[bump] = null;
-    p.equipment[key] = item;
-    p.inventory[idx] = prev || null;
-    p.inventory[prev ? free : idx] = other;
-    UI.message(bump === 'shield' ? '양손 무기를 들어 방패를 가방에 넣었습니다' : '방패를 들어 양손 무기를 가방에 넣었습니다', '#c9c1b3');
-  } else {
-    p.equipment[key] = item;
-    p.inventory[idx] = prev || null;
-  }
+  return loc.c === 'eq' ? p.equipment[loc.k] : loc.c === 'inv' ? p.inventory[loc.i] : p.stash[loc.i];
+}
+function putAt(loc, it) {
+  const p = player;
+  if (loc.c === 'eq') p.equipment[loc.k] = it || null;
+  else if (loc.c === 'inv') p.inventory[loc.i] = it || null;
+  else p.stash[loc.i] = it || null;
+}
+function sameLoc(a, b) { return a.c === b.c && (a.c === 'eq' ? a.k === b.k : a.i === b.i); }
+function fitsKey(it, k) { return !!it && slotOfKey(k) === it.slot; }
+function defaultKey(it) {
+  const p = player;
+  if (it.slot !== 'ring') return it.slot;
+  return !p.equipment.ring1 ? 'ring1' : !p.equipment.ring2 ? 'ring2' : 'ring1';
+}
+function cantEquipMsg(it) { UI.message(`레벨 ${it.req}부터 착용할 수 있습니다`, '#ff7a6a'); SFX.play('nope'); }
+
+// 장비가 바뀐 뒤: 능력치 다시 계산 (생명력 비율 유지), 소리, 저장 표시
+function afterEquipChange(item) {
+  const p = player;
   const ratio = p.life / p.stats.maxLife;
   recalcStats(p);
   p.life = Math.max(1, Math.min(p.stats.maxLife, ratio * p.stats.maxLife));
-  SFX.equip(item);
+  if (item) SFX.equip(item);
+  Game.dirty = true;
+}
+
+// loc에 있는 물건을 key 칸에 착용. 원래 착용하던 물건은 loc 자리로 감
+// 양손 무기와 방패는 함께 들 수 없으므로 다른 쪽은 가방 빈칸으로
+function equipInto(loc, key) {
+  const p = player, it = itemAt(loc);
+  if (!it || !fitsKey(it, key)) return false;
+  if (!canEquip(it)) { cantEquipMsg(it); return false; }
+  const prev = p.equipment[key];
+  let bump = null;
+  if (key === 'weapon' && isTwoHanded(it) && p.equipment.shield) bump = 'shield';
+  if (key === 'shield' && isTwoHanded(p.equipment.weapon)) bump = 'weapon';
+  putAt(loc, prev);
+  p.equipment[key] = it;
+  if (bump) {
+    const free = p.inventory.indexOf(null);
+    if (free < 0) {
+      p.equipment[key] = prev; putAt(loc, it);
+      UI.message(bump === 'shield' ? '양손 무기를 들려면 방패를 넣을 가방 칸이 필요합니다' : '방패를 들려면 양손 무기를 넣을 가방 칸이 필요합니다', '#ff7a6a');
+      SFX.play('nope');
+      return false;
+    }
+    p.inventory[free] = p.equipment[bump];
+    p.equipment[bump] = null;
+    UI.message(bump === 'shield' ? '양손 무기를 들어 방패를 가방에 넣었습니다' : '방패를 들어 양손 무기를 가방에 넣었습니다', '#c9c1b3');
+  }
+  afterEquipChange(it);
+  return true;
+}
+
+function equipFromInventory(idx, key) {
+  const item = player.inventory[idx];
+  if (!item) return false;
+  return equipInto({ c: 'inv', i: idx }, key || defaultKey(item));
+}
+
+// 끌어다 놓기·옮기기: from 자리의 물건을 to 자리로. to에 물건이 있으면 맞바꿈
+function moveItem(from, to) {
+  const p = player;
+  if (sameLoc(from, to)) return false;
+  const a = itemAt(from), b = itemAt(to);
+  if (!a) return false;
+  if (to.c === 'eq') {
+    if (!fitsKey(a, to.k)) { UI.message(`${SLOT_NAMES[a.slot]}은(는) 그 칸에 착용할 수 없습니다`, '#ff7a6a'); SFX.play('nope'); return false; }
+    if (from.c === 'eq') {  // 반지 두 칸끼리 맞바꿈
+      putAt(from, b); putAt(to, a);
+      afterEquipChange(a);
+      return true;
+    }
+    return equipInto(from, to.k);
+  }
+  if (from.c === 'eq') {
+    // 착용 중인 물건을 가방·보관함 칸으로
+    if (!b) { putAt(to, a); putAt(from, null); afterEquipChange(a); return true; }
+    if (fitsKey(b, from.k) && canEquip(b)) return equipInto(to, from.k);
+    // 바꿀 수 없는 물건이 있는 칸이면 같은 곳의 빈칸으로
+    const list = to.c === 'inv' ? p.inventory : p.stash;
+    const free = list.indexOf(null);
+    if (free < 0) { UI.message(to.c === 'inv' ? '가방이 가득 찼습니다' : '보관함이 가득 찼습니다', '#ff7a6a'); SFX.play('nope'); return false; }
+    list[free] = a; putAt(from, null);
+    afterEquipChange(a);
+    return true;
+  }
+  // 가방·보관함 칸끼리 맞바꿈
+  putAt(from, b); putAt(to, a);
+  SFX.equip(a);
+  Game.dirty = true;
+  return true;
+}
+
+// 가방(또는 보관함) 자동 정리: 부위 → 희귀도 → 아이템 레벨 순
+const SORT_SLOTS = ['weapon', 'shield', 'helm', 'armor', 'gloves', 'boots', 'belt', 'ring', 'amulet'];
+function sortItems(list) {
+  const items = list.filter(Boolean);
+  items.sort((a, b) => SORT_SLOTS.indexOf(a.slot) - SORT_SLOTS.indexOf(b.slot) || b.rarity - a.rarity || b.ilvl - a.ilvl || (b.plus || 0) - (a.plus || 0));
+  for (let i = 0; i < list.length; i++) list[i] = items[i] || null;
+  SFX.play('pickup');
   Game.dirty = true;
 }
 

@@ -59,10 +59,16 @@ const UI = {
     // 소지품 이벤트 위임
     const inv = this.el['inv-panel'];
     inv.addEventListener('click', e => this.onInvClick(e));
-    inv.addEventListener('dblclick', e => this.onInvDbl(e));
     inv.addEventListener('mouseover', e => this.onInvHover(e));
     inv.addEventListener('mouseout', e => { if (e.target.closest('[data-inv],[data-eq]')) this.hideTooltip(); });
-    inv.addEventListener('contextmenu', e => { e.preventDefault(); this.onInvDbl(e); });
+    // 오른쪽 클릭: 바로 착용·해제 (터치 길게 누르기로 생기는 메뉴는 무시)
+    inv.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      if (Drag.lastType !== 'mouse') return;
+      const cell = e.target.closest('[data-inv],[data-eq]');
+      if (cell) this.quickAction(cellLoc(cell));
+    });
+    initDrag();
     document.addEventListener('pointermove', e => { if (!this.el.tooltip.hidden) this.placeTooltip(e.clientX, e.clientY); });
     const shop = this.el['shop-panel'];
     shop.addEventListener('click', e => Shop.onClick(e));
@@ -201,7 +207,7 @@ const UI = {
     // 왼쪽 칸은 하나만: 캐릭터 창을 열면 상점 창은 닫음
     if (open && name === 'char' && !this.el['shop-panel'].hidden) { this.el['shop-panel'].hidden = true; Shop.close(); }
     if (open) { if (name === 'inv') this.renderInventory(); else this.renderCharacter(); }
-    if (name === 'inv' && !open) { this.selected = null; this.hideTooltip(); }
+    if (name === 'inv' && !open) { this.selected = null; this.moveFrom = null; this.hideTooltip(); }
   },
   openShop() {
     this.el['char-panel'].hidden = true;
@@ -212,6 +218,7 @@ const UI = {
     if (Shop.npc.role !== 'gate') { this.el['inv-panel'].hidden = false; this.renderInventory(); }
   },
   closePanels() {
+    this.moveFrom = null;
     this.el['inv-panel'].hidden = true;
     this.el['char-panel'].hidden = true;
     this.el['shop-panel'].hidden = true;
@@ -230,7 +237,8 @@ const UI = {
   },
 
   cellHtml(item, attrs, label) {
-    if (!item) return `<div class="cell" ${attrs}>${label ? `<span class="cell-label">${label}</span>` : ''}</div>`;
+    const mv = this.moveFrom ? ' move-target' : '';
+    if (!item) return `<div class="cell${mv}" ${attrs}>${label ? `<span class="cell-label">${label}</span>` : ''}</div>`;
     const sel = (this.selected && this.selected.item === item) || (Shop.target === item && Shop.isOpen()) ? ' selected' : '';
     const bad = !canEquip(item) ? ' cant' : '';
     return `<div class="cell r${item.rarity}${sel}${bad}" ${attrs}>${itemIconHtml(item)}${item.plus ? `<span class="plus">+${item.plus}</span>` : ''}</div>`;
@@ -242,10 +250,17 @@ const UI = {
     const doll = EQUIP_KEYS.map(k => this.cellHtml(p.equipment[k], `data-eq="${k}" style="grid-area:${k}"`, eqLabels[k])).join('');
     const grid = p.inventory.map((it, i) => this.cellHtml(it, `data-inv="${i}"`)).join('');
     const sellOk = Shop.canSell(), stashOk = Shop.isOpen() && Shop.npc.role === 'stash';
-    let detail = `<p class="detail-empty">아이템을 누르면 자세한 정보가 여기 나오고, 아래에 버튼이 생깁니다. 두 번 누르면 바로 착용합니다.${sellOk || stashOk ? '' : ' 물건은 마을 상인에게 팔 수 있습니다.'}</p>`;
+    const hint = this.finePointer
+      ? '아이템을 누르면 자세한 정보와 버튼이 나옵니다. <b>두 번 누르거나 오른쪽 클릭</b>하면 바로 착용·해제하고, <b>끌어다 놓으면</b> 장비 칸이나 가방의 다른 칸으로 옮겨집니다.'
+      : '아이템을 누르면 자세한 정보와 버튼이 나옵니다. <b>두 번 누르면</b> 바로 착용·해제하고, <b>길게 누른 채 끌면</b> 다른 칸으로 옮겨집니다. 아래 <b>옮기기</b> 버튼으로도 옮길 수 있습니다.';
+    let detail = `<p class="detail-empty">${hint}${sellOk || stashOk ? '' : ' 물건은 마을 상인에게 팔 수 있습니다.'}</p>`;
     let selRow = '';
     const sel = this.selected;
-    if (sel && sel.item) {
+    if (this.moveFrom) {
+      const it = itemAt(this.moveFrom);
+      selRow = `<div class="foot-sel move-on"><div class="foot-name">옮길 칸을 누르세요: <span style="color:${it ? RARITY[it.rarity].color : '#fff'}">${it ? escapeHtml(itemName(it)) : ''}</span></div>
+        <div class="foot-btns"><button data-act="movecancel">옮기기 취소</button></div></div>`;
+    } else if (sel && sel.item) {
       const it = sel.item;
       let btns;
       if (sel.kind === 'inv') {
@@ -253,25 +268,26 @@ const UI = {
         btns = `<button class="btn-main" data-act="equip" ${can ? '' : 'disabled'}>${can ? '착용' : `레벨 ${it.req} 필요`}</button>`
           + (sellOk ? `<button data-act="sell">판매 <small>+${it.value}</small></button>`
             : stashOk ? '<button data-act="stash">보관함에 넣기</button>'
-            : '<button data-act="drop">버리기</button>');
+            : '<button data-act="drop">버리기</button>')
+          + '<button data-act="move">옮기기</button>';
         const cmpKey = it.slot === 'ring' ? (p.equipment.ring1 ? 'ring1' : null) : it.slot;
         const cur = cmpKey ? p.equipment[cmpKey] : null;
         detail = `<div class="tt">${itemTooltipHtml(it)}</div>`;
         if (cur) detail += `<div class="tt tt-compare">${itemTooltipHtml(cur, { header: '착용 중', noValue: true })}</div>`;
       } else {
-        btns = '<button class="btn-main" data-act="unequip">해제해서 가방에 넣기</button>';
+        btns = '<button class="btn-main" data-act="unequip">해제해서 가방에 넣기</button><button data-act="move">옮기기</button>';
         detail = `<div class="tt">${itemTooltipHtml(it, { noValue: true })}</div>`;
       }
       detail = `<div class="detail-tips">${detail}</div>`;
       selRow = `<div class="foot-sel">
-          <div class="foot-name" style="color:${RARITY[it.rarity].color}">${escapeHtml(it.name)}</div>
+          <div class="foot-name" style="color:${RARITY[it.rarity].color}">${escapeHtml(itemName(it))}</div>
           <div class="foot-btns">${btns}<button class="btn-x" data-act="deselect" aria-label="선택 해제">×</button></div>
         </div>`;
     }
     const used = p.inventory.filter(Boolean).length;
     this.el['inv-panel'].querySelector('.panel-body').innerHTML = `
       <div class="doll">${doll}</div>
-      <div class="inv-meta"><span>가방 ${used} / ${p.inventory.length}</span><span class="gold">${p.gold.toLocaleString()} 골드</span></div>
+      <div class="inv-meta"><span>가방 ${used} / ${p.inventory.length}</span><button class="mini-btn" data-act="sortinv">정리</button><span class="gold">${p.gold.toLocaleString()} 골드</span></div>
       <div class="grid">${grid}</div>
       <div class="detail">${detail}</div>`;
     const general = sellOk ? '<div class="foot-btns"><button data-act="sellnormal">일반 아이템 모두 판매</button></div>' : '';
@@ -280,44 +296,83 @@ const UI = {
 
   onInvClick(e) {
     const p = player;
+    if (Drag.justDropped && performance.now() - Drag.justDropped < 350) return;
     const act = e.target.closest('[data-act]');
     if (act) {
       const a = act.dataset.act, sel = this.selected;
-      if (a === 'equip' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) equipFromInventory(i); this.selected = null; }
+      const selLoc = sel ? this.selLoc() : null;
+      if (a === 'equip' && selLoc) { equipInto(selLoc, defaultKey(sel.item)); this.selected = null; }
       else if (a === 'sell' && sel && Shop.canSell()) { const i = p.inventory.indexOf(sel.item); if (i >= 0) sellInventory(i); this.selected = null; }
       else if (a === 'stash' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) Shop.stashPut(i); this.selected = null; }
       else if (a === 'drop' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) dropInventory(i); this.selected = null; }
       else if (a === 'unequip' && sel) { if (unequip(sel.key)) this.selected = null; }
+      else if (a === 'move' && selLoc) { this.moveFrom = selLoc; this.selected = null; }
+      else if (a === 'movecancel') this.moveFrom = null;
+      else if (a === 'sortinv') { sortItems(p.inventory); this.selected = null; this.moveFrom = null; }
       else if (a === 'deselect') this.selected = null;
       else if (a === 'sellnormal' && Shop.canSell()) sellAllNormal();
       this.hideTooltip();
       this.refreshPanels();
       return;
     }
-    const inv = e.target.closest('[data-inv]');
-    const eq = e.target.closest('[data-eq]');
-    if (inv) {
-      const it = p.inventory[+inv.dataset.inv];
-      this.selected = it ? { kind: 'inv', item: it } : null;
-    } else if (eq) {
-      const it = p.equipment[eq.dataset.eq];
-      this.selected = it ? { kind: 'eq', item: it, key: eq.dataset.eq } : null;
-    } else return;
-    if (this.selected) Shop.pickTarget(this.selected.item);
-    this.renderInventory();
-    // 터치 화면에서는 툴팁 대신 아래 상세 칸을 보여줌
-    if (this.selected && !this.finePointer) this.el['inv-panel'].querySelector('.detail').scrollIntoView({ block: 'nearest' });
+    const cell = e.target.closest('[data-inv],[data-eq]');
+    if (!cell) return;
+    this.tapCell(cellLoc(cell));
   },
 
-  onInvDbl(e) {
-    const p = player;
-    const inv = e.target.closest('[data-inv]');
-    const eq = e.target.closest('[data-eq]');
-    if (inv && p.inventory[+inv.dataset.inv]) { equipFromInventory(+inv.dataset.inv); this.selected = null; }
-    else if (eq && p.equipment[eq.dataset.eq]) { unequip(eq.dataset.eq); this.selected = null; }
-    else return;
+  // 칸을 눌렀을 때: 옮기기 중이면 옮기고, 같은 물건을 빠르게 두 번 누르면 바로 착용·해제, 아니면 선택
+  tapCell(loc) {
+    const now = performance.now();
+    clearTimeout(this.scrollT);
+    if (this.moveFrom) {
+      const from = this.moveFrom;
+      this.moveFrom = null;
+      if (!sameLoc(from, loc)) moveItem(from, loc);
+      this.selected = null;
+      this.hideTooltip();
+      this.refreshPanels();
+      return;
+    }
+    const it = itemAt(loc);
+    const prevTap = this.lastTap;
+    this.lastTap = { loc, t: now };
+    if (it && prevTap && sameLoc(prevTap.loc, loc) && now - prevTap.t < 420) {
+      this.lastTap = null;
+      this.quickAction(loc);
+      return;
+    }
+    if (loc.c === 'stash') { Shop.sel = it ? { item: it, list: 'stash' } : null; this.refreshPanels(); return; }
+    this.selected = it ? (loc.c === 'eq' ? { kind: 'eq', item: it, key: loc.k } : { kind: 'inv', item: it }) : null;
+    if (this.selected) Shop.pickTarget(this.selected.item);
+    this.renderInventory();
+    // 터치 화면에서는 툴팁 대신 아래 상세 칸을 보여줌 (두 번 누를 시간을 준 뒤 스크롤)
+    if (this.selected && !this.finePointer) {
+      this.scrollT = setTimeout(() => {
+        const d = this.el['inv-panel'].querySelector('.detail');
+        if (this.selected && d && !this.el['inv-panel'].hidden) d.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }, 450);
+    }
+  },
+
+  // 바로 착용(가방) · 해제(장비) · 꺼내기(보관함)
+  quickAction(loc) {
+    const it = itemAt(loc);
+    if (!it) return;
+    if (loc.c === 'inv') equipInto(loc, defaultKey(it));
+    else if (loc.c === 'eq') unequip(loc.k);
+    else Shop.stashTake(loc.i);
+    this.selected = null;
+    Shop.sel = null;
     this.hideTooltip();
     this.refreshPanels();
+  },
+
+  selLoc() {
+    const sel = this.selected;
+    if (!sel) return null;
+    if (sel.kind === 'eq') return { c: 'eq', k: sel.key };
+    const i = player.inventory.indexOf(sel.item);
+    return i >= 0 ? { c: 'inv', i } : null;
   },
 
   onInvHover(e) {
@@ -449,3 +504,119 @@ const UI = {
   },
   hideTitle() { this.el.title.hidden = true; document.body.classList.remove('at-title'); },
 };
+
+// ── 끌어다 놓기 ──
+// 마우스: 누른 채 조금 움직이면 시작. 터치: 0.3초 길게 누른 뒤 끌기 (그냥 밀면 창이 스크롤됨)
+const Drag = { start: null, active: false, ghost: null, over: null, overZone: null, timer: 0, justDropped: 0, lastType: 'mouse' };
+
+function cellLoc(el) {
+  if (el.dataset.inv != null) return { c: 'inv', i: +el.dataset.inv };
+  if (el.dataset.eq != null) return { c: 'eq', k: el.dataset.eq };
+  return { c: 'stash', i: +el.dataset.stash };
+}
+
+function initDrag() {
+  const CELLS = '#inv-panel [data-inv], #inv-panel [data-eq], #shop-panel [data-stash]';
+  document.addEventListener('pointerdown', e => {
+    Drag.lastType = e.pointerType || 'mouse';
+    Drag.justDropped = 0;  // 놓은 직후의 클릭 한 번만 무시
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const cell = e.target.closest(CELLS);
+    if (!cell || !player) return;
+    const loc = cellLoc(cell);
+    const item = itemAt(loc);
+    if (!item) return;
+    Drag.start = { loc, item, x: e.clientX, y: e.clientY, id: e.pointerId, touch: e.pointerType !== 'mouse', cell };
+    clearTimeout(Drag.timer);
+    if (Drag.start.touch) Drag.timer = setTimeout(() => { if (Drag.start && !Drag.active) dragBegin(Drag.start.x, Drag.start.y); }, 320);
+  });
+  document.addEventListener('pointermove', e => {
+    const s = Drag.start;
+    if (!s || e.pointerId !== s.id) return;
+    if (!Drag.active) {
+      const moved = Math.hypot(e.clientX - s.x, e.clientY - s.y);
+      if (s.touch) { if (moved > 10) dragReset(); }
+      else if (moved > 6) dragBegin(e.clientX, e.clientY);
+      return;
+    }
+    dragMove(e.clientX, e.clientY);
+  });
+  document.addEventListener('pointerup', e => {
+    const s = Drag.start;
+    if (!s || e.pointerId !== s.id) return;
+    if (Drag.active) dragDrop(e.clientX, e.clientY);
+    dragReset();
+  });
+  document.addEventListener('pointercancel', () => dragReset());
+  // 끄는 동안 창이 스크롤되지 않게
+  document.addEventListener('touchmove', e => { if (Drag.active && e.cancelable) e.preventDefault(); }, { passive: false });
+}
+
+function dragBegin(x, y) {
+  const s = Drag.start;
+  Drag.active = true;
+  UI.hideTooltip();
+  UI.moveFrom = null;
+  const g = document.createElement('div');
+  g.className = `drag-ghost r${s.item.rarity}`;
+  g.innerHTML = itemIconHtml(s.item);
+  document.body.appendChild(g);
+  Drag.ghost = g;
+  document.body.classList.add('item-dragging');
+  if (s.cell && s.cell.isConnected) s.cell.classList.add('dragging');
+  if (navigator.vibrate && s.touch) { try { navigator.vibrate(15); } catch (err) { /* 무시 */ } }
+  dragMove(x, y);
+}
+
+// 놓을 수 있는 곳 찾기: 칸, 또는 상점 창(팔기 · 강화/재련 대상 고르기)
+function dragTarget(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (!el) return null;
+  const cell = el.closest('#inv-panel [data-inv], #inv-panel [data-eq], #shop-panel [data-stash]');
+  if (cell) {
+    const loc = cellLoc(cell);
+    const ok = loc.c !== 'eq' || fitsKey(Drag.start.item, loc.k);
+    return { kind: 'cell', el: cell, loc, ok };
+  }
+  const shop = el.closest('#shop-panel');
+  if (shop && Shop.isOpen()) {
+    const role = Shop.npc.role, from = Drag.start.loc;
+    if ((role === 'smith' && Shop.tab === 'enhance') || role === 'refiner') return { kind: 'target', el: shop, ok: true };
+    if (Shop.canSell()) return { kind: 'sell', el: shop, ok: from.c === 'inv' };
+  }
+  return null;
+}
+
+function dragMove(x, y) {
+  if (Drag.ghost) { Drag.ghost.style.left = x + 'px'; Drag.ghost.style.top = y + 'px'; }
+  const t = dragTarget(x, y);
+  const el = t && t.el;
+  if (Drag.over && Drag.over !== el) Drag.over.classList.remove('drop-ok', 'drop-bad');
+  if (el) el.classList.add(t.ok ? 'drop-ok' : 'drop-bad');
+  if (el) el.classList.remove(t.ok ? 'drop-bad' : 'drop-ok');
+  Drag.over = el;
+}
+
+function dragDrop(x, y) {
+  const s = Drag.start;
+  const t = dragTarget(x, y);
+  Drag.justDropped = performance.now();
+  if (!t) return;
+  if (t.kind === 'cell') moveItem(s.loc, t.loc);
+  else if (t.kind === 'sell') {
+    if (s.loc.c === 'inv') sellInventory(s.loc.i);
+    else UI.message('착용 중인 물건은 먼저 벗어야 팔 수 있습니다', '#ff7a6a');
+  } else if (t.kind === 'target') { Shop.target = s.item; }
+  UI.selected = null;
+  Shop.sel = null;
+  UI.refreshPanels();
+}
+
+function dragReset() {
+  clearTimeout(Drag.timer);
+  if (Drag.ghost) Drag.ghost.remove();
+  if (Drag.over) Drag.over.classList.remove('drop-ok', 'drop-bad');
+  if (Drag.start && Drag.start.cell && Drag.start.cell.isConnected) Drag.start.cell.classList.remove('dragging');
+  document.body.classList.remove('item-dragging');
+  Drag.ghost = null; Drag.over = null; Drag.start = null; Drag.active = false;
+}

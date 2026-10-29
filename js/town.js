@@ -344,10 +344,11 @@ const Shop = {
     panel.querySelector('.shop-tabs').hidden = !tabs.length;
     let body = '', foot = '';
     const gold = `<div class="inv-meta"><span>${n.role === 'stash' ? `보관함 ${p.stash.filter(Boolean).length} / ${p.stash.length}` : '가진 골드'}</span><span class="gold">${p.gold.toLocaleString()} 골드</span></div>`;
-    const cell = (it, attrs, price) => {
-      if (!it) return `<div class="cell" ${attrs}></div>`;
+    const cell = (it, attrs, price, target) => {
+      const mv = target && UI.moveFrom ? ' move-target' : '';
+      if (!it) return `<div class="cell${mv}" ${attrs}></div>`;
       const sel = this.sel && this.sel.item === it ? ' selected' : '';
-      return `<div class="cell r${it.rarity}${sel}${canEquip(it) ? '' : ' cant'}" ${attrs}>${itemIconHtml(it)}${price != null ? `<span class="price">${price >= 10000 ? Math.round(price / 1000) + 'k' : price}</span>` : ''}${it.plus ? `<span class="plus">+${it.plus}</span>` : ''}</div>`;
+      return `<div class="cell r${it.rarity}${sel}${mv}${canEquip(it) ? '' : ' cant'}" ${attrs}>${itemIconHtml(it)}${price != null ? `<span class="price">${price >= 10000 ? Math.round(price / 1000) + 'k' : price}</span>` : ''}${it.plus ? `<span class="plus">+${it.plus}</span>` : ''}</div>`;
     };
     const detail = (it, price) => `<div class="detail"><div class="detail-tips"><div class="tt">${itemTooltipHtml(it, { price })}</div></div></div>`;
     const selFoot = (it, btns) => `<div class="foot-sel"><div class="foot-name" style="color:${RARITY[it.rarity].color}">${escapeHtml(itemName(it))}</div><div class="foot-btns">${btns}<button class="btn-x" data-act="deselect" aria-label="선택 해제">×</button></div></div>`;
@@ -404,11 +405,12 @@ const Shop = {
         body += detail(it);
       }
     } else if (n.role === 'stash') {
-      body = gold + hint('보관함에 넣은 물건은 죽어도, 다시 시작해도 남습니다. 가방의 물건을 누르면 넣을 수 있습니다.')
-        + `<div class="grid">${p.stash.map((it, i) => cell(it, `data-stash="${i}"`)).join('')}</div>`;
+      body = gold + hint('보관함에 넣은 물건은 죽어도, 다시 시작해도 남습니다. 가방과 보관함 사이로 끌어다 놓거나, 두 번 눌러 꺼낼 수 있습니다.')
+        + `<div class="foot-btns"><button data-act="sortstash">보관함 정리</button></div>`
+        + `<div class="grid">${p.stash.map((it, i) => cell(it, `data-stash="${i}"`, null, true)).join('')}</div>`;
       if (this.sel) {
         body += detail(this.sel.item);
-        foot = selFoot(this.sel.item, '<button class="btn-main" data-act="take">가방으로 꺼내기</button>');
+        foot = selFoot(this.sel.item, '<button class="btn-main" data-act="take">가방으로 꺼내기</button><button data-act="stashmove">옮기기</button>');
       }
     } else if (n.role === 'gate') {
       const dw = Game.dungeonWorld;
@@ -422,6 +424,7 @@ const Shop = {
   },
 
   onClick(e) {
+    if (Drag.justDropped && performance.now() - Drag.justDropped < 350) return;
     const t = e.target;
     const tab = t.closest('[data-tab]');
     if (tab) { this.tab = tab.dataset.tab; this.sel = null; this.target = null; return this.refresh(); }
@@ -437,6 +440,8 @@ const Shop = {
       else if (a === 'potion1') this.buyPotions(1);
       else if (a === 'potion5') this.buyPotions(5);
       else if (a === 'take' && this.sel) { this.stashTake(player.stash.indexOf(this.sel.item)); this.sel = null; }
+      else if (a === 'stashmove' && this.sel) { const i = player.stash.indexOf(this.sel.item); if (i >= 0) UI.moveFrom = { c: 'stash', i }; this.sel = null; }
+      else if (a === 'sortstash') { sortItems(player.stash); this.sel = null; }
       else if (a === 'back') { UI.closePanels(); Game.returnToDungeon(); return; }
       return this.refresh();
     }
@@ -449,7 +454,7 @@ const Shop = {
     const st = t.closest('[data-stock]'), bb = t.closest('[data-bb]'), sh = t.closest('[data-stash]');
     if (st) { const it = this.stock[+st.dataset.stock]; this.sel = it ? { item: it, list: 'stock' } : null; }
     else if (bb) { const it = this.buyback[+bb.dataset.bb]; this.sel = it ? { item: it, list: 'bb' } : null; }
-    else if (sh) { const it = player.stash[+sh.dataset.stash]; this.sel = it ? { item: it, list: 'stash' } : null; }
+    else if (sh) { UI.tapCell({ c: 'stash', i: +sh.dataset.stash }); return; }
     else return;
     this.refresh();
   },
