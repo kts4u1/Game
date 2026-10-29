@@ -18,6 +18,7 @@
 - 게임 안에서 층 테마에 따라 타일에 색을 입힘 (초록, 붉은색, 보라색)
 - 일부 보스는 게임 안에서 색조를 바꿔 그림
 - 방향이 필요 없는 저주받은 무덤은 한 방향 프레임만 남김
+- 서리 망자·원혼·화염/냉기 해골 마법사·불타는/얼어붙은 무덤·화석 개미는 Flare `empyrean_campaign`의 color_mod 변종처럼 게임 안에서 기존 그림에 색을 곱해 그림
 - 효과음 OGG를 모노 MP3로 변환해 base64로 `sounds.js`에 담음
 
 변환한 그림과 효과음도 같은 CC-BY-SA 3.0 조건으로 배포합니다. 이 라이선스는 그림·효과음에만 적용되며, 게임 코드(`js/`, `css/`, `index.html`, `tools/`)는 포함하지 않습니다.
@@ -38,7 +39,8 @@
 | 방패 | `avatar/male/buckler`, `shield`, `iron_buckler`, `kite_shield` |
 | 좀비, 해골 창병, 해골 석궁병, 해골 마법사, 해골 병사 | `enemies/zombie`, `skeleton`, `skeleton_archer`, `skeleton_mage`, `skeleton_weak` |
 | 고블린, 고블린 약탈자, 개미귀신, 새끼 개미귀신, 불개미, 서리 개미 | `enemies/goblin`, `goblin_elite`, `antlion`, `antlion_small`, `fire_ant`, `ice_ant` |
-| 미노타우로스, 화염·독·서리 비룡, 저주받은 무덤 | `enemies/minotaur`, `wyvern_fire`, `wyvern`, `wyvern_water`, `cursed_grave` |
+| 미노타우로스, 화염·독·서리·폭풍 비룡, 저주받은 무덤 | `enemies/minotaur`, `wyvern_fire`, `wyvern`, `wyvern_water`, `wyvern_air`, `cursed_grave` |
+| 광차 고블린, 폭풍의 비룡왕 | `empyrean_campaign/enemies/goblin_minecart`, `wyvern_air_boss` |
 | 홉고블린, 홉고블린 궁수, 어둠의 망자, 갑각 개미귀신 | `empyrean_campaign/enemies/hobgoblin`, `hobgoblin_archer`, `zombie_dark`, `antlion_armored` |
 | 해골 기사, 해골 대마법사, 해골왕 (보스) | `empyrean_campaign/enemies/skeleton_knight_boss`, `skeleton_mage_boss`, `skeleton_mage_high_boss` |
 | 마을 사람, 오벨리스크 | `npcs/guild_man`, `knight`, `peasant_man1`, `peasant_man2`, `peasant_woman1`, `peasant_woman2`, `wandering_trader`, `return_obelisk1`, `empyrean_campaign/npcs/peddler_goblin` |

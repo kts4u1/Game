@@ -34,12 +34,14 @@ function spawnMonster(type, x, y, mlvl, tier = 0, opts = {}) {
     abil: (opts.abil || T.abil || []).slice(), cd: {}, act: null, pending: null, z: 0,
     undead: !!T.undead, armorK: T.armorK || 1, stationary: !!T.stationary, summoned: !!opts.summoned,
     proj: opts.proj || (T.ranged && T.ranged.proj) || null, shots: 0, stolen: 0, tint: opts.tint || null,
+    color: T.color || null, alpha: T.alpha || 1, final: !!opts.final, phase: 1,
   };
   if (tier === 1) { m.life *= 2.6; m.dmg = m.dmg.map(d => d * 1.3); m.speed *= 1.12; m.xp *= 3; m.scale = 1.12; }
   if (tier === 2) { m.life *= 4; m.dmg = m.dmg.map(d => d * 1.5); m.xp *= 6; m.scale = 1.22; m.name = opts.name; }
   if (tier === 3) {
     m.life *= 18; m.dmg = m.dmg.map(d => d * 2); m.xp *= 25; m.scale = opts.scale || 1.8;
     m.r = T.r * m.scale * 0.8; m.name = opts.name; m.pal = opts.pal || {}; m.atkRange += 22; m.windupDur *= 1.3; m.baseWindup = m.windupDur;
+    if (m.final) { m.life *= 1.5; m.xp *= 3; m.dmg = m.dmg.map(d => d * 0.8); }
   }
   for (const mod of m.mods) {
     if (mod === 'fast') { m.speed *= 1.35; m.atkCD *= 0.75; }
@@ -151,19 +153,22 @@ function populateFloor() {
     const type = weightedPick(roamers.length ? roamers : types, t => MONSTERS[t].weight);
     spawnPack(null, type, 0, packId++, pt, MONSTERS[type].pack ? Math.max(3, packSize(type, 0) - 2) : randInt(2, 4));
   }
-  // 저주받은 무덤: 부수기 전까지 해골 병사를 계속 불러냄
+  // 저주받은 무덤: 부수기 전까지 해골 병사를 계속 불러냄 (깊은 층은 불타는·얼어붙은 무덤도)
   if (f >= 3 && chance(0.55)) {
-    for (const r of shuffle(rooms.filter(r => r !== d.stairsRoom)).slice(0, randInt(1, 2))) {
+    const graves = f >= 26 ? ['grave', 'fireGrave', 'iceGrave'] : f >= 18 ? ['grave', 'fireGrave'] : ['grave'];
+    for (const r of shuffle(rooms.filter(r => r !== d.stairsRoom)).slice(0, randInt(1, f >= 18 ? 3 : 2))) {
       const c = d.randomPointInRoom(r, 2);
-      world.monsters.push(spawnMonster('grave', c.x, c.y, world.mlvl, 0, { pack: packId++ }));
+      world.monsters.push(spawnMonster(pick(graves), c.x, c.y, world.mlvl, 0, { pack: packId++ }));
     }
   }
   if (isBossFloor(f)) {
-    const B = BOSSES[(f / 5 - 1) % BOSSES.length];
+    const B = BOSSES[Math.min(BOSSES.length, f / 5) - 1];
     const r = d.stairsRoom;
     const pos = d.randomPointInRoom(r, 2);
-    world.monsters.push(spawnMonster(B.type, pos.x, pos.y, world.mlvl + 3, 3, { name: B.name, scale: B.scale, pal: B.pal, sprite: B.sprite, abil: B.abil, proj: B.proj, tint: B.tint, pack: packId++ }));
+    world.monsters.push(spawnMonster(B.type, pos.x, pos.y, world.mlvl + 3, 3, { name: B.name, scale: B.scale, pal: B.pal, sprite: B.sprite, abil: B.abil, proj: B.proj, tint: B.tint, final: B.final, pack: packId++ }));
     d.stairs.open = false;
+    // 마지막 층에는 더 내려가는 계단이 없음
+    if (f >= FINAL_FLOOR) d.stairs.none = true;
   }
   // 보물 상자
   for (const r of shuffle(rooms.slice()).slice(0, randInt(2, 3))) {
@@ -214,7 +219,7 @@ function updateMonsters(dt) {
     m.strikeT = Math.max(0, m.strikeT - dt);
     m.atkTimer -= dt;
     m.slow = Math.max(0, m.slow - dt);
-    for (const k in m.cd) m.cd[k] -= dt;
+    for (const k in m.cd) m.cd[k] -= dt / (m.cdScale || 1);
     if (Math.abs(m.kvx) + Math.abs(m.kvy) > 2) {
       d.moveCircle(m, m.kvx * dt, m.kvy * dt);
       const f = Math.pow(0.004, dt);
@@ -334,15 +339,16 @@ function resolveMonsterAttack(m) {
     if (m.abil.includes('volley') && (m.tier === 3 || m.shots % 3 === 0)) n = m.tier === 3 ? 5 : 3;
     for (let i = 0; i < n; i++) {
       const a = base + (i - (n - 1) / 2) * 0.2 + rand(-0.05, 0.05);
-      fireMonsterProjectile(m, m.proj, a, dmg * (n > 1 ? 0.75 : 1));
+      fireMonsterProjectile(m, m.proj, a, dmg * (n >= 5 ? 0.6 : n > 1 ? 0.75 : 1));
     }
     const proj = m.proj;
     SFX.play(proj === 'fireball' ? 'fire' : proj === 'icicle' ? 'freeze' : proj === 'spit' ? 'spit' : proj === 'plasma' ? 'zap' : 'arrow', 0.8);
   } else {
     SFX.monster(m, 'phys');
     if (dist(m.x, m.y, p.x, p.y) <= m.atkRange + p.r + 16) {
-      const venom = MONSTERS[m.type].poison || m.mods.includes('venom');
-      const hit = damagePlayer(dmg, m, { melee: true, poison: venom ? dmg * 0.6 : 0, fireTouch: MONSTERS[m.type].fireBurn });
+      const T = MONSTERS[m.type];
+      const venom = T.poison || m.mods.includes('venom');
+      const hit = damagePlayer(dmg, m, { melee: true, poison: venom ? dmg * 0.6 : 0, fireTouch: T.fireBurn, cold: T.coldHit });
       if (hit && m.abil.includes('steal')) stealGold(m);
     }
   }
@@ -477,11 +483,17 @@ function killMonster(m) {
   if (m.tier === 3) fxSprite('blast', m.x, m.y, { scale: 1.1 });
   if (m.tier === 2) UI.message(`${m.name} 처치!`, RARITY[3].color);
   if (m.tier === 3) {
-    world.dungeon.stairs.open = true;
-    UI.message(`${m.name} 처치! 아래로 가는 계단이 열렸습니다.`, '#ff9a4a');
     fxShake(14);
     fxRing(m.x, m.y, 10, 300, 1.2, '#ff8a3a', 8);
     for (const o of world.monsters) if (o.summoned && !o.dead) { o.life = 0; killMonster(o); }
+    if (m.final) {
+      // 최종 보스: 유니크·세트 3개를 더 떨어뜨리고 엔딩
+      for (let i = 0; i < 3; i++) spawnGround('item', m.x, m.y, { item: generateItem(m.mlvl + 2, chance(0.6) ? 3 : 4) });
+      Game.victory(m);
+    } else {
+      world.dungeon.stairs.open = true;
+      UI.message(`${m.name} 처치! 아래로 가는 계단이 열렸습니다.`, '#ff9a4a');
+    }
   }
 }
 
@@ -781,6 +793,23 @@ function updateHazards(dt) {
     h.t += dt;
     if (h.t < h.delay) continue;
     world.hazards.splice(i, 1);
+    if (h.kind === 'frost') {
+      SFX.play('freeze');
+      fxSprite('freeze', h.x, h.y, { layer: 'top', scale: h.r / 60, alpha: 0.9 });
+      fxRing(h.x, h.y, 10, h.r, 0.4, '#bfe8ff', 5);
+      fxSparks(h.x, h.y, 20, 18, '#dff4ff', 140);
+      world.flashes.push({ x: h.x, y: h.y, r: 240, life: 0.3, color: [150, 210, 255] });
+      if (!p.dead && dist(p.x, p.y, h.x, h.y) < h.r + p.r) damagePlayer(h.dmg, h.src, { cold: true });
+      continue;
+    }
+    if (h.kind === 'shock') {
+      SFX.play('zap');
+      fxSprite('thunderstrike', h.x, h.y, { scale: 0.9 });
+      fxSparks(h.x, h.y, 20, 14, '#cbbcff', 160);
+      world.flashes.push({ x: h.x, y: h.y, r: 260, life: 0.25, color: [170, 150, 255] });
+      if (!p.dead && dist(p.x, p.y, h.x, h.y) < h.r + p.r) damagePlayer(h.dmg, h.src, { magic: true });
+      continue;
+    }
     if (h.kind === 'fire') {
       SFX.play('burn');
       fxSprite('blast', h.x, h.y, { scale: h.r / 151 });

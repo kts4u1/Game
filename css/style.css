@@ -386,3 +386,14 @@ body.item-dragging, body.item-dragging * { cursor: grabbing !important; }
 .inv-meta .mini-btn { margin-left: auto; }
 .detail-empty b { color: var(--ink-dim); font-weight: 700; }
 .shop-hint b { color: var(--ink); font-weight: 700; }
+
+/* ── 엔딩 ── */
+#ending { background: radial-gradient(ellipse at 50% 40%, rgba(40, 26, 8, .86), rgba(3, 2, 2, .96) 75%); z-index: 30; }
+.ending-box { text-align: center; max-width: 620px; display: flex; flex-direction: column; align-items: center; gap: 12px; animation: endingIn 1.6s ease-out backwards; }
+@keyframes endingIn { from { opacity: 0; transform: translateY(18px); } }
+.ending-box h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: clamp(30px, 6vw, 56px); line-height: 1.15; background: linear-gradient(#fff3d0, #e2b45a 55%, #8a5a1c); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 3px 0 #000) drop-shadow(0 0 24px rgba(230, 170, 60, .5)); text-wrap: balance; }
+.ending-story { margin: 0; color: var(--ink-dim); line-height: 1.8; max-width: 34em; text-wrap: pretty; }
+.ending-stats { display: grid; grid-template-columns: auto auto; gap: 6px 22px; margin: 6px 0 4px; padding: 14px 22px; background: rgba(10, 8, 6, .75); border: 1px solid var(--edge); font-size: 14px; }
+.ending-stats dt { color: var(--ink-dim); text-align: left; }
+.ending-stats dd { margin: 0; text-align: right; color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .ending-box { animation: none; } }

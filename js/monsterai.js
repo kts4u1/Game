@@ -34,6 +34,9 @@ function spotNear(x, y, rMin, rMax, needLos) {
 function tryMonsterAbility(m, dp) {
   const p = player;
   for (const ab of m.abil) {
+    // 체력에 따라 바뀌는 행동은 재사용 대기시간과 상관없이 확인
+    if (ab === 'enrage' && !m.enraged && m.life < m.maxLife * 0.4) { enrageMonster(m); return true; }
+    if (ab === 'phases' && finalBossPhase(m)) return true;
     if ((m.cd[ab] || 0) > 0) continue;
     switch (ab) {
       case 'flee':
@@ -67,7 +70,8 @@ function tryMonsterAbility(m, dp) {
         break;
       case 'charge':
         if (dp > 150 && dp < 460 && m.hasLos) {
-          m.cd.charge = m.tier === 3 ? rand(5, 7) : rand(6, 9);
+          const cc = MONSTERS[m.type].chargeCD;
+          m.cd.charge = cc ? rand(cc[0], cc[1]) : m.tier === 3 ? rand(5, 7) : rand(6, 9);
           const a = angleTo(m.x, m.y, p.x, p.y);
           m.chargeAim = { a, len: dp + 90 };
           SFX.monster(m, 'ment');
@@ -137,6 +141,32 @@ function tryMonsterAbility(m, dp) {
         else castThen(m, 0.8, go);
         return true;
       }
+      case 'blizzard':
+        if (dp < 600) {
+          m.cd.blizzard = rand(7, 9);
+          castThen(m, 0.6, () => {
+            const pts = [{ x: p.x, y: p.y }];
+            for (let i = 0; i < 3; i++) pts.push({ x: p.x + rand(-160, 160), y: p.y + rand(-160, 160) });
+            pts.forEach((q, i) => world.hazards.push({ x: q.x, y: q.y, r: 90, t: -i * 0.2, delay: 1.1, dmg: m.dmg[1] * 1.1, src: m, kind: 'frost' }));
+            SFX.play('freeze');
+          });
+          return true;
+        }
+        break;
+      case 'storm':
+        if (dp < 640) {
+          m.cd.storm = rand(6, 8);
+          castThen(m, 0.5, () => {
+            const n = m.tier === 3 ? 6 : 4;
+            for (let i = 0; i < n; i++) {
+              const q = i === 0 ? { x: p.x, y: p.y } : { x: p.x + rand(-190, 190), y: p.y + rand(-190, 190) };
+              world.hazards.push({ x: q.x, y: q.y, r: 70, t: -i * 0.18, delay: 0.95, dmg: m.dmg[1] * 1.0, src: m, kind: 'shock' });
+            }
+            SFX.play('zap');
+          });
+          return true;
+        }
+        break;
       case 'meteor':
         if (dp < 600) {
           m.cd.meteor = rand(7, 9);
@@ -260,6 +290,49 @@ function startEmerge(m) {
   m.act = { kind: 'emerge', t: 0, dur: Math.min(1, dur) };
   fxDust(m.x, m.y, 6);
   SFX.monster(m, 'ment', 0.7);
+}
+
+// 분노: 체력이 적어지면 빨라지고 공격이 잦아짐
+function enrageMonster(m) {
+  m.enraged = true;
+  m.speed *= 1.35;
+  m.atkCD *= 0.7;
+  if (m.tint) m.tint = 'hue-rotate(-40deg) saturate(2.4) brightness(0.85)';
+  fxRing(m.x, m.y, 10, 160, 0.6, '#ff3a22', 7);
+  fxEmbers(m.x, m.y, 30, '#ff3a22', 40);
+  SFX.monster(m, 'ment');
+  SFX.play('berserk');
+  UI.message(`${m.name}이(가) 분노합니다!`, '#ff5a3a');
+}
+
+// 최종 보스 단계: 60% 이하에서 호위 기사 소환, 25% 이하에서 분노
+function finalBossPhase(m) {
+  const k = m.life / m.maxLife;
+  if (m.phase === 1 && k <= 0.6) {
+    m.phase = 2;
+    UI.message(`${m.name}: "왕관 앞에 무릎 꿇어라!"`, '#c9b6ff');
+    UI.banner('망자의 왕관이 빛납니다', '호위 기사들이 깨어났습니다');
+    for (let i = 0; i < 2; i++) {
+      const s = spotNear(m.x, m.y, 90, 160, true);
+      if (!s) continue;
+      const o = spawnMonster('knight', s.x, s.y, m.mlvl - 2, 1, { pack: m.pack, summoned: true, abil: ['charge', 'block'] });
+      o.summoner = m.id; o.aggro = true; o.act = { kind: 'emerge', t: 0, dur: 0.6 };
+      world.monsters.push(o);
+      fxSprite('dark_mist', s.x, s.y, { layer: 'top', scale: 0.6 });
+    }
+    fxShake(12);
+    castThen(m, 1.0, () => {});
+    return true;
+  }
+  if (m.phase === 2 && k <= 0.25) {
+    m.phase = 3;
+    enrageMonster(m);
+    for (const a in m.cd) m.cd[a] = Math.min(m.cd[a], 1);
+    m.cdScale = 0.6;
+    UI.banner('망자의 왕이 마지막 힘을 끌어냅니다', '');
+    return true;
+  }
+  return false;
 }
 
 function reviveMonster(o) {

@@ -48,6 +48,7 @@ const MONSTER_SOUND = {
   skeleton_weak: 'skeleton', skeleton_knight_boss: 'skeleton', skeleton_mage_boss: 'skeleton', skeleton_mage_high_boss: 'skeleton',
   antlion_small: 'antlion', antlion_armored: 'antlion', fire_ant: 'antlion', ice_ant: 'antlion',
   wyvern: 'wyvern', wyvern_water: 'wyvern', cursed_grave: 'grave',
+  wyvern_air: 'wyvern', wyvern_air_boss: 'wyvern', goblin_minecart: 'goblin',
 };
 
 const SFX = {

@@ -479,7 +479,7 @@ function drawHazards(ctx, t) {
   for (const h of world.hazards) {
     const k = h.t / h.delay;
     const sx = isoX(h.x, h.y), sy = isoY(h.x, h.y);
-    const col = h.kind === 'fire' ? '255,120,40' : '255,40,30';
+    const col = h.kind === 'fire' ? '255,120,40' : h.kind === 'frost' ? '140,200,255' : h.kind === 'shock' ? '180,150,255' : '255,40,30';
     ctx.fillStyle = `rgba(${col},${0.12 + k * 0.2})`;
     ctx.beginPath(); ctx.ellipse(sx, sy, h.r * 1.414 * k, h.r * 0.707 * k, 0, 0, TAU); ctx.fill();
     ctx.strokeStyle = `rgba(${col},${0.5 + Math.sin(t * 20) * 0.2})`; ctx.lineWidth = 2;
@@ -661,9 +661,10 @@ function drawMonster(ctx, m, t) {
     if (m.dead && m.deadT > 6) ctx.globalAlpha = Math.max(0, 1 - (m.deadT - 6) / 2);
     if (m.act && m.act.kind === 'emerge' && !fs.anims.spawn) ctx.globalAlpha = Math.min(1, m.act.t / m.act.dur);
     if (m.act && m.act.kind === 'burrow') ctx.globalAlpha = Math.max(0.15, 1 - m.act.t / 0.35);
+    if (m.alpha < 1) ctx.globalAlpha *= m.alpha;
     if (HAS_FILTER && m.hitFlash > 0 && !m.dead) ctx.filter = 'brightness(2.4)';
     else if (HAS_FILTER && m.tint) ctx.filter = m.tint;
-    drawSpriteFrame(ctx, fs, anim, dir, idx, sx, sy, m.scale);
+    drawSpriteFrame(ctx, fs, anim, dir, idx, sx, sy, m.scale, monsterAtlas(m, fs));
     ctx.restore();
   } else {
     drawMonsterFallback(ctx, m, t, sx, sy);
@@ -681,7 +682,7 @@ function monsterHeight(m) { return (MONSTERS[m.type].h || 70) * m.scale * (m.spr
 
 // Flare 그림이 아직 없을 때 쓰는 코드 그림
 // 코드 그림이 없는 새 몬스터는 비슷한 모양으로 대신 그림
-const FALLBACK_DRAW = { swarm: 'wraith', hobgoblin: 'fallen', hobArcher: 'fallen', darkZombie: 'zombie', thief: 'fallen', fireAnt: 'wraith', iceAnt: 'wraith', wyvern: 'brute', iceWyvern: 'brute', armorAnt: 'wraith', grave: 'skeleton', boneling: 'skeleton', knight: 'skeleton', lich: 'shaman', lichKing: 'shaman' };
+const FALLBACK_DRAW = { cartGoblin: 'fallen', fireMage: 'shaman', iceMage: 'shaman', frostZombie: 'zombie', ghost: 'zombie', stormWyvern: 'brute', fossilAnt: 'wraith', fireGrave: 'skeleton', iceGrave: 'skeleton', fireBoneling: 'skeleton', iceBoneling: 'skeleton', stormKing: 'brute', deathKing: 'shaman', swarm: 'wraith', hobgoblin: 'fallen', hobArcher: 'fallen', darkZombie: 'zombie', thief: 'fallen', fireAnt: 'wraith', iceAnt: 'wraith', wyvern: 'brute', iceWyvern: 'brute', armorAnt: 'wraith', grave: 'skeleton', boneling: 'skeleton', knight: 'skeleton', lich: 'shaman', lichKing: 'shaman' };
 function drawMonsterFallback(ctx, m, t, sx, sy) {
   const s = m.scale;
   if (!m.dead) drawShadow(ctx, sx, sy, m.r * 1.2, m.r * 0.5);
@@ -701,8 +702,8 @@ function drawMonsterFallback(ctx, m, t, sx, sy) {
   ctx.restore();
 }
 
-const PROJ_SPRITE = { axe: 'throw_axe', arrow: 'arrows', icicle: 'icicle', spit: 'spit', plasma: 'plasmaball', bolt: 'lightning' };
-const PROJ_SCALE = { axe: 0.9, icicle: 0.75, spit: 0.8, plasma: 0.6, bolt: 0.45 };
+const PROJ_SPRITE = { axe: 'throw_axe', arrow: 'arrows', icicle: 'icicle', spit: 'spit', plasma: 'plasmaball', bolt: 'lightning', stone: 'stone' };
+const PROJ_SCALE = { axe: 0.9, icicle: 0.75, spit: 0.8, plasma: 0.6, bolt: 0.45, stone: 1 };
 
 function drawProjectile(ctx, pr, t) {
   const sx = isoX(pr.x, pr.y), sy = isoY(pr.x, pr.y);

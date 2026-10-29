@@ -63,6 +63,9 @@ MONSTERS = {
     'cursed_grave': (['stance', 'cast', 'die'], None, None),  # 방향 1개만
     'wyvern': (['stance', 'run', 'swing', 'die'], None, 0.55),
     'wyvern_water': (['stance', 'run', 'swing', 'die'], None, 0.55),
+    'wyvern_air': (['stance', 'run', 'swing', 'die'], None, 0.55),
+    'goblin_minecart': (['stance', 'run'], EMP, None),
+    'wyvern_air_boss': (['stance', 'run', 'swing', 'die'], EMP, 0.38),
 }
 # 마을 사람들 (서 있는 모습만)
 NPCS = {

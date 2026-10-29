@@ -65,11 +65,16 @@ const Game = {
     const sprites = [...new Set(world.monsters.map(m => m.sprite))];
     // 소환되는 졸개 그림도 미리
     if (world.monsters.some(m => m.abil.includes('summon'))) sprites.push('skeleton_weak');
+    if (world.monsters.some(m => m.final)) sprites.push('skeleton_knight_boss');
     const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player)];
     if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) paths.push(FLARE.npcs[n.sprite].img);
     if (paths.every(p => Assets.ready(p))) return;
     this.loading = true;
-    Assets.preload(paths).then(() => { this.loading = false; });
+    Assets.preload(paths).then(() => {
+      // 색을 입힌 몬스터 그림도 미리 만들어 둠 (처음 나올 때 멈칫하지 않게)
+      for (const m of world.monsters) { const fs = monsterSprite(m); if (fs && m.color) monsterAtlas(m, fs); }
+      this.loading = false;
+    });
     setTimeout(() => { this.loading = false; }, 8000);
   },
 
@@ -91,7 +96,7 @@ const Game = {
     const s = this.loadSaveData();
     this.newConfirm = false;
     $('btn-new').textContent = '새 게임';
-    UI.showTitle(!!s, s ? `${s.floor ? s.floor + '층' : '마을'} · 레벨 ${s.p.level}` : '');
+    UI.showTitle(!!s, s ? `${s.floor ? s.floor + '층' : '마을'} · 레벨 ${s.p.level}${s.p.cleared ? ' · 정복 완료' : ''}` : '');
   },
 
   newGame() {
@@ -122,12 +127,14 @@ const Game = {
     p.deepest = d.deepest || s.floor || 1;
     p.stash = (d.stash || []).concat(new Array(STASH_SIZE).fill(null)).slice(0, STASH_SIZE);
     p.elixirs = d.elixirs || {};
+    p.playTime = d.playTime || 0; p.deaths = d.deaths || 0; p.cleared = d.cleared || null;
     recalcStats(p);
     p.life = p.stats.maxLife;
-    this.pendingLevels = 0;
+    this.pendingLevels = s.pending || 0;
+    this.levelUpDelay = 1.5;
     this.dungeonWorld = null;
     Shop.buyback = [];
-    if (s.floor) this.startFloor(s.floor); else this.goTown('start');
+    if (s.floor) this.startFloor(Math.min(FINAL_FLOOR, s.floor)); else this.goTown('start');
     this.enterPlay();
     if (!Object.keys(p.skills).length) this.openCards(true);
   },
@@ -166,7 +173,8 @@ const Game = {
     const prevDeep = p.deepest || 1;
     p.deepest = Math.max(prevDeep, n);
     this.arrive(d.start.x, d.start.y);
-    UI.banner(`${n}층 · ${d.theme.name}`, isBossFloor(n) ? `보스가 계단을 지키고 있습니다 · 몬스터 레벨 ${world.mlvl}` : `몬스터 레벨 ${world.mlvl}`);
+    if (n >= FINAL_FLOOR) UI.banner(`최종층 · ${d.theme.name}`, `망자의 왕이 기다립니다 · 몬스터 레벨 ${world.mlvl}`);
+    else UI.banner(`${n}층 · ${d.theme.name}`, isBossFloor(n) ? `보스가 계단을 지키고 있습니다 · 몬스터 레벨 ${world.mlvl}` : `몬스터 레벨 ${world.mlvl}`);
     if (n > prevDeep && n > 1 && (n - 1) % 5 === 0) UI.message(`${n}층 웨이포인트가 열렸습니다. 마을의 심연의 문에서 바로 올 수 있습니다.`, '#8fd0ff');
     this.save();
   },
@@ -204,15 +212,41 @@ const Game = {
 
   // 웨이포인트 이동
   travel(f) {
+    f = Math.min(FINAL_FLOOR, f);
     this.dungeonWorld = null;
     SFX.play('teleporter');
     this.startFloor(f);
   },
 
   descend() {
+    if (world.floor >= FINAL_FLOOR) return;
     SFX.play('stairs');
     this.dungeonWorld = null;
     this.startFloor(world.floor + 1);
+  },
+
+  // 최종 보스 처치
+  victory(m) {
+    const p = player;
+    const first = !p.cleared;
+    if (first) p.cleared = { time: Math.round(p.playTime || 0), level: p.level, kills: p.kills, deaths: p.deaths || 0 };
+    p.clearCount = (p.clearCount || 0) + 1;
+    this.slowmo = 2.2;
+    fxShake(20);
+    for (let i = 0; i < 6; i++) fxRing(m.x, m.y, 10 + i * 20, 260 + i * 90, 1.2 + i * 0.25, i % 2 ? '#c9b6ff' : '#ffd36a', 8);
+    world.flashes.push({ x: m.x, y: m.y, r: 700, life: 1.6, color: [255, 220, 150] });
+    fxSprite('sparkle', m.x, m.y, { life: 4, fade: 1.2, scale: 2 });
+    fxBeam(m.x, m.y, '#ffd36a', 6);
+    SFX.play('levelup');
+    SFX.synth('unique');
+    UI.banner('망자의 왕관이 부서졌습니다', '심연이 잠들었습니다');
+    // 보스가 쓰러진 자리에 마을로 가는 차원문
+    const spot = world.dungeon.freeSpot(m.x + 60, m.y, 26);
+    world.portal = { x: spot.x, y: spot.y, kind: 'portal', t: 0 };
+    this.dungeonWorld = world;
+    if (first) this.endingT = 4.2;
+    else UI.message('망자의 왕을 다시 쓰러뜨렸습니다', '#ffd36a');
+    this.save();
   },
 
   saveSettings() { store.set(SETTINGS_KEY, JSON.stringify(this.settings)); },
@@ -256,10 +290,11 @@ const Game = {
     if (!player || this.state === 'title' || !world) return;
     const p = player;
     const data = {
-      v: 1, floor: world.town ? 0 : world.floor,
+      v: 1, floor: world.town ? 0 : world.floor, pending: this.pendingLevels || 0,
       p: {
         level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, bonusLife: p.bonusLife, skills: p.skills, hotbar: p.hotbar,
         equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, elixirs: p.elixirs,
+        playTime: Math.round(p.playTime || 0), deaths: p.deaths || 0, cleared: p.cleared || null,
       },
     };
     store.set(SAVE_KEY, JSON.stringify(data));
@@ -491,7 +526,14 @@ function update(dt) {
   }
   updateHover();
   const paused = Game.state !== 'playing' || !UI.el.menu.hidden || UI.anyPanel() || Game.loading;
+  if (Game.endingT > 0 && Game.state === 'playing') {
+    Game.endingT -= dt;
+    if (Game.endingT <= 0) { Game.endingT = 0; Game.state = 'ending'; UI.closePanels(); UI.showEnding(); }
+  }
+  // 최종 보스가 쓰러질 때 잠시 느리게
+  if (Game.slowmo > 0) { Game.slowmo -= dt; dt *= Game.slowmo > 0 ? 0.3 : 1; }
   if (!paused) {
+    player.playTime = (player.playTime || 0) + dt;
     handleHeldInput(dt);
     updatePlayer(dt);
     // 발소리와 심장 박동
@@ -516,7 +558,7 @@ function update(dt) {
     if (world.monsters.some(m => m.dead && m.deadT > 9)) world.monsters = world.monsters.filter(m => !(m.dead && m.deadT > 9));
     Game.revealT -= dt;
     if (Game.revealT <= 0) { Game.revealT = 0.1; world.dungeon.reveal(player.x, player.y, 9); }
-    if (Game.pendingLevels > 0 && !player.dead) {
+    if (Game.pendingLevels > 0 && !player.dead && !(Game.endingT > 0)) {
       Game.levelUpDelay -= dt;
       if (Game.levelUpDelay <= 0) Game.openCards(false);
     }

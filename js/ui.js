@@ -51,6 +51,8 @@ const UI = {
     $('btn-new').addEventListener('click', () => { SFX.init(); Game.newGame(); });
     $('btn-continue').addEventListener('click', () => { SFX.init(); Game.continueGame(); });
     $('btn-respawn').addEventListener('click', () => { this.el.death.hidden = true; respawn(); });
+    $('btn-end-town').addEventListener('click', () => { $('ending').hidden = true; Game.state = 'playing'; Game.goTown('portal'); });
+    $('btn-end-title').addEventListener('click', () => { $('ending').hidden = true; Game.state = 'playing'; Game.save(); Game.toTitle(); });
     $('btn-resume').addEventListener('click', () => this.toggleMenu(false));
     $('btn-sound').addEventListener('click', () => this.toggleSound());
     $('btn-loot').addEventListener('click', () => Game.cycleLootFilter());
@@ -502,6 +504,23 @@ const UI = {
     lu.hidden = false;
   },
   hideLevelUp() { this.el.levelup.hidden = true; this.cards = null; },
+
+  // 엔딩 화면: 이번 모험의 기록
+  showEnding() {
+    const p = player, c = p.cleared || {};
+    const t = Math.round(c.time != null ? c.time : p.playTime || 0);
+    const time = `${Math.floor(t / 3600)}시간 ${Math.floor(t / 60) % 60}분`;
+    const worn = EQUIP_KEYS.map(k => p.equipment[k]).filter(Boolean);
+    const best = worn.reduce((b, it) => (!b || (it.plus || 0) > (b.plus || 0) ? it : b), null);
+    const rows = [
+      ['걸린 시간', time], ['레벨', c.level || p.level], ['쓰러뜨린 몬스터', (c.kills || p.kills).toLocaleString()],
+      ['쓰러진 횟수', c.deaths != null ? c.deaths : p.deaths || 0], ['가진 골드', p.gold.toLocaleString()],
+      ['착용한 유니크 · 세트', `${worn.filter(i => i.rarity === 3).length} · ${worn.filter(i => i.rarity === 4).length}`],
+    ];
+    if (best && best.plus) rows.push(['가장 많이 강화한 장비', itemName(best)]);
+    $('ending').querySelector('.ending-stats').innerHTML = rows.map(r => `<dt>${r[0]}</dt><dd>${escapeHtml(String(r[1]))}</dd>`).join('');
+    $('ending').hidden = false;
+  },
 
   toggleMenu(force) {
     const m = this.el.menu;

@@ -724,6 +724,7 @@ function learnSkill(id) {
 // ── 죽음 ──
 function playerDie() {
   const p = player;
+  p.deaths = (p.deaths || 0) + 1;
   p.dead = true;
   p.life = 0;
   p.attack = p.leap = p.whirl = p.order = null;

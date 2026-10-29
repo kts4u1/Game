@@ -77,14 +77,14 @@ function animIndex(anim, ms, once) {
 function spriteSet(kind, name) { return HAS_FLARE ? (FLARE[kind] && FLARE[kind][name]) || null : null; }
 
 // 스프라이트 한 프레임 그리기. 그림이 없으면 false
-function drawSpriteFrame(ctx, set, animName, dir, idx, x, y, scale = 1) {
+function drawSpriteFrame(ctx, set, animName, dir, idx, x, y, scale = 1, imgOverride = null) {
   if (!set) return false;
   const anim = set.anims[animName] || set.anims.stance || set.anims.power;
   if (!anim) return false;
   const row = anim.f[dir] && anim.f[dir][0] ? anim.f[dir] : anim.f[0];  // 방향이 적은 효과는 0번 방향 사용
   const fr = row && row[idx];
   if (!fr) return false;
-  const img = Assets.get(set.img);
+  const img = imgOverride || Assets.get(set.img);
   if (!img) return false;
   const k = (2 / 3) / (set.scale || FLARE.scale) * scale;
   ctx.drawImage(img, fr[0], fr[1], fr[2], fr[3], x - fr[4] * k, y - fr[5] * k, fr[2] * k, fr[3] * k);
@@ -161,6 +161,11 @@ function drawHeroFlare(ctx, p, t, x, y) {
 
 // ── 몬스터 ──
 function monsterSprite(m) { return spriteSet('monsters', m.sprite || MONSTERS[m.type].sprite); }
+// Flare의 color_mod처럼 그림 전체에 색을 곱한 아틀라스 (처음 한 번만 만들고 재사용)
+function monsterAtlas(m, set) {
+  if (!m.color) return null;
+  return Assets.tintedAtlas(set.img, `rgb(${m.color[0]},${m.color[1]},${m.color[2]})`);
+}
 
 function monsterPose(m, set, t) {
   const dir = flareDir(m.facing);

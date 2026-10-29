@@ -163,8 +163,9 @@ const Town = {
   // 웨이포인트로 갈 수 있는 층: 1층과 보스를 잡은 다음 층(6, 11, 16 …)
   waypointFloors() {
     const out = [1];
-    const deep = player.deepest || 1;
+    const deep = Math.min(FINAL_FLOOR, player.deepest || 1);
     for (let f = 6; f <= deep; f += 5) out.push(f);
+    if (deep >= FINAL_FLOOR) out.push(FINAL_FLOOR);  // 최종층까지 간 뒤에는 왕좌로 바로
     return out;
   },
 };

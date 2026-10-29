@@ -471,14 +471,14 @@ const SET_ITEMS = [
 // ranged.proj: arrow 화살 · fireball 화염구 · icicle 얼음창(둔화) · spit 독침(중독) · plasma 마력구
 const MONSTERS = {
   zombie:   { name: '좀비', sprite: 'zombie', h: 90, life: 16, dmg: [3, 6], speed: 55, r: 15, atkRange: 40, atkCD: 1.5, windup: 0.45, xp: 9, minFloor: 1, maxFloor: 9, weight: 3, undead: true },
-  skeleton: { name: '해골 창병', sprite: 'skeleton', h: 88, life: 12, dmg: [2, 5], speed: 95, r: 14, atkRange: 46, atkCD: 1.1, windup: 0.35, xp: 8, minFloor: 1, weight: 3, undead: true },
-  archer:   { name: '해골 석궁병', sprite: 'skeleton_archer', h: 88, life: 10, dmg: [2, 4], speed: 80, r: 14, atkCD: 1.9, windup: 0.5, xp: 9, minFloor: 1, weight: 2, undead: true,
+  skeleton: { name: '해골 창병', sprite: 'skeleton', h: 88, life: 12, dmg: [2, 5], speed: 95, r: 14, atkRange: 46, atkCD: 1.1, windup: 0.35, xp: 8, minFloor: 1, maxFloor: 24, weight: 3, undead: true },
+  archer:   { name: '해골 석궁병', sprite: 'skeleton_archer', h: 88, life: 10, dmg: [2, 4], speed: 80, r: 14, atkCD: 1.9, windup: 0.5, xp: 9, minFloor: 1, maxFloor: 34, weight: 2, undead: true,
               ranged: { range: 340, proj: 'arrow', speed: 430, keep: 170 } },
   fallen:   { name: '고블린', sprite: 'goblin', h: 52, life: 7, dmg: [1, 4], speed: 125, r: 11, atkRange: 34, atkCD: 0.9, windup: 0.25, xp: 5, minFloor: 1, maxFloor: 9, weight: 3, pack: [5, 8], abil: ['flee'] },
   shaman:   { name: '해골 마법사', sprite: 'skeleton_mage', h: 92, life: 14, dmg: [3, 6], speed: 70, r: 13, atkCD: 2.4, windup: 0.55, xp: 14, minFloor: 2, weight: 0, undead: true,
               ranged: { range: 320, proj: 'fireball', speed: 300, keep: 200 }, abil: ['revive'] },
   swarm:    { name: '새끼 개미귀신', sprite: 'antlion_small', h: 34, life: 5, dmg: [1, 3], speed: 150, r: 10, atkRange: 30, atkCD: 0.8, windup: 0.2, xp: 3, minFloor: 2, maxFloor: 9, weight: 1.6, pack: [6, 9], abil: ['ambush'] },
-  hobgoblin: { name: '홉고블린', sprite: 'hobgoblin', h: 64, life: 20, dmg: [3, 7], speed: 100, r: 13, atkRange: 38, atkCD: 1.1, windup: 0.35, xp: 12, minFloor: 3, weight: 2.2, pack: [3, 4], abil: ['block'], escort: 'hobArcher' },
+  hobgoblin: { name: '홉고블린', sprite: 'hobgoblin', h: 64, life: 20, dmg: [3, 7], speed: 100, r: 13, atkRange: 38, atkCD: 1.1, windup: 0.35, xp: 12, minFloor: 3, maxFloor: 29, weight: 2.2, pack: [3, 4], abil: ['block'], escort: 'hobArcher' },
   hobArcher: { name: '홉고블린 궁수', sprite: 'hobgoblin_archer', h: 64, life: 14, dmg: [3, 6], speed: 95, r: 13, atkCD: 1.8, windup: 0.45, xp: 12, minFloor: 3, weight: 0.8,
               ranged: { range: 360, proj: 'arrow', speed: 460, keep: 190 }, abil: ['volley'] },
   wraith:   { name: '개미귀신', sprite: 'antlion', h: 50, life: 18, dmg: [4, 7], speed: 135, r: 17, atkRange: 42, atkCD: 1.0, windup: 0.3, xp: 14, minFloor: 4, weight: 2, lifeSteal: 0.5, abil: ['burrow'] },
@@ -493,15 +493,35 @@ const MONSTERS = {
   armorAnt: { name: '갑각 개미귀신', sprite: 'antlion_armored', h: 80, life: 70, dmg: [9, 16], speed: 95, r: 24, atkRange: 50, atkCD: 1.5, windup: 0.55, xp: 40, minFloor: 10, weight: 1.2, pack: [1, 2], abil: ['burrow'], armorK: 0.75 },
   iceWyvern: { name: '서리 비룡', sprite: 'wyvern_water', h: 110, life: 60, dmg: [8, 14], speed: 105, r: 22, atkCD: 2.4, windup: 0.6, xp: 40, minFloor: 11, weight: 1, pack: [1, 2],
               ranged: { range: 330, proj: 'icicle', speed: 420, keep: 150, spread: 3 }, abil: ['dive'] },
+  // ── 12층 이후 새 몬스터 (color: 그림에 곱하는 색, alpha: 투명도) ──
+  cartGoblin: { name: '광차 고블린', sprite: 'goblin_minecart', h: 64, life: 30, dmg: [7, 12], speed: 135, r: 18, atkRange: 34, atkCD: 1.2, windup: 0.2, xp: 22, minFloor: 12, weight: 1, pack: [2, 3], abil: ['charge'], chargeCD: [2.5, 4] },
+  fireMage: { name: '화염 해골 마법사', sprite: 'skeleton_mage', color: [255, 175, 150], h: 92, life: 18, dmg: [5, 9], speed: 72, r: 13, atkCD: 2.2, windup: 0.55, xp: 18, minFloor: 13, weight: 1.4, pack: [2, 3], undead: true,
+              ranged: { range: 340, proj: 'fireball', speed: 320, keep: 220 }, abil: ['meteor'] },
+  frostZombie: { name: '서리 망자', sprite: 'zombie', color: [190, 210, 255], h: 90, life: 34, dmg: [6, 10], speed: 52, r: 15, atkRange: 42, atkCD: 1.6, windup: 0.5, xp: 18, minFloor: 14, weight: 2, pack: [4, 6], undead: true, coldHit: true },
+  iceMage:  { name: '냉기 해골 마법사', sprite: 'skeleton_mage', color: [180, 200, 255], h: 92, life: 18, dmg: [5, 9], speed: 72, r: 13, atkCD: 2.2, windup: 0.55, xp: 18, minFloor: 15, weight: 1.4, pack: [2, 3], undead: true,
+              ranged: { range: 320, proj: 'icicle', speed: 400, keep: 200 }, abil: ['nova'] },
+  ghost:    { name: '원혼', sprite: 'zombie', color: [200, 255, 210], alpha: 0.7, h: 90, life: 22, dmg: [6, 10], speed: 115, r: 14, atkRange: 40, atkCD: 1.1, windup: 0.3, xp: 20, minFloor: 17, weight: 1.5, pack: [3, 5], undead: true, lifeSteal: 0.5, abil: ['blink'] },
+  stormWyvern: { name: '폭풍 비룡', sprite: 'wyvern_air', h: 110, life: 62, dmg: [9, 15], speed: 110, r: 22, atkCD: 2.0, windup: 0.55, xp: 44, minFloor: 17, weight: 1, pack: [1, 3],
+              ranged: { range: 340, proj: 'bolt', speed: 260, keep: 150, spread: 3 }, abil: ['dive'] },
+  fossilAnt: { name: '화석 개미', sprite: 'ice_ant', color: [125, 108, 92], h: 58, life: 40, dmg: [7, 12], speed: 95, r: 17, atkCD: 2.1, windup: 0.5, xp: 24, minFloor: 20, weight: 1.4, pack: [3, 5], armorK: 0.65,
+              ranged: { range: 300, proj: 'stone', speed: 480, keep: 140 }, abil: ['burrow'] },
   // 특수: 방에 놓이는 무덤과 무덤·보스가 불러내는 졸개
   grave:    { name: '저주받은 무덤', sprite: 'cursed_grave', h: 70, life: 45, dmg: [0, 0], speed: 0, r: 24, xp: 30, minFloor: 3, weight: 0, undead: true, stationary: true, abil: ['summon'], summon: 'boneling', armorK: 0.8 },
   boneling: { name: '해골 병사', sprite: 'skeleton_weak', h: 84, life: 8, dmg: [2, 4], speed: 90, r: 13, atkRange: 44, atkCD: 1.2, windup: 0.35, xp: 3, minFloor: 99, weight: 0, undead: true },
+  fireGrave: { name: '불타는 무덤', sprite: 'cursed_grave', color: [255, 165, 140], h: 70, life: 55, dmg: [0, 0], speed: 0, r: 24, xp: 40, minFloor: 99, weight: 0, undead: true, stationary: true, abil: ['summon'], summon: 'fireBoneling', armorK: 0.8 },
+  iceGrave: { name: '얼어붙은 무덤', sprite: 'cursed_grave', color: [175, 200, 255], h: 70, life: 55, dmg: [0, 0], speed: 0, r: 24, xp: 40, minFloor: 99, weight: 0, undead: true, stationary: true, abil: ['summon'], summon: 'iceBoneling', armorK: 0.8 },
+  fireBoneling: { name: '불꽃 해골 병사', sprite: 'skeleton_weak', color: [255, 170, 140], h: 84, life: 9, dmg: [3, 5], speed: 95, r: 13, atkRange: 44, atkCD: 1.2, windup: 0.35, xp: 3, minFloor: 99, weight: 0, undead: true, abil: ['explode'] },
+  iceBoneling: { name: '서리 해골 병사', sprite: 'skeleton_weak', color: [175, 200, 255], h: 84, life: 9, dmg: [3, 5], speed: 85, r: 13, atkRange: 44, atkCD: 1.3, windup: 0.35, xp: 3, minFloor: 99, weight: 0, undead: true, coldHit: true },
   // 보스 전용
   knight:   { name: '해골 기사', sprite: 'skeleton_knight_boss', h: 120, life: 60, dmg: [9, 15], speed: 85, r: 20, atkRange: 58, atkCD: 1.4, windup: 0.5, xp: 40, minFloor: 99, weight: 0, undead: true, abil: ['charge', 'block', 'summon'], summon: 'boneling', armorK: 0.85 },
   lich:     { name: '해골 대마법사', sprite: 'skeleton_mage_boss', h: 120, life: 45, dmg: [8, 13], speed: 75, r: 18, atkCD: 2.0, windup: 0.55, xp: 40, minFloor: 99, weight: 0, undead: true,
               ranged: { range: 380, proj: 'plasma', speed: 300, keep: 240 }, abil: ['teleport', 'nova', 'summon'], summon: 'boneling' },
   lichKing: { name: '해골왕', sprite: 'skeleton_mage_high_boss', h: 124, life: 50, dmg: [9, 15], speed: 75, r: 18, atkCD: 1.8, windup: 0.5, xp: 50, minFloor: 99, weight: 0, undead: true,
               ranged: { range: 400, proj: 'plasma', speed: 320, keep: 240 }, abil: ['teleport', 'nova', 'summon', 'meteor'], summon: 'boneling' },
+  stormKing: { name: '폭풍의 비룡왕', sprite: 'wyvern_air_boss', h: 230, life: 60, dmg: [10, 16], speed: 95, r: 30, atkCD: 2.0, windup: 0.6, xp: 60, minFloor: 99, weight: 0,
+              ranged: { range: 380, proj: 'bolt', speed: 260, keep: 170, spread: 3 }, abil: ['dive', 'storm', 'volley'] },
+  deathKing: { name: '망자의 왕', sprite: 'skeleton_mage_high_boss', h: 124, life: 60, dmg: [10, 16], speed: 80, r: 18, atkCD: 1.6, windup: 0.5, xp: 80, minFloor: 99, weight: 0, undead: true,
+              ranged: { range: 420, proj: 'plasma', speed: 330, keep: 240 }, abil: ['phases', 'teleport', 'nova', 'summon', 'meteor', 'storm', 'volley'], summon: 'iceBoneling' },
 };
 const UNDEAD = new Set(Object.keys(MONSTERS).filter(k => MONSTERS[k].undead));
 
@@ -527,8 +547,13 @@ const BOSSES = [
   { name: '역병 비룡 니드라', type: 'wyvern', scale: 1.3, abil: ['dive', 'volley', 'pools'] },
   { name: '대사제 말카르', type: 'lich', scale: 1.1, abil: ['teleport', 'nova', 'summon', 'volley'] },
   { name: '심연의 비룡 아즈라크', type: 'wyvern', sprite: 'wyvern_fire', scale: 1.25, proj: 'fireball', abil: ['dive', 'meteor', 'volley'] },
-  { name: '해골왕 오르쿠스', type: 'lichKing', scale: 1.1, abil: ['teleport', 'nova', 'summon', 'meteor'] },
+  { name: '해골 대주교 벨칸', type: 'lichKing', scale: 1.1, abil: ['teleport', 'nova', 'summon', 'meteor'] },
+  { name: '피의 군주 크루그', type: 'brute', sprite: 'minotaur', scale: 1.5, abil: ['charge', 'slam', 'enrage'], tint: 'hue-rotate(-28deg) saturate(1.9) brightness(0.8)' },
+  { name: '서리 여왕 실바', type: 'iceWyvern', sprite: 'wyvern_water', scale: 1.45, abil: ['dive', 'blizzard', 'nova', 'volley'], tint: 'saturate(0.6) brightness(1.25)' },
+  { name: '폭풍의 비룡왕 볼타르', type: 'stormKing', scale: 0.85, abil: ['dive', 'storm', 'volley'] },
+  { name: '망자의 왕 오르쿠스', type: 'deathKing', scale: 1.45, final: true, abil: ['phases', 'teleport', 'nova', 'summon', 'meteor', 'storm', 'volley'], tint: 'hue-rotate(195deg) saturate(1.4) brightness(1.05)' },
 ];
+const FINAL_FLOOR = 50;
 
 // ── 층별 테마 ──
 const THEMES = [
@@ -537,8 +562,25 @@ const THEMES = [
   { name: '버려진 성채', tiles: 'dungeon', tint: '#9fb39a', floor: ['#323b35', '#2d3630', '#28302b'], grout: '#151a17', top: '#4b5650', left: '#262d29', right: '#343d38', brick: '#161b18', moss: '#3d5a2a' },
   { name: '불타는 심연', tiles: 'cave', tint: '#ff8f6e', floor: ['#3b2522', '#341f1c', '#2d1a17'], grout: '#120807', top: '#4f2f2a', left: '#26130f', right: '#381c17', brick: '#140806', lava: true },
   { name: '혼돈의 성역', tiles: 'dungeon', tint: '#b9a0e0', floor: ['#2f2639', '#2a2133', '#231b2c'], grout: '#100b15', top: '#463a55', left: '#1f1828', right: '#2d243a', brick: '#120d18', lava: true },
+  { name: '얼어붙은 지하묘지', tiles: 'dungeon', tint: '#a8c4ff', floor: ['#2c3442', '#28303d', '#232a36'], grout: '#10141b', top: '#46526a', left: '#1e2430', right: '#2b3342', brick: '#11151c', moss: null },
+  { name: '역병의 동굴', tiles: 'cave', tint: '#a9d48c', floor: ['#33402a', '#2e3a26', '#283322'], grout: '#121a0e', top: '#4a5c3a', left: '#222c1a', right: '#304026', brick: '#141c10', moss: '#4a6a2a' },
+  { name: '피의 성채', tiles: 'dungeon', tint: '#ff9a8a', floor: ['#3e2626', '#382222', '#311e1e'], grout: '#160b0b', top: '#5a3838', left: '#2a1818', right: '#3c2222', brick: '#180c0c', moss: null },
+  { name: '잿빛 폐허', tiles: 'cave', tint: '#b4aca4', floor: ['#38352f', '#33302b', '#2d2a26'], grout: '#141210', top: '#524e46', left: '#26231f', right: '#36322d', brick: '#161411', moss: null },
+  { name: '그림자 미궁', tiles: 'dungeon', tint: '#8a90c8', floor: ['#26283a', '#222434', '#1d1f2d'], grout: '#0c0d14', top: '#3c3f58', left: '#191a26', right: '#252738', brick: '#0e0f16', moss: null },
+  { name: '용암 지옥', tiles: 'cave', tint: '#ff7a4a', floor: ['#3e2018', '#381c15', '#311812'], grout: '#160806', top: '#58302a', left: '#2a120d', right: '#3c1a14', brick: '#180806', lava: true },
+  { name: '망각의 회랑', tiles: 'dungeon', tint: '#c0a0ff', floor: ['#2c2440', '#27203a', '#211b32'], grout: '#0e0a16', top: '#443a5c', left: '#1c1628', right: '#2a213c', brick: '#100c18', lava: true },
 ];
+// 마지막 층: 망자의 왕좌
+const FINAL_THEME = { name: '망자의 왕좌', tiles: 'dungeon', tint: '#e8c27a', floor: ['#3a3020', '#342b1c', '#2e2619'], grout: '#14100a', top: '#57492e', left: '#2a2216', right: '#3c3120', brick: '#16120b', lava: true };
+// 테마가 바뀌는 층 (위 THEMES 순서대로)
+const THEME_STARTS = [1, 4, 7, 10, 13, 16, 20, 25, 30, 35, 40, 45];
 const TOWN_THEME = { name: '국경 야영지', tiles: 'grassland', tint: null, town: true, floor: ['#3d4a2a', '#38452a', '#334026'], grout: '#1d2414', top: '#4a5a32', left: '#2a3320', right: '#36412a', brick: '#1d2414', moss: null };
-function themeForFloor(f) { return f === 0 ? TOWN_THEME : THEMES[Math.min(THEMES.length - 1, Math.floor((f - 1) / 3))]; }
+function themeForFloor(f) {
+  if (f === 0) return TOWN_THEME;
+  if (f >= FINAL_FLOOR) return FINAL_THEME;
+  let i = 0;
+  while (i + 1 < THEME_STARTS.length && THEME_STARTS[i + 1] <= f) i++;
+  return THEMES[i];
+}
 function monsterLevelForFloor(f) { return 1 + Math.round((f - 1) * 1.5); }
 function isBossFloor(f) { return f > 0 && f % 5 === 0; }
