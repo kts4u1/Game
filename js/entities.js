@@ -470,6 +470,8 @@ function killMonster(m) {
   if (bony || m.type === 'grave') { fxSparks(m.x, m.y, 20, 10, '#d8d1bd', 140); }
   else { fxBlood(m.x, m.y, 30, 16); fxDecal('blood', m.x, m.y, m.scale * rand(0.8, 1.2), m.type === 'zombie' || m.type === 'darkZombie' ? 'rgba(40,52,14,.8)' : 'rgba(70,6,8,.8)'); }
   if (m.sprite === 'antlion') fxSparks(m.x, m.y, 30, 20, '#7ff2ff', 200);
+  // 광차가 부서지는 모습 (그림에 죽는 동작이 없음)
+  if (m.sprite === 'goblin_minecart') { fxDust(m.x, m.y, 14, '110,90,70', 120); fxSparks(m.x, m.y, 20, 18, '#ffcf6a', 180); for (let i = 0; i < 5; i++) fxRock(m.x + rand(-24, 24), m.y + rand(-24, 24), 0.6); SFX.play('chest', 0.6); }
   if (m.type === 'grave') {
     for (const o of world.monsters) if (o.summoner === m.id && !o.dead) { o.life = 0; killMonster(o); }
     UI.message('저주받은 무덤을 부쉈습니다', '#c9c1b3');

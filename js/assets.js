@@ -171,7 +171,8 @@ function monsterPose(m, set, t) {
   const dir = flareDir(m.facing);
   const atk = set.anims.swing ? 'swing' : set.anims.shoot ? 'shoot' : 'cast';
   const A = set.anims;
-  if (m.dead) return ['die', animIndex(A.die, m.deadT * 1000, true), dir];
+  // 죽는 동작이 없는 그림(광차 고블린 등)은 서 있는 모습으로 두고 render.js에서 사라지게 함
+  if (m.dead) return A.die ? ['die', animIndex(A.die, m.deadT * 1000, true), dir] : ['stance', 0, dir];
   const act = m.act && m.act.kind;
   if (act === 'emerge' && A.spawn) return ['spawn', animIndex(A.spawn, m.act.t * 1000, true), dir];
   if ((act === 'charge' || act === 'dive' || act === 'flee' || act === 'burrow') && A.run) {
@@ -187,7 +188,7 @@ function monsterPose(m, set, t) {
     return [atk, Math.min(n - 1, Math.floor(n * 0.6 + k * n * 0.4)), dir];
   }
   if (m.moving && A.run) return ['run', Math.floor(m.walkPhase * 0.75) % A.run.n, dir];
-  return ['stance', animIndex(A.stance, t * 1000 + m.seed * 300), dir];
+  return A.stance ? ['stance', animIndex(A.stance, t * 1000 + m.seed * 300), dir] : ['run', 0, dir];
 }
 
 // ── 마을 사람 ──

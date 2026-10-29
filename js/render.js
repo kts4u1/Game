@@ -357,10 +357,14 @@ function renderFrame(t, focus) {
   const pIsoX = p ? isoX(p.x, p.y) : 0, pIsoY = p ? isoY(p.x, p.y) : 0, pDepth = p ? p.x + p.y : 0;
   const playing = p && Game.state !== 'title';
   for (const s of sorted) {
+    // 그림 하나에 문제가 있어도 나머지(캐릭터, 몬스터, 조명)는 계속 그림
+    try { drawSorted(ctx, s); } catch (err) { if (!R.drawErr) { R.drawErr = true; console.error(err); } }
+  }
+  function drawSorted(ctx, s) {
     if (s.k === 0 && d.town) {
       // 마을 숲: 나무가 플레이어를 가리면 반투명
       const id = atlas && d.art.wall[s.i];
-      if (!id) continue;
+      if (!id) return;
       const tall = d.art.tall[s.i];
       const dy = s.iy + TILE / 2 - pIsoY;
       const fade = playing && tall && s.d > pDepth && Math.abs(s.ix - pIsoX) < 130 && dy > -20 && dy < 380;
@@ -385,6 +389,8 @@ function renderFrame(t, focus) {
     else if (s.k === 6) drawNpc(ctx, s.n, t);
     else if (s.k === 7) drawTownProp(ctx, s.pr);
   }
+  ctx.globalAlpha = 1;
+  ctx.filter = 'none';
   if (!atlas) for (const tc of d.torches) if (explored(tc.x, tc.y)) drawTorchBracket(ctx, tc);
   drawFXParticles(ctx);
   drawFXSprites(ctx, 'top');
@@ -659,6 +665,7 @@ function drawMonster(ctx, m, t) {
     const [anim, idx, dir] = monsterPose(m, fs, t);
     ctx.save();
     if (m.dead && m.deadT > 6) ctx.globalAlpha = Math.max(0, 1 - (m.deadT - 6) / 2);
+    if (m.dead && !fs.anims.die) ctx.globalAlpha = Math.max(0, 1 - m.deadT / 0.6);  // 죽는 동작이 없으면 금방 사라짐
     if (m.act && m.act.kind === 'emerge' && !fs.anims.spawn) ctx.globalAlpha = Math.min(1, m.act.t / m.act.dur);
     if (m.act && m.act.kind === 'burrow') ctx.globalAlpha = Math.max(0.15, 1 - m.act.t / 0.35);
     if (m.alpha < 1) ctx.globalAlpha *= m.alpha;
