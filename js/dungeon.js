@@ -10,6 +10,7 @@ class Dungeon {
     this.h = 70;
     this.lights = [];
     if (floor === 0) generateTown(this);  // 마을 (town.js)
+    else if (this.theme.outdoor) this.generateOutdoor();  // 20층부터: 넓은 바깥 지역
     else this.generate();
   }
 
@@ -79,6 +80,230 @@ class Dungeon {
 
     this.placeTorches();
     this.placeDecor();
+  }
+
+  // ── 바깥 지역: 숲으로 둘러싸인 넓은 공터들을 굽은 큰길로 잇고, 공터 안에 바위·나무 무더기 ──
+  // 칸: 1 = 걸을 수 있는 땅, 2 = 숲·바위(그림은 render.js가 깊이에 따라 나무·덤불·바위로), 3 = 소품이 놓인 칸
+  generateOutdoor() {
+    const th = this.theme, final = this.floor >= FINAL_FLOOR;
+    const W = this.w = final ? 76 : 92, H = this.h = W;
+    this.outdoor = true;
+    const blob = (c) => {
+      // 공터 하나: 가장자리가 울퉁불퉁한 타원
+      for (let y = Math.max(2, c.cy - c.ry - 2); y <= Math.min(H - 3, c.cy + c.ry + 2); y++) {
+        for (let x = Math.max(2, c.cx - c.rx - 2); x <= Math.min(W - 3, c.cx + c.rx + 2); x++) {
+          const dx = (x - c.cx) / c.rx, dy = (y - c.cy) / c.ry, a = Math.atan2(dy, dx);
+          const edge = 1 + Math.sin(a * 3 + c.p0) * 0.12 + Math.sin(a * 5 + c.p1) * 0.08;
+          if (dx * dx + dy * dy < edge * edge) this.tiles[y * W + x] = 1;
+        }
+      }
+    };
+    for (let attempt = 0; attempt < 20; attempt++) {
+      this.tiles = new Uint8Array(W * H).fill(2);
+      this.rooms = [];
+      const target = final ? 6 : 9 + Math.min(3, Math.floor((this.floor - OUTDOOR_FLOOR) / 10));
+      for (let a = 0; a < 800 && this.rooms.length < target; a++) {
+        // 최종층의 마지막 공터는 왕좌가 있는 큰 광장
+        const big = final && this.rooms.length === target - 1;
+        const rx = big ? 11 : randInt(6, 9), ry = big ? 11 : randInt(6, 9);
+        const cx = randInt(rx + 4, W - rx - 5), cy = randInt(ry + 4, H - ry - 5);
+        const hit = this.rooms.some(r => Math.abs(cx - r.cx) < rx + r.rx + 4 && Math.abs(cy - r.cy) < ry + r.ry + 4);
+        if (hit) continue;
+        this.rooms.push({ x: cx - rx, y: cy - ry, w: rx * 2 + 1, h: ry * 2 + 1, cx, cy, rx, ry, p0: Math.random() * TAU, p1: Math.random() * TAU });
+      }
+      if (this.rooms.length >= (final ? 5 : 7)) break;
+    }
+    for (const r of this.rooms) blob(r);
+    // 공터를 넓은 길로 연결 (최소 신장 트리 + 순환 길)
+    const linked = [this.rooms[0]], rest = this.rooms.slice(1);
+    while (rest.length) {
+      let best = null, bd = Infinity;
+      for (const a of linked) for (const b of rest) {
+        const dd = Math.hypot(a.cx - b.cx, a.cy - b.cy);
+        if (dd < bd) { bd = dd; best = [a, b]; }
+      }
+      this.trail(best[0], best[1]);
+      linked.push(best[1]);
+      rest.splice(rest.indexOf(best[1]), 1);
+    }
+    for (let k = 0; k < 3; k++) {
+      const a = pick(this.rooms), b = pick(this.rooms);
+      if (a !== b && Math.hypot(a.cx - b.cx, a.cy - b.cy) < 34) this.trail(a, b);
+    }
+    // 시작 공터(가장자리 쪽)와 계단 공터(길로 가장 먼 곳)
+    this.startRoom = this.rooms.reduce((m, r) => (Math.min(r.cx, r.cy, W - r.cx, H - r.cy) < Math.min(m.cx, m.cy, W - m.cx, H - m.cy) ? r : m), this.rooms[0]);
+    const throne = final ? this.rooms[this.rooms.length - 1] : null;
+    if (throne) {
+      // 최종층: 왕좌 광장에서 가장 먼 공터에서 시작
+      const far0 = r => Math.hypot(r.cx - throne.cx, r.cy - throne.cy);
+      this.startRoom = this.rooms.filter(r => r !== throne).reduce((m, r) => (far0(r) > far0(m) ? r : m));
+    }
+    let dmap = this.bfs(this.startRoom.cx, this.startRoom.cy);
+    let far = this.rooms.find(r => r !== this.startRoom), fd = -1;
+    for (const r of this.rooms) {
+      const v = dmap[this.idx(r.cx, r.cy)];
+      if (r !== this.startRoom && v > fd) { fd = v; far = r; }
+    }
+    if (throne) far = throne;
+    this.stairsRoom = far;
+    // 공터 안의 장애물: 바위·나무 무더기 (공터 한가운데·시작점·계단 둘레는 비움)
+    // 무더기 하나가 길을 끊으면 되돌림 → 모든 땅이 늘 이어져 있음
+    const keep = (x, y) => this.rooms.some(r => Math.hypot(x - r.cx, y - r.cy) < (r === far ? (final ? 6 : 3.5) : r === this.startRoom ? 3.5 : 1.6));
+    for (const r of this.rooms) {
+      const n = r === this.startRoom ? 1 : randInt(1, th.dense ? 5 : 3);
+      for (let k = 0; k < n; k++) {
+        const a = Math.random() * TAU, rr = rand(0.35, 0.75);
+        const ox = r.cx + Math.cos(a) * r.rx * rr, oy = r.cy + Math.sin(a) * r.ry * rr, rad = rand(0.7, th.dense ? 2.1 : 1.6);
+        const cells = [];
+        for (let y = Math.floor(oy - rad); y <= Math.ceil(oy + rad); y++) for (let x = Math.floor(ox - rad); x <= Math.ceil(ox + rad); x++) {
+          if (Math.hypot(x - ox, y - oy) > rad || keep(x, y) || this.tile(x, y) !== 1) continue;
+          cells.push(y * W + x);
+        }
+        this.blockIfConnected(cells, 2);
+      }
+    }
+    // 혹시 끊긴 곳은 숲으로 메움 (시작점에서 걸어갈 수 없는 땅이 없게)
+    dmap = this.bfs(this.startRoom.cx, this.startRoom.cy);
+    for (let i = 0; i < W * H; i++) if (this.tiles[i] === 1 && dmap[i] < 0) this.tiles[i] = 2;
+    this.explored = new Uint8Array(W * H);
+    this.variant = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) this.variant[i] = Math.floor(Math.random() * 8);
+    this.stairs = { x: (far.cx + 0.5) * TILE, y: (far.cy + 0.5) * TILE, open: true };
+    this.start = { x: (this.startRoom.cx + 0.5) * TILE, y: (this.startRoom.cy + 0.5) * TILE };
+    // 시작점에서 계단까지 흙길
+    this.path = new Uint8Array(W * H);
+    const road = this.findPath(this.start.x, this.start.y, this.stairs.x, this.stairs.y) || [];
+    for (const pt of road) {
+      const tx = Math.floor(pt.x / TILE), ty = Math.floor(pt.y / TILE);
+      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) if (this.walkable(tx + dx, ty + dy)) this.path[this.idx(tx + dx, ty + dy)] = 1;
+    }
+    this.torches = [];
+    this.lights = [];
+    this.props = [];
+    this.decor = [];
+    this.placeOutdoorProps();
+    this.ambient = th.amb || [30, 28, 32];
+  }
+
+  // cells를 막아도(값 v) 걸을 수 있는 땅이 모두 이어져 있으면 막고 true, 아니면 그대로 두고 false
+  blockIfConnected(cells, v) {
+    if (!cells.length) return false;
+    const T = this.tiles;
+    let total = 0;
+    for (let i = 0; i < T.length; i++) if (T[i] === 1) total++;
+    for (const i of cells) T[i] = v;
+    const sr = this.startRoom, dm = this.bfs(sr.cx, sr.cy);
+    let reach = 0;
+    for (let i = 0; i < T.length; i++) if (T[i] === 1 && dm[i] >= 0) reach++;
+    if (reach === total - cells.length) return true;
+    for (const i of cells) T[i] = 1;
+    return false;
+  }
+
+  // 공터와 공터를 잇는 넓고 굽은 길
+  trail(a, b) {
+    const pts = [[a.cx, a.cy]];
+    const n = 3, len = Math.hypot(b.cx - a.cx, b.cy - a.cy) || 1;
+    const nx = -(b.cy - a.cy) / len, ny = (b.cx - a.cx) / len;
+    for (let i = 1; i < n; i++) {
+      const t = i / n, off = rand(-4, 4);
+      pts.push([lerp(a.cx, b.cx, t) + nx * off, lerp(a.cy, b.cy, t) + ny * off]);
+    }
+    pts.push([b.cx, b.cy]);
+    const rad = rand(1.6, 2.4);
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[i + 1];
+      const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2);
+      for (let s = 0; s <= steps; s++) {
+        const x = lerp(x0, x1, s / steps), y = lerp(y0, y1, s / steps);
+        for (let yy = Math.floor(y - rad); yy <= Math.ceil(y + rad); yy++) for (let xx = Math.floor(x - rad); xx <= Math.ceil(x + rad); xx++) {
+          if (xx < 3 || yy < 3 || xx >= this.w - 3 || yy >= this.h - 3) continue;
+          if (Math.hypot(xx - x, yy - y) <= rad) this.tiles[yy * this.w + xx] = 1;
+        }
+      }
+    }
+  }
+
+  // 바깥 지역의 볼거리: 버려진 야영지(모닥불), 돌기둥 폐허, 무덤, 해골, 불타는 땅
+  placeOutdoorProps() {
+    const th = this.theme, W = this.w;
+    const free = (x, y, r = 1) => {
+      for (let j = y - r; j <= y + r; j++) for (let i = x - r; i <= x + r; i++) if (this.tile(i, j) !== 1) return false;
+      return Math.hypot(x - this.startRoom.cx, y - this.startRoom.cy) > 3 && Math.hypot(x - this.stairsRoom.cx, y - this.stairsRoom.cy) > 4 && !this.path[y * W + x];
+    };
+    const put = (name, x, y, block = true) => {
+      // 길을 끊는 자리에는 놓지 않음
+      if (block && !this.blockIfConnected([y * W + x], 3)) return false;
+      this.props.push({ name, x: (x + 0.5) * TILE, y: (y + 0.5) * TILE, pick: randInt(0, 3) });
+      return true;
+    };
+    const spot = (r, margin = 2) => {
+      for (let i = 0; i < 40; i++) {
+        const x = randInt(r.x + margin, r.x + r.w - 1 - margin), y = randInt(r.y + margin, r.y + r.h - 1 - margin);
+        if (free(x, y)) return { x, y };
+      }
+      return null;
+    };
+    const rooms = shuffle(this.rooms.filter(r => r !== this.startRoom && r !== this.stairsRoom));
+    let ri = 0;
+    const nextRoom = () => rooms.length ? rooms[ri++ % rooms.length] : null;
+    // 버려진 야영지: 모닥불(불빛) + 천막·상자
+    for (let k = 0; k < (th.camps || 0); k++) {
+      const r = nextRoom(), c = r && spot(r, 3);
+      if (!c) continue;
+      if (!put('campfire', c.x, c.y)) continue;
+      this.lights.push({ x: (c.x + 0.5) * TILE, y: (c.y + 0.5) * TILE, r: 300, i: 0.75, c: [255, 160, 80], flicker: true, fire: true });
+      for (const [nm, dx, dy] of [['tent', -2, -1], ['crates', 1, -2], ['wood', 2, 1]]) if (free(c.x + dx, c.y + dy, 0)) put(nm, c.x + dx, c.y + dy);
+    }
+    // 돌기둥 폐허: 둥글게 선 기둥
+    for (let k = 0; k < (th.ruins || 0); k++) {
+      const r = nextRoom(), c = r && spot(r, 4);
+      if (!c) continue;
+      const n = randInt(5, 7), rad = rand(2.6, 3.4), a0 = Math.random() * TAU;
+      for (let i = 0; i < n; i++) {
+        if (chance(0.2)) continue;
+        const x = Math.round(c.x + Math.cos(a0 + i / n * TAU) * rad), y = Math.round(c.y + Math.sin(a0 + i / n * TAU) * rad);
+        if (free(x, y, 0)) put(chance(0.5) ? 'pillar' : 'pillar2', x, y);
+      }
+      this.lights.push({ x: (c.x + 0.5) * TILE, y: (c.y + 0.5) * TILE, r: 230, i: 0.45, c: [170, 150, 255] });
+    }
+    // 무덤
+    for (let k = 0; k < (th.graves || 0); k++) {
+      const r = nextRoom(), c = r && spot(r, 3);
+      if (!c) continue;
+      for (let i = 0; i < randInt(3, 5); i++) {
+        const x = c.x + randInt(-2, 2), y = c.y + randInt(-2, 2);
+        if (free(x, y, 0)) put('graves', x, y);
+      }
+    }
+    // 바닥 장식 (뼈·해골·얼룩)
+    for (const r of this.rooms) {
+      for (let i = 0, n = randInt(2, 4); i < n; i++) {
+        const c = spot(r, 1);
+        if (c) this.decor.push({ type: pick(['bones', 'bones', 'skull', 'stain']), x: (c.x + rand(0.2, 0.8)) * TILE, y: (c.y + rand(0.2, 0.8)) * TILE, rot: Math.random() * TAU, s: rand(0.7, 1.3) });
+      }
+    }
+    // 불타는 평원: 곳곳에 타오르는 땅 / 늪지: 고인 독웅덩이 빛
+    if (th.burning || th.marsh) {
+      for (const r of this.rooms) {
+        if (r === this.startRoom || chance(0.35)) continue;
+        const c = spot(r, 2);
+        if (!c) continue;
+        this.lights.push({ x: (c.x + 0.5) * TILE, y: (c.y + 0.5) * TILE, r: 200, i: 0.5, c: th.burning ? [255, 120, 50] : [140, 220, 90], flicker: true, glow: th.burning ? 'fire' : 'marsh' });
+      }
+    }
+    // 최종층: 왕좌 광장을 두른 기둥과 화로
+    if (th.throne) {
+      const r = this.stairsRoom;
+      for (let i = 0; i < 10; i++) {
+        const a = i / 10 * TAU, x = Math.round(r.cx + Math.cos(a) * 8), y = Math.round(r.cy + Math.sin(a) * 8);
+        if (this.tile(x, y) === 1) put(i % 2 ? 'pillar' : 'pillar2', x, y);
+      }
+      for (let i = 0; i < 4; i++) {
+        const a = Math.PI / 4 + i / 4 * TAU, x = (r.cx + Math.cos(a) * 5.5 + 0.5) * TILE, y = (r.cy + Math.sin(a) * 5.5 + 0.5) * TILE;
+        this.torches.push({ kind: 'brazier', x, y, bx: x, by: y, lx: x, ly: y, fx: isoX(x, y) - 2, fy: isoY(x, y) - 34, phase: Math.random() * 10 });
+      }
+    }
   }
 
   carveRect(x, y, w, h) {
@@ -335,6 +560,8 @@ class Dungeon {
       const i = this.idx(x, y);
       if (this.explored[i] || this.tiles[i] === 0) continue;
       if ((x - tx) ** 2 + (y - ty) ** 2 > r * r) continue;
+      // 바깥 지역은 탁 트여 있어 숲 너머도 보임
+      if (this.outdoor) { this.explored[i] = 1; continue; }
       // 벽 너머는 보이지 않음 (벽 자체는 보임)
       const cx = (x + 0.5) * TILE, cy = (y + 0.5) * TILE;
       const d = dist(px, py, cx, cy);

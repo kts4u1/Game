@@ -121,13 +121,15 @@ function populateFloor() {
   const types = pickRoster(f);
   world.roster = types;
   const rooms = d.rooms.filter(r => r !== d.startRoom);
-  const champRooms = shuffle(rooms.slice()).slice(0, f === 1 ? 1 : randInt(1, 2));
+  const nm = world.diff === 1;
+  // 악몽: 정예 무리가 더 많고, 이름 있는 정예는 특성이 하나 더
+  const champRooms = shuffle(rooms.slice()).slice(0, (f === 1 ? 1 : randInt(1, 2)) + (nm ? 1 : 0));
   const uniqCands = rooms.filter(r => !champRooms.includes(r) && r !== d.stairsRoom);
   const uniqueRoom = f >= 2 && uniqCands.length ? pick(uniqCands) : null;
   let packId = 1;
   for (const r of rooms) {
     const area = r.w * r.h, dens = floorDensity(f);
-    const packs = 1 + (area > 56 && chance(dens) ? 1 : 0) + (area > 100 && chance(dens) ? 1 : 0) + (chance(0.45 * dens) ? 1 : 0);
+    const packs = 1 + (area > 56 && chance(dens) ? 1 : 0) + (area > 100 && chance(dens) ? 1 : 0) + (chance(0.45 * dens) ? 1 : 0) + (d.outdoor && area > 220 && chance(0.6 * dens) ? 1 : 0);
     for (let k = 0; k < packs; k++) {
       const type = weightedPick(types, t => MONSTERS[t].weight);
       spawnPack(r, type, k === 0 && champRooms.includes(r) ? 1 : 0, packId++);
@@ -135,7 +137,7 @@ function populateFloor() {
     if (r === uniqueRoom) {
       const cands = types.filter(t => t !== 'fallen' && t !== 'swarm');
       const type = weightedPick(cands.length ? cands : types, t => MONSTERS[t].weight);
-      const mods = shuffle(Object.keys(ELITE_MODS)).slice(0, f >= 6 ? 3 : 2);
+      const mods = shuffle(Object.keys(ELITE_MODS)).slice(0, (f >= 6 ? 3 : 2) + (nm ? 1 : 0));
       const name = `${pick(UNIQUE_NAME_A)} ${pick(UNIQUE_NAME_B)}`;
       const c = d.randomPointInRoom(r, 2);
       const pid = packId++;
@@ -623,12 +625,12 @@ function dropLoot(x, y, mlvl, tier, extraGold = 0) {
   else if (tier === 4) { items = randInt(1, 2); gold = 1; potion = 0.5; }
   const ilvl = mlvl + (tier === 3 ? 2 : tier >= 1 ? 1 : 0);
   for (let i = 0; i < items; i++) {
-    let r = rollRarity(mlvl, tier, s.mf);
+    let r = rollRarity(mlvl, tier, s.mf + DIFFICULTIES[world.diff || 0].mf);
     if (i === 0 && minRarity && r < minRarity) r = minRarity;
     spawnGround('item', x, y, { item: generateItem(ilvl, r) });
   }
   if (chance(gold) || extraGold) {
-    const amt = Math.round(randInt(3, 9) * 1.6 * (1 + mlvl * 0.6) * (1 + s.gf / 100) * (tier ? 2 + tier : 1) + extraGold * 1.5);
+    const amt = Math.round((randInt(3, 9) * 1.6 * (1 + mlvl * 0.6) * (1 + s.gf / 100) * (tier ? 2 + tier : 1) + extraGold * 1.5) * DIFFICULTIES[world.diff || 0].gold);
     spawnGround('gold', x, y, { amount: amt });
   }
   if (chance(potion)) spawnGround('potion', x, y, {});

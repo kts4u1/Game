@@ -4,7 +4,7 @@
 function createPlayer() {
   const p = {
     x: 0, y: 0, r: 14, z: 0, facing: 0.8, level: 1, xp: 0, life: 100, fury: 50, gold: 0, potions: 3, bonusLife: 0,
-    skills: {}, hotbar: [null, null, null, null], cds: {},
+    skills: {}, hotbar: [null, null, null, null], cds: {}, difficulty: 0, deepestBy: [1, 1],
     equipment: { weapon: null, shield: null, helm: null, amulet: null, armor: null, ring1: null, ring2: null, gloves: null, belt: null, boots: null },
     inventory: new Array(40).fill(null), stash: new Array(STASH_SIZE).fill(null), elixirs: {}, poisonT: 0, poisonDps: 0,
     walkPhase: 0, moving: false, attack: null, leap: null, whirl: null, pose: null, poseT: 0, poseDur: 0,
@@ -81,7 +81,7 @@ function recalcStats(p) {
   s.lifeSteal = Math.min(s.lifeSteal, 25);
   s.crit = Math.min(s.crit, 75);
   s.block = p.equipment.shield ? Math.min(50, s.block + s.blockChance) : 0;
-  s.res = Math.min(75, s.resAll);
+  s.res = Math.min(75, s.resAll) + (DIFFICULTIES[p.difficulty || 0].res || 0);  // 악몽은 원소 저항 감소
   s.cdr = Math.min(40, s.cdr);
   s.furyCost = Math.min(40, s.furyCost);
   p.life = Math.min(p.life, s.maxLife);

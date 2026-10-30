@@ -80,7 +80,7 @@ const Game = {
 
   buildTitleWorld() {
     const f = pick([1, 4, 7, 10, 13]);
-    world = makeWorld(f);
+    world = makeWorld(f, 0);
     populateFloor();
     world.dungeon.explored.fill(1);
     buildThemeSprites(world.dungeon.theme);
@@ -96,7 +96,8 @@ const Game = {
     const s = this.loadSaveData();
     this.newConfirm = false;
     $('btn-new').textContent = '새 게임';
-    UI.showTitle(!!s, s ? `${s.floor ? s.floor + '층' : '마을'} · 레벨 ${s.p.level}${s.p.cleared ? ' · 정복 완료' : ''}` : '');
+    const nm = s && s.p.difficulty === 1;
+    UI.showTitle(!!s, s ? `${nm ? '악몽 ' : ''}${s.floor ? s.floor + '층' : '마을'} · 레벨 ${s.p.level}${s.p.clearedNM ? ' · 악몽 정복' : s.p.cleared ? ' · 정복 완료' : ''}` : '');
   },
 
   newGame() {
@@ -127,7 +128,10 @@ const Game = {
     p.deepest = d.deepest || s.floor || 1;
     p.stash = (d.stash || []).concat(new Array(STASH_SIZE).fill(null)).slice(0, STASH_SIZE);
     p.elixirs = d.elixirs || {};
-    p.playTime = d.playTime || 0; p.deaths = d.deaths || 0; p.cleared = d.cleared || null;
+    p.playTime = d.playTime || 0; p.deaths = d.deaths || 0; p.cleared = d.cleared || null; p.clearedNM = d.clearedNM || null;
+    p.difficulty = d.cleared && d.difficulty === 1 ? 1 : 0;
+    p.deepestBy = d.deepestBy || [p.deepest, 1];
+    p.deepestBy[p.difficulty] = p.deepest;
     recalcStats(p);
     p.life = p.stats.maxLife;
     this.pendingLevels = s.pending || 0;
@@ -145,7 +149,7 @@ const Game = {
     UI.hideTitle();
     UI.closePanels();
     UI.el.death.hidden = true;
-    SFX.setAmbient(world.dungeon.theme.tiles);
+    SFX.setAmbient(world.dungeon.theme.sound || world.dungeon.theme.tiles);
   },
 
   // 새 층(또는 마을)에 플레이어를 세우고 그림·소리·카메라를 맞춤
@@ -158,11 +162,11 @@ const Game = {
     if (R.themeName !== d.theme.name) buildThemeSprites(d.theme);
     if (!d.art) prepareFloorArt(d);
     this.preloadFloor();
-    SFX.setAmbient(d.theme.tiles);
+    SFX.setAmbient(d.theme.sound || d.theme.tiles);
     FX.reset();
     R.camX = isoX(p.x, p.y);
     R.camY = isoY(p.x, p.y) - 30;
-    d.reveal(p.x, p.y, 9);
+    d.reveal(p.x, p.y, d.outdoor ? 12 : 9);
     UI.setFloor();
   },
 
@@ -173,8 +177,9 @@ const Game = {
     const prevDeep = p.deepest || 1;
     p.deepest = Math.max(prevDeep, n);
     this.arrive(d.start.x, d.start.y);
-    if (n >= FINAL_FLOOR) UI.banner(`최종층 · ${d.theme.name}`, `망자의 왕이 기다립니다 · 몬스터 레벨 ${world.mlvl}`);
-    else UI.banner(`${n}층 · ${d.theme.name}`, isBossFloor(n) ? `보스가 계단을 지키고 있습니다 · 몬스터 레벨 ${world.mlvl}` : `몬스터 레벨 ${world.mlvl}`);
+    const nm = world.diff === 1 ? '악몽 · ' : '';
+    if (n >= FINAL_FLOOR) UI.banner(`${nm}최종층 · ${d.theme.name}`, `망자의 왕이 기다립니다 · 몬스터 레벨 ${world.mlvl}`);
+    else UI.banner(`${nm}${n}층 · ${d.theme.name}`, isBossFloor(n) ? `보스가 계단을 지키고 있습니다 · 몬스터 레벨 ${world.mlvl}` : `몬스터 레벨 ${world.mlvl}`);
     if (n > prevDeep && n > 1 && (n - 1) % 5 === 0) UI.message(`${n}층 웨이포인트가 열렸습니다. 마을의 심연의 문에서 바로 올 수 있습니다.`, '#8fd0ff');
     this.save();
   },
@@ -206,7 +211,7 @@ const Game = {
       if (!d.circleBlocked(pt.x + ox, pt.y + oy, player.r) && d.clearPath(pt.x, pt.y, pt.x + ox, pt.y + oy, 10)) { at = { x: pt.x + ox, y: pt.y + oy }; break; }
     }
     this.arrive(at ? at.x : pt.x, at ? at.y : pt.y);
-    UI.banner(`${world.floor}층 · ${world.dungeon.theme.name}`, '차원문을 통해 돌아왔습니다');
+    UI.banner(`${world.diff === 1 ? '악몽 · ' : ''}${world.floor}층 · ${world.dungeon.theme.name}`, '차원문을 통해 돌아왔습니다');
     this.save();
   },
 
@@ -227,9 +232,10 @@ const Game = {
 
   // 최종 보스 처치
   victory(m) {
-    const p = player;
-    const first = !p.cleared;
-    if (first) p.cleared = { time: Math.round(p.playTime || 0), level: p.level, kills: p.kills, deaths: p.deaths || 0 };
+    const p = player, nm = world.diff === 1;
+    const key = nm ? 'clearedNM' : 'cleared';
+    const first = !p[key];
+    if (first) p[key] = { time: Math.round(p.playTime || 0), level: p.level, kills: p.kills, deaths: p.deaths || 0 };
     p.clearCount = (p.clearCount || 0) + 1;
     this.slowmo = 2.2;
     fxShake(20);
@@ -239,13 +245,37 @@ const Game = {
     fxBeam(m.x, m.y, '#ffd36a', 6);
     SFX.play('levelup');
     SFX.synth('unique');
-    UI.banner('망자의 왕관이 부서졌습니다', '심연이 잠들었습니다');
+    UI.banner(nm ? '악몽의 왕관이 부서졌습니다' : '망자의 왕관이 부서졌습니다', nm ? '악몽이 끝났습니다' : '심연이 잠들었습니다');
     // 보스가 쓰러진 자리에 마을로 가는 차원문
     const spot = world.dungeon.freeSpot(m.x + 60, m.y, 26);
     world.portal = { x: spot.x, y: spot.y, kind: 'portal', t: 0 };
     this.dungeonWorld = world;
-    if (first) this.endingT = 4.2;
-    else UI.message('망자의 왕을 다시 쓰러뜨렸습니다', '#ffd36a');
+    if (first) { this.endingT = 4.2; this.endingNM = nm; }
+    else UI.message(nm ? '악몽 속 망자의 왕을 다시 쓰러뜨렸습니다' : '망자의 왕을 다시 쓰러뜨렸습니다', '#ffd36a');
+    this.save();
+  },
+
+  // 난이도별 가장 깊이 내려간 층 [일반, 악몽]
+  deepestBy() {
+    const p = player, by = (p.deepestBy || [1, 1]).slice();
+    by[p.difficulty || 0] = p.deepest || 1;
+    return by;
+  },
+  // 난이도 바꾸기 (마을에서). 다른 난이도로 열어 둔 차원문은 닫힘
+  setDifficulty(diff) {
+    const p = player;
+    if (!p || diff === (p.difficulty || 0) || (diff === 1 && !p.cleared)) return;
+    const by = this.deepestBy();
+    p.difficulty = diff;
+    p.deepestBy = by;
+    p.deepest = by[diff] || 1;
+    this.dungeonWorld = null;
+    recalcStats(p);
+    p.life = Math.min(p.life, p.stats.maxLife);
+    UI.setFloor();
+    SFX.play(diff ? 'levelup' : 'equip');
+    if (diff === 1) UI.banner('악몽 난이도', `몬스터 레벨 ${monsterLevelForFloor(1, 1)}부터 · 더 좋은 아이템과 골드 · 원소 저항 ${DIFFICULTIES[1].res}%`);
+    else UI.banner('일반 난이도', '처음 내려갔던 심연으로 돌아갑니다');
     this.save();
   },
 
@@ -295,6 +325,7 @@ const Game = {
         level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, bonusLife: p.bonusLife, skills: p.skills, hotbar: p.hotbar,
         equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, elixirs: p.elixirs,
         playTime: Math.round(p.playTime || 0), deaths: p.deaths || 0, cleared: p.cleared || null,
+        clearedNM: p.clearedNM || null, difficulty: p.difficulty || 0, deepestBy: this.deepestBy(),
       },
     };
     store.set(SAVE_KEY, JSON.stringify(data));
@@ -317,10 +348,11 @@ const Game = {
   },
 };
 
-function makeWorld(floor) {
+function makeWorld(floor, diff) {
   const dungeon = new Dungeon(floor);
+  diff = !floor ? 0 : diff != null ? diff : (player && player.difficulty) || 0;
   return {
-    floor, dungeon, town: floor === 0, mlvl: floor ? monsterLevelForFloor(floor) : 1, monsters: [], ground: [], projectiles: [],
+    floor, dungeon, town: floor === 0, diff, mlvl: floor ? monsterLevelForFloor(floor, diff) : 1, monsters: [], ground: [], projectiles: [],
     chests: [], hazards: [], waves: [], flashes: [], pools: [], portal: null,
   };
 }
@@ -528,7 +560,7 @@ function update(dt) {
   const paused = Game.state !== 'playing' || !UI.el.menu.hidden || UI.anyPanel() || Game.loading;
   if (Game.endingT > 0 && Game.state === 'playing') {
     Game.endingT -= dt;
-    if (Game.endingT <= 0) { Game.endingT = 0; Game.state = 'ending'; UI.closePanels(); UI.showEnding(); }
+    if (Game.endingT <= 0) { Game.endingT = 0; Game.state = 'ending'; UI.closePanels(); UI.showEnding(Game.endingNM); }
   }
   // 최종 보스가 쓰러질 때 잠시 느리게
   if (Game.slowmo > 0) { Game.slowmo -= dt; dt *= Game.slowmo > 0 ? 0.3 : 1; }
@@ -557,7 +589,7 @@ function update(dt) {
     for (let i = world.flashes.length - 1; i >= 0; i--) { world.flashes[i].life -= dt; if (world.flashes[i].life <= 0) world.flashes.splice(i, 1); }
     if (world.monsters.some(m => m.dead && m.deadT > 9)) world.monsters = world.monsters.filter(m => !(m.dead && m.deadT > 9));
     Game.revealT -= dt;
-    if (Game.revealT <= 0) { Game.revealT = 0.1; world.dungeon.reveal(player.x, player.y, 9); }
+    if (Game.revealT <= 0) { Game.revealT = 0.1; world.dungeon.reveal(player.x, player.y, world.dungeon.outdoor ? 12 : 9); }
     if (Game.pendingLevels > 0 && !player.dead && !(Game.endingT > 0)) {
       Game.levelUpDelay -= dt;
       if (Game.levelUpDelay <= 0) Game.openCards(false);

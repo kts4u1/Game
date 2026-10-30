@@ -54,7 +54,7 @@ function tileHash(x, y) { return (Math.imul(x, 73856093) ^ Math.imul(y, 19349663
 
 function prepareFloorArt(d) {
   if (!HAS_FLARE) return;
-  if (d.town) { prepareTownArt(d); return; }
+  if (d.outdoor) { prepareTownArt(d); return; }
   const set = FLARE.tiles[d.theme.tiles];
   const N = d.w * d.h;
   const floor = new Int16Array(N), wall = new Int16Array(N), low = new Uint8Array(N);
@@ -92,7 +92,7 @@ function prepareFloorArt(d) {
   d.art = { set, floor, wall, low };
 }
 
-// 마을: 풀밭·돌길 바닥, 숲 가장자리에 나무·덤불·바위
+// 마을·바깥 지역: 풀밭·길 바닥, 숲 가장자리에 나무·덤불·바위 (테마의 flora = [나무, 덤불, 바위] 비율)
 function prepareTownArt(d) {
   const set = FLARE.tiles.grassland;
   const N = d.w * d.h;
@@ -112,6 +112,8 @@ function prepareTownArt(d) {
       q.push(ni);
     }
   }
+  const [ft, fb, fr] = d.theme.flora || [5, 10, 12];
+  const tree = (i, h) => { wall[i] = set.trees[(h >>> 9) % set.trees.length]; tall[i] = 1; };
   for (let y = 0; y < d.h; y++) for (let x = 0; x < d.w; x++) {
     const i = y * d.w + x, h = tileHash(x, y);
     floor[i] = d.path[i] ? set.path[(h >>> 3) % set.path.length] : set.floor[(h >>> 2) % set.floor.length];
@@ -119,20 +121,21 @@ function prepareTownArt(d) {
     // 숲 깊은 곳은 어둠에 묻히므로 나무를 덜 그림
     const dp = depth[i], r = (h >>> 5) % 12;
     if (dp === 1) {
-      if (r < 5) { wall[i] = set.trees[(h >>> 9) % set.trees.length]; tall[i] = 1; }
-      else if (r < 10) wall[i] = set.bushes[(h >>> 9) % set.bushes.length];
-      else wall[i] = set.rocks[(h >>> 9) % set.rocks.length];
+      if (r < ft) tree(i, h);
+      else if (r < fb) wall[i] = set.bushes[(h >>> 9) % set.bushes.length];
+      else if (r < fr) wall[i] = set.rocks[(h >>> 9) % set.rocks.length];
     } else if (dp <= 3) {
-      if (r < 5) { wall[i] = set.trees[(h >>> 9) % set.trees.length]; tall[i] = 1; }
-      else if (r < 7) wall[i] = set.bushes[(h >>> 9) % set.bushes.length];
-    } else if (dp === 4 && r < 3) { wall[i] = set.trees[(h >>> 9) % set.trees.length]; tall[i] = 1; }
+      if (r < ft) tree(i, h);
+      else if (r < Math.min(fb, ft + 2)) wall[i] = set.bushes[(h >>> 9) % set.bushes.length];
+      else if (ft <= 3 && r >= 10) wall[i] = set.rocks[(h >>> 9) % set.rocks.length];
+    } else if (dp === 4 && r < Math.ceil(ft * 0.6)) tree(i, h);
   }
   d.art = { set, floor, wall, low, tall, depth };
 }
 
 // 마을 소품 (천막, 모루, 상자 …) 그리기
 function drawTownProp(ctx, pr) {
-  const img = Assets.get(FLARE.tiles.grassland.img);
+  const img = (world && world.dungeon.art && world.dungeon.art.set === FLARE.tiles.grassland && tileAtlas(world.dungeon)) || Assets.get(FLARE.tiles.grassland.img);
   if (!img) return;
   const set = FLARE.tiles.grassland;
   const id = set.props[pr.name] != null ? set.props[pr.name] : set[pr.name] ? set[pr.name][(pr.pick || 0) % set[pr.name].length] : null;
@@ -142,7 +145,9 @@ function drawTownProp(ctx, pr) {
 
 function tileAtlas(d) {
   if (!d.art) return null;
-  return Assets.tintedAtlas(d.art.set.img, d.theme.tint);
+  const th = d.theme;
+  if (th.filter && HAS_FILTER) return Assets.filteredAtlas(d.art.set.img, th.filter, th.tintAfter);
+  return Assets.tintedAtlas(d.art.set.img, th.tint);
 }
 function propsAtlas() { return HAS_FLARE ? Assets.get(FLARE.tiles.dungeon.img) : null; }
 
@@ -279,7 +284,7 @@ function makeWallTile(theme, v) {
 function renderFrame(t, focus) {
   const ctx = R.ctx, dpr = R.dpr;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = world && world.town ? '#0b1009' : '#050407';
+  ctx.fillStyle = !world ? '#050407' : world.town ? '#0b1009' : world.dungeon.theme.bg || '#050407';
   ctx.fillRect(0, 0, R.canvas.width, R.canvas.height);
   if (!world) return;
   const d = world.dungeon;
@@ -315,7 +320,7 @@ function renderFrame(t, focus) {
       if (!tile || !d.explored[i]) continue;
       const ix = (tx - ty) * TILE, iy = (tx + ty) * TILE / 2;
       if (!onScreen(ix, iy + 32)) continue;
-      if (atlas && !(d.town && d.art.depth[i] > 10)) drawTile(ctx, atlas, set, d.art.floor[i], ix, iy + TILE / 2, kf);
+      if (atlas && !(d.outdoor && d.art.depth[i] > 10)) drawTile(ctx, atlas, set, d.art.floor[i], ix, iy + TILE / 2, kf);
       else if (tile === 1) ctx.drawImage(R.sprites.floors[d.variant[i]], ix - 65, iy - 1);
       if (tile === 2) sorted.push({ d: (tx + ty + 1) * TILE, k: 0, tx, ty, ix, iy, i, v: d.variant[i] & 3 });
     }
@@ -325,8 +330,8 @@ function renderFrame(t, focus) {
   const props = propsAtlas();
   for (const dc of d.decor) {
     if (!explored(dc.x, dc.y)) continue;
-    if (props && d.art && d.art.set.decor.length) {
-      const dl = d.art.set.decor;
+    const dl = d.art && (d.outdoor ? FLARE.tiles.dungeon.decor : d.art.set.decor);
+    if (props && dl && dl.length) {
       drawTile(ctx, props, FLARE.tiles.dungeon, dl[tileHash(dc.x | 0, dc.y | 0) % dl.length], isoX(dc.x, dc.y), isoY(dc.x, dc.y));
     } else if (!props) drawDecor(ctx, dc);
   }
@@ -348,10 +353,8 @@ function renderFrame(t, focus) {
   for (const c of world.chests) if (explored(c.x, c.y)) sorted.push({ d: c.x + c.y, k: 4, c });
   for (const pr of world.projectiles) sorted.push({ d: pr.x + pr.y, k: 3, pr });
   if (atlas) for (const tc of d.torches) if (tc.kind === 'brazier' && explored(tc.bx, tc.by)) sorted.push({ d: tc.bx + tc.by, k: 5, tc });
-  if (d.town) {
-    for (const n of d.npcs) if (n.sprite) sorted.push({ d: n.x + n.y, k: 6, n });
-    for (const pr of d.props) sorted.push({ d: pr.x + pr.y, k: 7, pr });
-  }
+  if (d.town) for (const n of d.npcs) if (n.sprite) sorted.push({ d: n.x + n.y, k: 6, n });
+  if (d.props) for (const pr of d.props) if (explored(pr.x, pr.y)) sorted.push({ d: pr.x + pr.y, k: 7, pr });
   if (p && Game.state !== 'title') sorted.push({ d: p.x + p.y, k: 2 });
   sorted.sort((a, b) => a.d - b.d);
   const pIsoX = p ? isoX(p.x, p.y) : 0, pIsoY = p ? isoY(p.x, p.y) : 0, pDepth = p ? p.x + p.y : 0;
@@ -361,8 +364,8 @@ function renderFrame(t, focus) {
     safeDraw(ctx, () => drawSorted(ctx, s));
   }
   function drawSorted(ctx, s) {
-    if (s.k === 0 && d.town) {
-      // 마을 숲: 나무가 플레이어를 가리면 반투명
+    if (s.k === 0 && d.outdoor) {
+      // 숲: 나무가 플레이어를 가리면 반투명
       const id = atlas && d.art.wall[s.i];
       if (!id) return;
       const tall = d.art.tall[s.i];
@@ -405,7 +408,7 @@ function renderFrame(t, focus) {
     for (const tc of d.torches) if (explored(tc.x, tc.y)) (atlas ? drawFlareFlame : drawTorchFlame)(ctx, tc, t);
     for (const pr of world.projectiles) if (pr.type === 'fireball') drawFireball(ctx, pr, t);
     for (const pt of portalsOf(world)) drawPortalGlow(ctx, pt, t);
-    if (d.town) drawTownGlow(ctx, d, t);
+    if (d.outdoor) drawTownGlow(ctx, d, t);
     drawFXSprites(ctx, 'glow');
     if (p && p.whirl) drawWhirlArcs(ctx, p, t);
     if (d.stairs.open && !d.stairs.none && explored(d.stairs.x, d.stairs.y)) drawStairsGlow(ctx, d.stairs, t);
@@ -774,6 +777,8 @@ function collectLights(t, focus) {
   else lights.push({ x: focus.x, y: focus.y, r: 520, i: 0.9 });
   const d = world.dungeon;
   if (d.town) lights.push({ x: d.center.x, y: d.center.y, r: 1300, i: 0.72, c: [255, 246, 228], flat: true });
+  // 바깥 지역: 하늘빛이 넓게 비춤 (테마 색)
+  else if (d.outdoor) lights.push({ x: focus.x, y: focus.y, r: 1250, i: 0.5, c: d.theme.sky || [230, 230, 230], flat: true });
   for (const L of d.lights) {
     const fl = L.flicker ? 0.88 + Math.sin(t * 11) * 0.06 + Math.sin(t * 5.7) * 0.05 : 1;
     lights.push({ x: L.x, y: L.y, r: L.r * fl, i: L.i * fl, c: L.c });
@@ -967,7 +972,8 @@ function drawAutomap(ctx, cx, cy, s, alpha, big) {
     if (!t) continue;
     const mx = ox + (tx - ty) * s, my = oy + (tx + ty) * s / 2;
     if (!big && (mx < -s * 2 || my < -s || mx > cx * 2 + s * 2 || my > cy * 2 + s)) continue;
-    ctx.fillStyle = d.town ? (t === 2 ? 'rgba(40,70,35,.7)' : d.path[i] ? 'rgba(170,160,140,.8)' : 'rgba(110,140,80,.75)') : t === 2 ? '#b8a684' : 'rgba(90,80,70,.55)';
+    if (d.outdoor && !d.town && t === 2 && d.art && d.art.depth[i] > 1) continue;  // 깊은 숲은 지도에서 생략
+    ctx.fillStyle = d.outdoor ? (t === 2 ? 'rgba(40,70,35,.7)' : d.path[i] ? 'rgba(170,160,140,.8)' : 'rgba(110,140,80,.75)') : t === 2 ? '#b8a684' : 'rgba(90,80,70,.55)';
     ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx + s, my + s / 2); ctx.lineTo(mx, my + s); ctx.lineTo(mx - s, my + s / 2); ctx.closePath(); ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -1034,12 +1040,30 @@ function drawTownGate(ctx, d, t) {
   drawTile(ctx, img, set, set.props.portal, isoX(gt.x, gt.y), isoY(gt.x, gt.y));
 }
 function drawTownGlow(ctx, d, t) {
-  const gt = d.gate, sx = isoX(gt.x, gt.y), sy = isoY(gt.x, gt.y);
-  const a = 0.22 + Math.sin(t * 2.2) * 0.08;
-  const g = ctx.createRadialGradient(sx, sy, 4, sx, sy, 90);
-  g.addColorStop(0, `rgba(120,200,255,${a})`); g.addColorStop(1, 'rgba(120,200,255,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.ellipse(sx, sy, 90, 45, 0, 0, TAU); ctx.fill();
+  if (d.gate) {
+    const gt = d.gate, sx = isoX(gt.x, gt.y), sy = isoY(gt.x, gt.y);
+    const a = 0.22 + Math.sin(t * 2.2) * 0.08;
+    const g = ctx.createRadialGradient(sx, sy, 4, sx, sy, 90);
+    g.addColorStop(0, `rgba(120,200,255,${a})`); g.addColorStop(1, 'rgba(120,200,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(sx, sy, 90, 45, 0, 0, TAU); ctx.fill();
+  }
+  // 불타는 땅·독 늪: 바닥에서 일렁이는 빛
+  for (const L of d.lights) {
+    if (!L.glow) continue;
+    const gx = isoX(L.x, L.y), gy = isoY(L.x, L.y);
+    if (Math.abs(gx - R.camX) > R.W / R.zoom || Math.abs(gy - R.camY) > R.H / R.zoom) continue;
+    const k = 0.75 + Math.sin(t * 3 + L.x) * 0.15;
+    const c = L.glow === 'fire' ? '255,110,40' : '120,220,80';
+    const gg = ctx.createRadialGradient(gx, gy, 2, gx, gy, 95);
+    gg.addColorStop(0, `rgba(${c},${0.45 * k})`); gg.addColorStop(0.6, `rgba(${c},${0.18 * k})`); gg.addColorStop(1, `rgba(${c},0)`);
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.ellipse(gx, gy, 95, 48, 0, 0, TAU); ctx.fill();
+    if (chance(0.06)) {
+      const w = fromIso(gx + rand(-50, 50), gy + rand(-20, 20));
+      FX.particles.push({ kind: 'ember', add: true, x: w.x, y: w.y, z: 0, vx: rand(-8, 8), vy: rand(-8, 8), vz: rand(30, 70), g: -8, life: rand(0.6, 1.3), size: rand(1, 2.4), color: L.glow === 'fire' ? '#ff9a40' : '#9be070' });
+    }
+  }
   // 모닥불
   for (const L of d.lights) {
     if (!L.fire) continue;

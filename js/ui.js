@@ -52,6 +52,7 @@ const UI = {
     $('btn-continue').addEventListener('click', () => { SFX.init(); Game.continueGame(); });
     $('btn-respawn').addEventListener('click', () => { this.el.death.hidden = true; respawn(); });
     $('btn-end-town').addEventListener('click', () => { $('ending').hidden = true; Game.state = 'playing'; Game.goTown('portal'); });
+    $('btn-end-nm').addEventListener('click', () => { $('ending').hidden = true; Game.state = 'playing'; Game.goTown('portal'); Game.setDifficulty(1); });
     $('btn-end-title').addEventListener('click', () => { $('ending').hidden = true; Game.state = 'playing'; Game.save(); Game.toTitle(); });
     $('btn-resume').addEventListener('click', () => this.toggleMenu(false));
     $('btn-sound').addEventListener('click', () => this.toggleSound());
@@ -191,11 +192,15 @@ const UI = {
 
   setFloor() {
     if (world.town) {
+      const nm = player.difficulty === 1;
       this.el['floor-name'].textContent = world.dungeon.theme.name;
-      this.el['floor-sub'].textContent = `마을 · 가장 깊이 내려간 곳 ${player.deepest || 1}층`;
+      this.el['floor-sub'].textContent = `마을 · ${nm ? '악몽에서 ' : ''}가장 깊이 내려간 곳 ${player.deepest || 1}층`;
+      this.el['floor-name'].classList.toggle('nm', nm);
     } else {
-      this.el['floor-name'].textContent = `${world.floor}층 · ${world.dungeon.theme.name}`;
+      const nm = world.diff === 1;
+      this.el['floor-name'].textContent = `${nm ? '악몽 · ' : ''}${world.floor}층 · ${world.dungeon.theme.name}`;
       this.el['floor-sub'].textContent = `몬스터 레벨 ${world.mlvl}${isBossFloor(world.floor) ? ' · 보스 층' : ''}`;
+      this.el['floor-name'].classList.toggle('nm', nm);
     }
     $('btn-tp').hidden = !!world.town;
   },
@@ -440,6 +445,7 @@ const UI = {
     for (const id in ELIXIRS) if (p.elixirs[id] > 0) rows.push([ELIXIRS[id].name, `${Math.ceil(p.elixirs[id] / 60)}분 남음`]);
     const sc = setCounts(p.equipment);
     for (const id in sc) if (SETS[id]) rows.push([SETS[id].name, `${sc[id]}세트`]);
+    if (p.cleared) rows.push(['난이도', DIFFICULTIES[p.difficulty || 0].name]);
     rows.push(['가장 깊은 층', `${p.deepest || 1}층`], ['처치 수', p.kills]);
     const ids = Object.keys(p.skills);
     const skills = ids.length ? ids.map(id => {
@@ -506,8 +512,19 @@ const UI = {
   hideLevelUp() { this.el.levelup.hidden = true; this.cards = null; },
 
   // 엔딩 화면: 이번 모험의 기록
-  showEnding() {
-    const p = player, c = p.cleared || {};
+  showEnding(nm) {
+    const p = player, c = (nm ? p.clearedNM : p.cleared) || {};
+    const box = $('ending');
+    box.classList.toggle('nm', !!nm);
+    box.querySelector('h2').textContent = nm ? '악몽이 끝났습니다' : '심연이 잠들었습니다';
+    box.querySelector('.ending-story').textContent = nm
+      ? '부서진 왕관의 조각들이 악몽 속에서 다시 맞붙어 망자의 왕을 일으켰지만, 야만용사는 더 깊은 어둠을 뚫고 내려가 그를 두 번째로 쓰러뜨렸습니다. 이번에는 왕관의 파편마저 재가 되어 바람에 흩어졌습니다. 이제 심연은 그의 이름만 들어도 떨게 될 것입니다.'
+      : '망자의 왕 오르쿠스가 쓰러지자 그의 머리에서 굴러떨어진 왕관이 산산이 부서졌습니다. 묘지를 깨우던 저주가 걷히고, 국경 야영지에는 오랜만에 새소리가 돌아왔습니다. 쉰 개의 층을 뚫고 내려간 야만용사의 이름은 노래가 되어 북방의 모든 부족에게 전해질 것입니다.';
+    $('btn-end-nm').hidden = !!nm;
+    $('btn-end-town').classList.toggle('primary', !!nm);
+    box.querySelector('.menu-note').textContent = nm
+      ? '엔딩 뒤에도 웨이포인트로 원하는 층에 가서 계속 사냥할 수 있습니다. 심연의 문에서 난이도를 바꿀 수 있습니다.'
+      : '악몽 난이도: 1층부터 다시 내려가지만 몬스터가 훨씬 강하고, 더 좋은 아이템과 골드가 떨어집니다. 캐릭터와 장비는 그대로입니다.';
     const t = Math.round(c.time != null ? c.time : p.playTime || 0);
     const time = `${Math.floor(t / 3600)}시간 ${Math.floor(t / 60) % 60}분`;
     const worn = EQUIP_KEYS.map(k => p.equipment[k]).filter(Boolean);

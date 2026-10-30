@@ -40,7 +40,7 @@ const TOWN_NPCS = [
 // 마을 지도: 숲속 공터 + 돌길 광장
 function generateTown(d) {
   const W = 56, H = 56, cx = 28, cy = 28;
-  d.w = W; d.h = H; d.town = true;
+  d.w = W; d.h = H; d.town = true; d.outdoor = true;
   d.tiles = new Uint8Array(W * H);
   d.path = new Uint8Array(W * H);
   const p0 = Math.random() * TAU, p1 = Math.random() * TAU;
@@ -344,6 +344,11 @@ const Shop = {
     }[n.role] || [];
     panel.querySelector('.shop-tabs').innerHTML = tabs.map(([id, label]) => `<button data-tab="${id}" class="${this.tab === id ? 'on' : ''}">${label}</button>`).join('');
     panel.querySelector('.shop-tabs').hidden = !tabs.length;
+    // 심연의 문: 엔딩을 본 뒤에는 난이도 선택
+    if (n.role === 'gate' && p.cleared) {
+      panel.querySelector('.shop-tabs').innerHTML = DIFFICULTIES.map((D, i) => `<button data-diff="${i}" class="${(p.difficulty || 0) === i ? 'on' : ''}${i ? ' nm' : ''}">${D.name}</button>`).join('');
+      panel.querySelector('.shop-tabs').hidden = false;
+    }
     let body = '', foot = '';
     const gold = `<div class="inv-meta"><span>${n.role === 'stash' ? `보관함 ${p.stash.filter(Boolean).length} / ${p.stash.length}` : '가진 골드'}</span><span class="gold">${p.gold.toLocaleString()} 골드</span></div>`;
     const cell = (it, attrs, price, target) => {
@@ -415,10 +420,11 @@ const Shop = {
         foot = selFoot(this.sel.item, '<button class="btn-main" data-act="take">가방으로 꺼내기</button><button data-act="stashmove">옮기기</button>');
       }
     } else if (n.role === 'gate') {
-      const dw = Game.dungeonWorld;
-      body = hint('웨이포인트는 1층과, 보스를 쓰러뜨린 다음 층(6, 11, 16층 …)에서 열립니다.')
+      const dw = Game.dungeonWorld, diff = p.difficulty || 0;
+      body = (diff ? hint(`악몽: 몬스터가 훨씬 강하고 더 좋은 아이템과 골드(${DIFFICULTIES[1].gold}배)가 떨어집니다. 원소 저항 ${DIFFICULTIES[1].res}%.`) : '')
+        + hint('웨이포인트는 1층과, 보스를 쓰러뜨린 다음 층(6, 11, 16층 …)에서 열립니다.')
         + `<ul class="shop-list">${dw && dw.portal ? `<li><div class="sl-main"><div class="sl-name">차원문으로 돌아가기</div><div class="sl-desc">${dw.floor}층 · ${dw.dungeon.theme.name}</div></div><div class="sl-btns"><button class="btn-main" data-act="back">돌아가기</button></div></li>` : ''}
-          ${Town.waypointFloors().map(f => `<li><div class="sl-main"><div class="sl-name">${f}층 · ${themeForFloor(f).name}</div><div class="sl-desc">몬스터 레벨 ${monsterLevelForFloor(f)}</div></div><div class="sl-btns"><button data-floor="${f}">이동</button></div></li>`).join('')}</ul>`
+          ${Town.waypointFloors().map(f => `<li><div class="sl-main"><div class="sl-name">${f}층 · ${themeForFloor(f).name}</div><div class="sl-desc">${diff ? '악몽 · ' : ''}몬스터 레벨 ${monsterLevelForFloor(f, diff)}</div></div><div class="sl-btns"><button data-floor="${f}">이동</button></div></li>`).join('')}</ul>`
         + hint(`가장 깊이 내려간 곳: ${player.deepest || 1}층`);
     }
     panel.querySelector('.panel-body').innerHTML = body;
@@ -428,6 +434,8 @@ const Shop = {
   onClick(e) {
     if (Drag.justDropped && performance.now() - Drag.justDropped < 350) return;
     const t = e.target;
+    const dbtn = t.closest('[data-diff]');
+    if (dbtn) { Game.setDifficulty(+dbtn.dataset.diff); this.sel = null; return this.refresh(); }
     const tab = t.closest('[data-tab]');
     if (tab) { this.tab = tab.dataset.tab; this.sel = null; this.target = null; return this.refresh(); }
     const act = t.closest('[data-act]');

@@ -397,3 +397,8 @@ body.item-dragging, body.item-dragging * { cursor: grabbing !important; }
 .ending-stats dt { color: var(--ink-dim); text-align: left; }
 .ending-stats dd { margin: 0; text-align: right; color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .ending-box { animation: none; } }
+/* 악몽 난이도 */
+#floor-name.nm { color: #ff8070; }
+.shop-tabs button.nm.on { color: #ff8070; background: #2e1614; border-color: #6a2a22; }
+#ending.nm { background: radial-gradient(ellipse at 50% 40%, rgba(60, 10, 12, .88), rgba(4, 1, 2, .97) 75%); }
+#ending.nm h2 { background: linear-gradient(#ffe0d6, #ff6a5a 55%, #7a1a14); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 3px 0 #000) drop-shadow(0 0 24px rgba(255, 70, 50, .5)); }

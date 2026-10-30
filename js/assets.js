@@ -36,6 +36,28 @@ const Assets = {
     })));
   },
   // 테마 색을 입힌 타일 아틀라스 (화면 픽셀은 읽지 않음)
+  // CSS 필터로 색을 바꾼 아틀라스 (바깥 지역 테마: 설원, 잿빛 황무지 …). after: 그 위에 곱할 색
+  filteredAtlas(path, filter, after) {
+    const key = path + '|' + filter + '|' + (after || '');
+    if (this.tinted[key]) return this.tinted[key];
+    const img = this.get(path);
+    if (!img) return null;
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const x = c.getContext('2d');
+    x.filter = filter;
+    x.drawImage(img, 0, 0);
+    x.filter = 'none';
+    if (after) {
+      x.globalCompositeOperation = 'multiply';
+      x.fillStyle = after;
+      x.fillRect(0, 0, c.width, c.height);
+      x.globalCompositeOperation = 'destination-in';
+      x.drawImage(img, 0, 0);
+    }
+    this.tinted[key] = c;
+    return c;
+  },
   tintedAtlas(path, color) {
     if (!color) return this.get(path);
     const key = path + color;
