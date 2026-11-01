@@ -304,7 +304,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .quest-goal { color: #e8dcc0; font-size: 13px; }
 .quest-reward { color: var(--gold); font-size: 13px; margin: 2px 0 10px; }
 .quest-sub { margin-top: 8px; font-size: 11px; color: var(--ink-faint); }
-.quest-box button { min-height: 36px; padding: 0 16px; }
+.quest-box button { min-height: 38px; padding: 0 20px; background: linear-gradient(#3a2c1e, #221a12); border: 1px solid #6a5434; border-radius: 4px; color: #f3e6c8; font-weight: 600; }
+.quest-box button:hover:not(:disabled) { border-color: var(--edge-hi); background: linear-gradient(#4a3826, #2a2016); }
+.quest-box .btn-main { background: linear-gradient(#7a2e16, #451609); border-color: #c0643e; color: #fff4e2; font-weight: 800; letter-spacing: .02em; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.quest-box .btn-main:hover:not(:disabled) { background: linear-gradient(#963a1a, #521a0b); border-color: #e08a5a; }
 .quest-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .quest-row { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #2a2118; }
 .quest-row small { color: var(--ink-faint); }
