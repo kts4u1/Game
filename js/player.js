@@ -7,7 +7,7 @@ function createPlayer() {
     skills: {}, hotbar: [null, null, null, null, null, null], cds: {}, difficulty: 0, deepestBy: [1, 1, 1], bonusDmg: 0, bonusArmor: 0,
     frenzy: { n: 0, t: 0 }, rampage: { n: 0, t: 0 }, rush: null,
     equipment: { weapon: null, shield: null, helm: null, amulet: null, armor: null, ring1: null, ring2: null, gloves: null, belt: null, boots: null },
-    inventory: new Array(40).fill(null), stash: new Array(STASH_SIZE).fill(null), elixirs: {}, poisonT: 0, poisonDps: 0,
+    inventory: new Array(40).fill(null), stash: new Array(STASH_SIZE).fill(null), charms: new Array(CHARM_SLOTS).fill(null), elixirs: {}, poisonT: 0, poisonDps: 0,
     walkPhase: 0, moving: false, attack: null, leap: null, whirl: null, pose: null, poseT: 0, poseDur: 0,
     buffs: {}, hurtT: 0, slowT: 0, potionCD: 0, healLeft: 0, healRate: 0, dead: false, order: null,
     path: null, pathKey: '', pathT: 0, stuck: 0, stats: {}, procCD: 0, kills: 0,
@@ -43,8 +43,8 @@ function recalcStats(p) {
     // 소켓에 박은 보석
     if (it.gems) for (const g of it.gems) { const [st, v] = gemStat(g, it.slot); s[st] = (s[st] || 0) + v; }
   }
-  // 가방 속 부적 (착용 레벨이 되어야 효과)
-  for (const it of p.inventory) {
+  // 부적 주머니의 부적 (착용 레벨이 되어야 효과)
+  for (const it of p.charms || []) {
     if (!it || it.slot !== 'charm' || p.level < it.req) continue;
     for (const a of it.affixes) if (a.stat !== 'skill') s[a.stat] = (s[a.stat] || 0) + a.value;
   }
@@ -156,7 +156,13 @@ function navigate(p, tx, ty, dt, stopDist = 4) {
   p.moving = moved > 0.2;
   if (p.moving) p.facing = a;
   if (moved < step * 0.2) { p.stuck += dt; if (p.stuck > 0.3) { p.path = null; p.stuck = 0; } } else p.stuck = 0;
-  return dist(p.x, p.y, tx, ty) <= stopDist;
+  // 목표에 더 다가가지 못하면(벽에 막혀 미끄러지거나 제자리에서 떨면) 0.6초 뒤 멈춤
+  const dd = dist(p.x, p.y, tx, ty), nk = Math.round(tx) + ',' + Math.round(ty);
+  if (p.navKey !== nk) { p.navKey = nk; p.navBest = dd; p.navT = 0; }
+  const following = !(p.path && p.path.length === 1 && p.path[0].direct) && moved > step * 0.7;
+  if (dd < p.navBest - 1.5 || following) { p.navBest = Math.min(p.navBest, dd); p.navT = 0; }
+  else if ((p.navT += dt) > 0.6) { p.navT = 0; p.path = null; p.order = null; p.moving = false; return false; }  // 도착이 아니라 포기: 명령만 취소
+  return dd <= stopDist;
 }
 
 // ── 업데이트 ──
@@ -173,12 +179,12 @@ function updatePlayer(dt) {
     if (p.buffs.berserk <= 0) { p.buffs.berserk = 0; recalcStats(p); }
     else if (chance(dt * 25)) fxEmbers(p.x, p.y, 1, '#ff3a22', 14);
   }
-  // 가방 속 부적이 바뀌면 능력치 다시 계산
+  // 부적 주머니가 바뀌면 능력치 다시 계산
   p.charmT = (p.charmT || 0) - dt;
   if (p.charmT <= 0) {
     p.charmT = 0.3;
     let key = '';
-    for (const it of p.inventory) if (it && it.slot === 'charm') key += it.uid + ',';
+    for (const it of p.charms || []) if (it) key += it.uid + ',';
     if (key !== p.charmKey) { p.charmKey = key; recalcStats(p); }
   }
   // 지속 효과: 강철 피부, 전투 명령, 광란·학살 중첩
@@ -718,15 +724,43 @@ function canEquip(item) { return player.level >= item.req; }
 // ── 아이템 위치: { c: 'inv' | 'eq' | 'stash', i: 칸 번호, k: 장비 칸 이름 } ──
 function itemAt(loc) {
   const p = player;
-  return loc.c === 'eq' ? p.equipment[loc.k] : loc.c === 'inv' ? p.inventory[loc.i] : p.stash[loc.i];
+  return loc.c === 'eq' ? p.equipment[loc.k] : loc.c === 'inv' ? p.inventory[loc.i] : loc.c === 'charm' ? p.charms[loc.i] : p.stash[loc.i];
 }
 function putAt(loc, it) {
   const p = player;
   if (loc.c === 'eq') p.equipment[loc.k] = it || null;
   else if (loc.c === 'inv') p.inventory[loc.i] = it || null;
+  else if (loc.c === 'charm') p.charms[loc.i] = it || null;
   else p.stash[loc.i] = it || null;
 }
+function listOf(c) { const p = player; return c === 'inv' ? p.inventory : c === 'charm' ? p.charms : p.stash; }
+// 부적 주머니 넣기·빼기 (두 번 누르기)
+function charmToPouch(loc) {
+  const p = player, it = itemAt(loc);
+  if (!it || it.slot !== 'charm') return false;
+  const i = p.charms.indexOf(null);
+  if (i < 0) { UI.message(`부적 주머니가 가득 찼습니다 (${CHARM_SLOTS}칸). 바꿀 부적을 끌어다 놓으세요`, '#ff7a6a'); SFX.play('nope'); return false; }
+  p.charms[i] = it; putAt(loc, null);
+  recalcStats(p); SFX.equip(it); Game.dirty = true;
+  return true;
+}
+function charmFromPouch(i) {
+  const p = player, it = p.charms[i];
+  if (!it) return false;
+  const s = p.inventory.indexOf(null);
+  if (s < 0) { UI.message('가방이 가득 찼습니다', '#ff7a6a'); SFX.play('nope'); return false; }
+  p.inventory[s] = it; p.charms[i] = null;
+  recalcStats(p); SFX.equip(it); Game.dirty = true;
+  return true;
+}
 function sameLoc(a, b) { return a.c === b.c && (a.c === 'eq' ? a.k === b.k : a.i === b.i); }
+// 이동 목표가 벽 안이면 가까운 빈자리로 (벽에 붙어 계속 미끄러지지 않게)
+function moveTarget(x, y) {
+  const d = world.dungeon, r = player.r * 0.8;
+  if (!d.circleBlocked(x, y, r)) return { x, y };
+  const s = d.freeSpot(x, y, r, 140);
+  return dist(s.x, s.y, x, y) <= 140 ? s : { x, y };
+}
 function fitsKey(it, k) { return !!it && slotOfKey(k) === it.slot; }
 function defaultKey(it) {
   const p = player;
@@ -789,6 +823,15 @@ function moveItem(from, to) {
   if (sameLoc(from, to)) return false;
   const a = itemAt(from), b = itemAt(to);
   if (!a) return false;
+  // 부적 주머니에는 부적만
+  if (to.c === 'charm' && a.slot !== 'charm') { UI.message('부적 주머니에는 부적만 넣을 수 있습니다', '#ff7a6a'); SFX.play('nope'); return false; }
+  if (from.c === 'charm' && b && b.slot !== 'charm') {
+    const list = listOf(to.c), free = list.indexOf(null);
+    if (free < 0) { SFX.play('nope'); return false; }
+    list[free] = a; putAt(from, null); recalcStats(player); SFX.equip(a); Game.dirty = true;
+    return true;
+  }
+  if (to.c === 'charm' || from.c === 'charm') { putAt(from, b); putAt(to, a); recalcStats(player); SFX.equip(a); Game.dirty = true; return true; }
   if (to.c === 'eq') {
     if (!fitsKey(a, to.k)) { UI.message(`${SLOT_NAMES[a.slot]}은(는) 그 칸에 착용할 수 없습니다`, '#ff7a6a'); SFX.play('nope'); return false; }
     if (from.c === 'eq') {  // 반지 두 칸끼리 맞바꿈
@@ -803,7 +846,7 @@ function moveItem(from, to) {
     if (!b) { putAt(to, a); putAt(from, null); afterEquipChange(a); return true; }
     if (fitsKey(b, from.k) && canEquip(b)) return equipInto(to, from.k);
     // 바꿀 수 없는 물건이 있는 칸이면 같은 곳의 빈칸으로
-    const list = to.c === 'inv' ? p.inventory : p.stash;
+    const list = listOf(to.c);
     const free = list.indexOf(null);
     if (free < 0) { UI.message(to.c === 'inv' ? '가방이 가득 찼습니다' : '보관함이 가득 찼습니다', '#ff7a6a'); SFX.play('nope'); return false; }
     list[free] = a; putAt(from, null);

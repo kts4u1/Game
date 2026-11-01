@@ -308,7 +308,7 @@ function itemTooltipHtml(item, opts = {}) {
       else lines.push(`<div class="tt-gem empty">◇ 빈 소켓</div>`);
     }
   }
-  if (item.slot === 'charm') lines.push(`<div class="tt-flavor">가방에 넣어 두기만 하면 효과가 있습니다 (보관함에서는 효과 없음).</div>`);
+  if (item.slot === 'charm') lines.push(`<div class="tt-flavor">소지품 창의 부적 주머니(${CHARM_SLOTS}칸)에 넣으면 효과가 있습니다. 두 번 누르면 넣고 뺍니다.</div>`);
   if (item.setId && SETS[item.setId]) {
     const S = SETS[item.setId];
     const have = typeof player !== 'undefined' && player ? setCounts(player.equipment)[item.setId] || 0 : 0;

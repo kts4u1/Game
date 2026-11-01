@@ -343,10 +343,14 @@ const Shop = {
     fxSprite('heal', player.x, player.y, { follow: player, scale: 0.8 });
     UI.message(`${E.name}을(를) 마셨습니다: ${E.desc}`, '#ffd36a');
   },
+  stashPage: 0,
   stashPut(i) {
     const p = player, it = p.inventory[i];
     if (!it) return;
-    const s = p.stash.indexOf(null);
+    // 지금 보고 있는 쪽의 빈칸부터, 없으면 다른 쪽
+    const base = this.stashPage * STASH_PAGE;
+    let s = p.stash.slice(base, base + STASH_PAGE).indexOf(null);
+    s = s >= 0 ? base + s : p.stash.indexOf(null);
     if (s < 0) { UI.message('보관함이 가득 찼습니다', '#ff7a6a'); SFX.play('nope'); return; }
     p.stash[s] = it; p.inventory[i] = null;
     SFX.equip(it);
@@ -375,6 +379,14 @@ const Shop = {
     }[n.role] || [];
     panel.querySelector('.shop-tabs').innerHTML = tabs.map(([id, label]) => `<button data-tab="${id}" class="${this.tab === id ? 'on' : ''}">${label}</button>`).join('');
     panel.querySelector('.shop-tabs').hidden = !tabs.length;
+    // 보관함: 쪽 선택 (쪽마다 48칸)
+    if (n.role === 'stash') {
+      panel.querySelector('.shop-tabs').innerHTML = Array.from({ length: STASH_PAGES }, (_, k) => {
+        const cnt = p.stash.slice(k * STASH_PAGE, (k + 1) * STASH_PAGE).filter(Boolean).length;
+        return `<button data-spage="${k}" class="${this.stashPage === k ? 'on' : ''}">${k + 1}쪽 <small>${cnt}/${STASH_PAGE}</small></button>`;
+      }).join('');
+      panel.querySelector('.shop-tabs').hidden = false;
+    }
     // 심연의 문: 엔딩을 본 뒤에는 난이도 선택
     if (n.role === 'gate' && p.cleared) {
       panel.querySelector('.shop-tabs').innerHTML = DIFFICULTIES.map((D, i) => diffUnlocked(p, i)
@@ -463,9 +475,9 @@ const Shop = {
         body += detail(it);
       }
     } else if (n.role === 'stash') {
-      body = gold + hint('보관함에 넣은 물건은 죽어도, 다시 시작해도 남습니다. 가방과 보관함 사이로 끌어다 놓거나, 두 번 눌러 꺼낼 수 있습니다.')
-        + `<div class="foot-btns"><button data-act="sortstash">보관함 정리</button></div>`
-        + `<div class="grid">${p.stash.map((it, i) => cell(it, `data-stash="${i}"`, null, true)).join('')}</div>`;
+      body = gold + hint(`보관함은 ${STASH_PAGES}쪽 × ${STASH_PAGE}칸입니다. 넣은 물건은 죽어도, 다시 시작해도 남습니다. 가방과 보관함 사이로 끌어다 놓거나, 두 번 눌러 꺼낼 수 있습니다. 지금 쪽이 가득 차면 다른 쪽 빈칸에 들어갑니다.`)
+        + `<div class="foot-btns"><button data-act="sortstash">이 쪽 정리</button></div>`
+        + `<div class="grid">${p.stash.slice(this.stashPage * STASH_PAGE, (this.stashPage + 1) * STASH_PAGE).map((it, j) => cell(it, `data-stash="${this.stashPage * STASH_PAGE + j}"`, null, true)).join('')}</div>`;
       if (this.sel) {
         body += detail(this.sel.item);
         foot = selFoot(this.sel.item, '<button class="btn-main" data-act="take">가방으로 꺼내기</button><button data-act="stashmove">옮기기</button>');
@@ -486,6 +498,8 @@ const Shop = {
   onClick(e) {
     if (Drag.justDropped && performance.now() - Drag.justDropped < 350) return;
     const t = e.target;
+    const sp = t.closest('[data-spage]');
+    if (sp) { this.stashPage = +sp.dataset.spage; this.sel = null; return this.refresh(); }
     const cb = t.closest('[data-combine]');
     if (cb) { this.combineGems(cb.dataset.combine); return this.refresh(); }
     const dbtn = t.closest('[data-diff]');
@@ -506,7 +520,13 @@ const Shop = {
       else if (a === 'potion5') this.buyPotions(5);
       else if (a === 'take' && this.sel) { this.stashTake(player.stash.indexOf(this.sel.item)); this.sel = null; }
       else if (a === 'stashmove' && this.sel) { const i = player.stash.indexOf(this.sel.item); if (i >= 0) UI.moveFrom = { c: 'stash', i }; this.sel = null; }
-      else if (a === 'sortstash') { sortItems(player.stash); this.sel = null; }
+      else if (a === 'sortstash') {
+        // 지금 쪽만 정리
+        const base = this.stashPage * STASH_PAGE, page = player.stash.slice(base, base + STASH_PAGE);
+        sortItems(page);
+        page.forEach((it, j) => { player.stash[base + j] = it; });
+        this.sel = null;
+      }
       else if (a === 'back') { UI.closePanels(); Game.returnToDungeon(); return; }
       return this.refresh();
     }

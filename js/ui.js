@@ -68,12 +68,12 @@ const UI = {
     const inv = this.el['inv-panel'];
     inv.addEventListener('click', e => this.onInvClick(e));
     inv.addEventListener('mouseover', e => this.onInvHover(e));
-    inv.addEventListener('mouseout', e => { if (e.target.closest('[data-inv],[data-eq]')) this.hideTooltip(); });
+    inv.addEventListener('mouseout', e => { if (e.target.closest('[data-inv],[data-eq],[data-charm]')) this.hideTooltip(); });
     // 오른쪽 클릭: 바로 착용·해제 (터치 길게 누르기로 생기는 메뉴는 무시)
     inv.addEventListener('contextmenu', e => {
       e.preventDefault();
       if (Drag.lastType !== 'mouse') return;
-      const cell = e.target.closest('[data-inv],[data-eq]');
+      const cell = e.target.closest('[data-inv],[data-eq],[data-charm]');
       if (cell) this.quickAction(cellLoc(cell));
     });
     initDrag();
@@ -260,6 +260,7 @@ const UI = {
     const eqLabels = { weapon: '무기', shield: '방패', helm: '투구', amulet: '목걸이', armor: '갑옷', ring1: '반지', ring2: '반지', gloves: '장갑', belt: '허리띠', boots: '장화' };
     const doll = EQUIP_KEYS.map(k => this.cellHtml(p.equipment[k], `data-eq="${k}" style="grid-area:${k}"`, eqLabels[k])).join('');
     const grid = p.inventory.map((it, i) => this.cellHtml(it, `data-inv="${i}"`)).join('');
+    const pouch = p.charms.map((it, i) => this.cellHtml(it, `data-charm="${i}"`, i === 0 && !it ? '부적' : '')).join('');
     const sellOk = Shop.canSell(), stashOk = Shop.isOpen() && Shop.npc.role === 'stash';
     const hint = this.finePointer
       ? '아이템을 누르면 자세한 정보와 버튼이 나옵니다. <b>두 번 누르거나 오른쪽 클릭</b>하면 바로 착용·해제하고, <b>끌어다 놓으면</b> 장비 칸이나 가방의 다른 칸으로 옮겨집니다. 상인 창이 열려 있을 때 <b>Shift + 클릭</b>하면 바로 팝니다.'
@@ -276,7 +277,8 @@ const UI = {
       let btns;
       if (sel.kind === 'inv') {
         const can = canEquip(it);
-        btns = `<button class="btn-main" data-act="equip" ${can ? '' : 'disabled'}>${can ? '착용' : `레벨 ${it.req} 필요`}</button>`
+        btns = (it.slot === 'charm' ? '<button class="btn-main" data-act="pouch">부적 주머니에 넣기</button>'
+          : it.slot === 'gem' ? '' : `<button class="btn-main" data-act="equip" ${can ? '' : 'disabled'}>${can ? '착용' : `레벨 ${it.req} 필요`}</button>`)
           + (sellOk ? `<button data-act="sell">판매 <small>+${it.value}</small></button>`
             : stashOk ? '<button data-act="stash">보관함에 넣기</button>'
             : '<button data-act="drop">버리기</button>')
@@ -285,6 +287,9 @@ const UI = {
         const cur = cmpKey ? p.equipment[cmpKey] : null;
         detail = `<div class="tt">${itemTooltipHtml(it)}</div>`;
         if (cur) detail += `<div class="tt tt-compare">${itemTooltipHtml(cur, { header: '착용 중', noValue: true })}</div>`;
+      } else if (sel.kind === 'charm') {
+        btns = '<button class="btn-main" data-act="uncharm">가방으로 꺼내기</button><button data-act="move">옮기기</button>';
+        detail = `<div class="tt">${itemTooltipHtml(it, { noValue: true })}</div>`;
       } else {
         btns = '<button class="btn-main" data-act="unequip">해제해서 가방에 넣기</button><button data-act="move">옮기기</button>';
         detail = `<div class="tt">${itemTooltipHtml(it, { noValue: true })}</div>`;
@@ -298,6 +303,8 @@ const UI = {
     const used = p.inventory.filter(Boolean).length;
     this.el['inv-panel'].querySelector('.panel-body').innerHTML = `
       <div class="doll">${doll}</div>
+      <div class="inv-meta"><span title="여기에 넣은 부적만 효과가 있습니다">부적 주머니 ${p.charms.filter(Boolean).length} / ${CHARM_SLOTS}</span></div>
+      <div class="grid charm-pouch">${pouch}</div>
       <div class="inv-meta"><span>가방 ${used} / ${p.inventory.length}</span><button class="mini-btn" data-act="sortinv">정리</button><span class="gold">${p.gold.toLocaleString()} 골드</span></div>
       <div class="grid">${grid}</div>
       <div class="detail">${detail}</div>`;
@@ -317,6 +324,8 @@ const UI = {
       else if (a === 'stash' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) Shop.stashPut(i); this.selected = null; }
       else if (a === 'drop' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) dropInventory(i); this.selected = null; }
       else if (a === 'unequip' && sel) { if (unequip(sel.key)) this.selected = null; }
+      else if (a === 'pouch' && selLoc) { charmToPouch(selLoc); this.selected = null; }
+      else if (a === 'uncharm' && sel) { const i = p.charms.indexOf(sel.item); if (i >= 0) charmFromPouch(i); this.selected = null; }
       else if (a === 'move' && selLoc) { this.moveFrom = selLoc; this.selected = null; }
       else if (a === 'movecancel') this.moveFrom = null;
       else if (a === 'sortinv') { sortItems(p.inventory); this.selected = null; this.moveFrom = null; }
@@ -326,7 +335,7 @@ const UI = {
       this.refreshPanels();
       return;
     }
-    const cell = e.target.closest('[data-inv],[data-eq]');
+    const cell = e.target.closest('[data-inv],[data-eq],[data-charm]');
     if (!cell) return;
     if (e.shiftKey) { this.shiftClick(cellLoc(cell)); return; }
     this.tapCell(cellLoc(cell));
@@ -338,6 +347,7 @@ const UI = {
     if (!it) return;
     this.moveFrom = null;
     if (loc.c === 'stash') Shop.stashTake(loc.i);
+    else if (loc.c === 'charm') charmFromPouch(loc.i);
     else if (loc.c === 'eq') { UI.message('착용 중인 물건은 먼저 벗어야 팔 수 있습니다', '#ff7a6a'); SFX.play('nope'); }
     else if (Shop.canSell()) {
       sellInventory(loc.i);
@@ -372,7 +382,7 @@ const UI = {
       return;
     }
     if (loc.c === 'stash') { Shop.sel = it ? { item: it, list: 'stash' } : null; this.refreshPanels(); return; }
-    this.selected = it ? (loc.c === 'eq' ? { kind: 'eq', item: it, key: loc.k } : { kind: 'inv', item: it }) : null;
+    this.selected = it ? (loc.c === 'eq' ? { kind: 'eq', item: it, key: loc.k } : loc.c === 'charm' ? { kind: 'charm', item: it } : { kind: 'inv', item: it }) : null;
     if (this.selected) Shop.pickTarget(this.selected.item);
     this.renderInventory();
     // 터치 화면에서는 툴팁 대신 아래 상세 칸을 보여줌 (두 번 누를 시간을 준 뒤 스크롤)
@@ -388,7 +398,9 @@ const UI = {
   quickAction(loc) {
     const it = itemAt(loc);
     if (!it) return;
-    if (loc.c === 'inv') equipInto(loc, defaultKey(it));
+    if (loc.c === 'charm') charmFromPouch(loc.i);
+    else if (loc.c === 'inv' && it.slot === 'charm') charmToPouch(loc);
+    else if (loc.c === 'inv') equipInto(loc, defaultKey(it));
     else if (loc.c === 'eq') unequip(loc.k);
     else Shop.stashTake(loc.i);
     this.selected = null;
@@ -401,6 +413,7 @@ const UI = {
     const sel = this.selected;
     if (!sel) return null;
     if (sel.kind === 'eq') return { c: 'eq', k: sel.key };
+    if (sel.kind === 'charm') { const c = player.charms.indexOf(sel.item); return c >= 0 ? { c: 'charm', i: c } : null; }
     const i = player.inventory.indexOf(sel.item);
     return i >= 0 ? { c: 'inv', i } : null;
   },
@@ -420,6 +433,10 @@ const UI = {
       }
     } else if (eq) {
       const it = p.equipment[eq.dataset.eq];
+      if (it) html = `<div class="tt">${itemTooltipHtml(it, { noValue: true })}</div>`;
+    } else {
+      const ch = e.target.closest('[data-charm]');
+      const it = ch && p.charms[+ch.dataset.charm];
       if (it) html = `<div class="tt">${itemTooltipHtml(it, { noValue: true })}</div>`;
     }
     if (html) this.showTooltip(html, e.clientX, e.clientY);
@@ -579,12 +596,13 @@ const Drag = { start: null, active: false, ghost: null, over: null, overZone: nu
 
 function cellLoc(el) {
   if (el.dataset.inv != null) return { c: 'inv', i: +el.dataset.inv };
+  if (el.dataset.charm != null) return { c: 'charm', i: +el.dataset.charm };
   if (el.dataset.eq != null) return { c: 'eq', k: el.dataset.eq };
   return { c: 'stash', i: +el.dataset.stash };
 }
 
 function initDrag() {
-  const CELLS = '#inv-panel [data-inv], #inv-panel [data-eq], #shop-panel [data-stash]';
+  const CELLS = '#inv-panel [data-inv], #inv-panel [data-eq], #inv-panel [data-charm], #shop-panel [data-stash]';
   document.addEventListener('pointerdown', e => {
     Drag.lastType = e.pointerType || 'mouse';
     Drag.justDropped = 0;  // 놓은 직후의 클릭 한 번만 무시
@@ -640,11 +658,11 @@ function dragBegin(x, y) {
 function dragTarget(x, y) {
   const el = document.elementFromPoint(x, y);
   if (!el) return null;
-  const cell = el.closest('#inv-panel [data-inv], #inv-panel [data-eq], #shop-panel [data-stash]');
+  const cell = el.closest('#inv-panel [data-inv], #inv-panel [data-eq], #inv-panel [data-charm], #shop-panel [data-stash]');
   if (cell) {
     const loc = cellLoc(cell);
     const it = Drag.start.item, onto = itemAt(loc);
-    let ok = loc.c !== 'eq' || fitsKey(it, loc.k);
+    let ok = loc.c === 'charm' ? it.slot === 'charm' : loc.c !== 'eq' || fitsKey(it, loc.k);
     if (it.slot === 'gem' && onto && onto !== it && onto.slot !== 'gem' && onto.slot !== 'charm') ok = canSocket(onto);
     return { kind: 'cell', el: cell, loc, ok };
   }

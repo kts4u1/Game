@@ -155,6 +155,9 @@ const Game = {
     p.kills = d.kills || 0;
     p.deepest = d.deepest || s.floor || 1;
     p.stash = (d.stash || []).concat(new Array(STASH_SIZE).fill(null)).slice(0, STASH_SIZE);
+    p.charms = (d.charms || []).concat(new Array(CHARM_SLOTS).fill(null)).slice(0, CHARM_SLOTS);
+    // 예전 저장: 가방에 있던 부적을 주머니로 옮김
+    if (!d.charms) p.inventory.forEach((it, i) => { if (it && it.slot === 'charm') { const k = p.charms.indexOf(null); if (k >= 0) { p.charms[k] = it; p.inventory[i] = null; } } });
     p.elixirs = d.elixirs || {};
     p.playTime = d.playTime || 0; p.deaths = d.deaths || 0;
     for (const D of DIFFICULTIES) p[D.key] = d[D.key] || null;
@@ -357,7 +360,7 @@ const Game = {
       v: 1, floor: world.town ? 0 : world.floor, pending: this.pendingLevels || 0,
       p: {
         level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, bonusLife: p.bonusLife, bonusDmg: p.bonusDmg || 0, bonusArmor: p.bonusArmor || 0, skills: p.skills, hotbar: p.hotbar,
-        equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, elixirs: p.elixirs,
+        equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, charms: p.charms, elixirs: p.elixirs,
         playTime: Math.round(p.playTime || 0), deaths: p.deaths || 0, cleared: p.cleared || null,
         clearedNM: p.clearedNM || null, clearedHell: p.clearedHell || null, difficulty: p.difficulty || 0, deepestBy: this.deepestBy(),
       },
@@ -460,9 +463,10 @@ function onLeftPress(shift) {
   else if (h && h.kind === 'npc') { p.order = { type: 'npc', target: h.ref }; Input.leftMode = 'once'; }
   else if (h && h.kind === 'portal') { p.order = { type: 'portal', target: h.ref }; Input.leftMode = 'once'; }
   else {
-    p.order = { type: 'move', x: Input.world.x, y: Input.world.y };
+    const t = moveTarget(Input.world.x, Input.world.y);
+    p.order = { type: 'move', x: t.x, y: t.y };
     Input.leftMode = 'move';
-    fxRing(Input.world.x, Input.world.y, 3, 16, 0.35, 'rgba(232,217,168,.8)', 2, false);
+    fxRing(t.x, t.y, 3, 16, 0.35, 'rgba(232,217,168,.8)', 2, false);
   }
 }
 
@@ -472,7 +476,7 @@ function handleHeldInput(dt) {
   if (Input.left) {
     if (Input.leftMode === 'move') {
       Input.holdT -= dt;
-      if (Input.holdT <= 0) { Input.holdT = 0.08; p.order = { type: 'move', x: Input.world.x, y: Input.world.y }; }
+      if (Input.holdT <= 0) { Input.holdT = 0.08; const t = moveTarget(Input.world.x, Input.world.y); p.order = { type: 'move', x: t.x, y: t.y }; }
     } else if (Input.leftMode === 'attack') {
       if (!p.order || p.order.type !== 'attack' || p.order.target.dead) {
         const h = Input.hover;

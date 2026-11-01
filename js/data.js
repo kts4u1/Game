@@ -13,7 +13,10 @@ const SLOT_NAMES = {
   weapon: '무기', shield: '방패', helm: '투구', armor: '갑옷', gloves: '장갑',
   boots: '장화', belt: '허리띠', ring: '반지', amulet: '목걸이', charm: '부적', gem: '보석',
 };
-const STASH_SIZE = 48;
+// 보관함: 48칸 × 4쪽
+const STASH_PAGE = 48, STASH_PAGES = 4, STASH_SIZE = STASH_PAGE * STASH_PAGES;
+// 부적 주머니: 여기에 넣은 부적만 효과 (가방 칸을 차지하지 않음)
+const CHARM_SLOTS = 8;
 const MAX_POTIONS = 12;
 // 약초상이 파는 비약 (지속 시간: 초)
 const ELIXIRS = {
