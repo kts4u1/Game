@@ -40,6 +40,13 @@ function recalcStats(p) {
       if (a.stat === 'skill') s.skillBonus[a.skill] = (s.skillBonus[a.skill] || 0) + a.value;
       else if (!a.local) s[a.stat] = (s[a.stat] || 0) + a.value;
     }
+    // 소켓에 박은 보석
+    if (it.gems) for (const g of it.gems) { const [st, v] = gemStat(g, it.slot); s[st] = (s[st] || 0) + v; }
+  }
+  // 가방 속 부적 (착용 레벨이 되어야 효과)
+  for (const it of p.inventory) {
+    if (!it || it.slot !== 'charm' || p.level < it.req) continue;
+    for (const a of it.affixes) if (a.stat !== 'skill') s[a.stat] = (s[a.stat] || 0) + a.value;
   }
   // 세트 효과
   const sets = setCounts(p.equipment);
@@ -68,10 +75,10 @@ function recalcStats(p) {
   if ((v = pv('treasure'))) { s.mf += v.mf; s.gf += v.gf; }
   if ((v = pv('shieldmaster'))) { s.blockChance += v.block; s.blockFury = v.fury; }
   if ((v = pv('resist'))) s.resAll += v.res;
-  if ((v = pv('ironwill'))) { s.dmgTakenPct = (s.dmgTakenPct || 0) + v.reduce; s.ccRed = v.cc; }
+  if ((v = pv('ironwill'))) { s.dmgTakenPct = (s.dmgTakenPct || 0) + v.reduce; s.ccRed = (s.ccRed || 0) + v.cc; }
   if ((v = pv('laststand'))) s.lastStand = v.reduce;
   if ((v = pv('retaliate'))) s.retaliate = v;
-  if ((v = pv('heavyhand'))) { if (p.equipment.weapon && isTwoHanded(p.equipment.weapon)) s.dmgPct += v.dmg2h; s.bashChance = v.stun; }
+  if ((v = pv('heavyhand'))) { if (p.equipment.weapon && isTwoHanded(p.equipment.weapon)) s.dmgPct += v.dmg2h; s.bashChance = (s.bashChance || 0) + v.stun; }
   if ((v = pv('vitality'))) { s.potionBoost += v.potion; s.killLife += Math.round((2 + p.level * 0.15) * v.kill); }
   // 영구 보너스 카드, 광란·학살 중첩, 전투 명령
   s.dmgPct += p.bonusDmg || 0;
@@ -97,6 +104,8 @@ function recalcStats(p) {
   s.block = p.equipment.shield ? Math.min(50, s.block + s.blockChance) : 0;
   s.res = Math.min(75, s.resAll) + (DIFFICULTIES[p.difficulty || 0].res || 0);  // 악몽·지옥은 원소 저항 감소
   s.cdr = Math.min(40, s.cdr);
+  s.ccRed = Math.min(75, s.ccRed || 0);
+  s.dmgTakenPct = Math.min(50, s.dmgTakenPct || 0);
   s.furyCost = Math.min(40, s.furyCost);
   p.life = Math.min(p.life, s.maxLife);
   p.fury = Math.min(p.fury, s.maxFury);
@@ -163,6 +172,14 @@ function updatePlayer(dt) {
     p.buffs.berserk -= dt;
     if (p.buffs.berserk <= 0) { p.buffs.berserk = 0; recalcStats(p); }
     else if (chance(dt * 25)) fxEmbers(p.x, p.y, 1, '#ff3a22', 14);
+  }
+  // 가방 속 부적이 바뀌면 능력치 다시 계산
+  p.charmT = (p.charmT || 0) - dt;
+  if (p.charmT <= 0) {
+    p.charmT = 0.3;
+    let key = '';
+    for (const it of p.inventory) if (it && it.slot === 'charm') key += it.uid + ',';
+    if (key !== p.charmKey) { p.charmKey = key; recalcStats(p); }
   }
   // 지속 효과: 강철 피부, 전투 명령, 광란·학살 중첩
   if (p.buffs.ironskin > 0) { p.buffs.ironskin -= dt; if (chance(dt * 10)) fxSparks(p.x, p.y, 50, 1, '#d8dde8', 40); }
@@ -732,6 +749,10 @@ function afterEquipChange(item) {
 // 양손 무기와 방패는 함께 들 수 없으므로 다른 쪽은 가방 빈칸으로
 function equipInto(loc, key) {
   const p = player, it = itemAt(loc);
+  if (it && (it.slot === 'gem' || it.slot === 'charm')) {
+    UI.message(it.slot === 'gem' ? '보석은 소켓이 있는 장비 위로 끌어다 놓으면 박힙니다' : '부적은 가방에 넣어 두기만 하면 효과가 있습니다', '#c9c1b3');
+    return false;
+  }
   if (!it || !fitsKey(it, key)) return false;
   if (!canEquip(it)) { cantEquipMsg(it); return false; }
   const prev = p.equipment[key];
@@ -797,7 +818,25 @@ function moveItem(from, to) {
 }
 
 // 가방(또는 보관함) 자동 정리: 부위 → 희귀도 → 아이템 레벨 순
-const SORT_SLOTS = ['weapon', 'shield', 'helm', 'armor', 'gloves', 'boots', 'belt', 'ring', 'amulet'];
+const SORT_SLOTS = ['weapon', 'shield', 'helm', 'armor', 'gloves', 'boots', 'belt', 'ring', 'amulet', 'charm', 'gem'];
+
+// 보석을 소켓에 박음 (gemLoc의 보석 → targetLoc의 장비). 한 번 박은 보석은 빼낼 수 없음
+function canSocket(it) { return !!it && it.sockets > (it.gems ? it.gems.length : 0); }
+function insertGem(gemLoc, targetLoc) {
+  const gem = itemAt(gemLoc), it = itemAt(targetLoc);
+  if (!gem || gem.slot !== 'gem' || !it || it === gem) return false;
+  if (!canSocket(it)) { UI.message(it.sockets ? '빈 소켓이 없습니다' : '소켓이 없는 장비입니다. 대장장이가 소켓을 뚫어 줍니다', '#ff7a6a'); SFX.play('nope'); return false; }
+  it.gems = it.gems || [];
+  it.gems.push({ gem: gem.gem, grade: gem.grade });
+  putAt(gemLoc, null);
+  finalizeItem(it);
+  if (targetLoc.c === 'eq') recalcStats(player);
+  SFX.play('anvil');
+  const [st, v] = gemStat(gem, it.slot);
+  UI.message(`${gem.name}을(를) 박았습니다: ${statLine(st, v)}`, GEM_TYPES[gem.gem].color);
+  Game.dirty = true;
+  return true;
+}
 function sortItems(list) {
   const items = list.filter(Boolean);
   items.sort((a, b) => SORT_SLOTS.indexOf(a.slot) - SORT_SLOTS.indexOf(b.slot) || b.rarity - a.rarity || b.ilvl - a.ilvl || (b.plus || 0) - (a.plus || 0));

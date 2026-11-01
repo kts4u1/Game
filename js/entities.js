@@ -396,6 +396,7 @@ function rollPlayerDamage(mult, m) {
   const elem = s.fireDmg + s.coldDmg + (s.lightDmg ? randInt(1, s.lightDmg) : 0);
   let d = (rand(s.minDmg, s.maxDmg) + elem) * (1 + s.dmgPct / 100) * mult;
   if (m && m.undead && s.dmgUndead) d *= 1 + s.dmgUndead / 100;
+  if (m && m.tier > 0 && s.dmgElite) d *= 1 + s.dmgElite / 100;
   const crit = Math.random() * 100 < s.crit;
   if (crit) d *= 1 + s.critDmg / 100;
   return { d: Math.max(1, Math.round(d)), crit };
@@ -662,6 +663,10 @@ function dropLoot(x, y, mlvl, tier, extraGold = 0) {
     spawnGround('gold', x, y, { amount: amt });
   }
   if (chance(potion)) spawnGround('potion', x, y, {});
+  // 보석과 부적
+  const gemC = [0.008, 0.06, 0.15, 1, 0.12][tier], charmC = [0.004, 0.03, 0.08, 0.4, 0.06][tier];
+  if (chance(gemC)) spawnGround('item', x, y, { item: generateGem(ilvl) });
+  if (chance(charmC)) spawnGround('item', x, y, { item: generateItem(ilvl, rollRarity(mlvl, tier, s.mf) >= 2 ? 2 : 1, { slot: 'charm' }) });
 }
 
 function spawnGround(kind, x, y, data) {
@@ -688,6 +693,7 @@ function spawnGround(kind, x, y, data) {
 // 바닥 아이템 표시 필터: 0 전부, 1 마법 이상, 2 레어 이상
 function groundVisible(g) {
   if (g.kind !== 'item') return true;
+  if (g.item.slot === 'gem' || g.item.slot === 'charm') return true;  // 보석·부적은 늘 보임
   const f = (Game.settings && Game.settings.lootFilter) || 0;
   return g.item.rarity >= f;
 }

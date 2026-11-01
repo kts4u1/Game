@@ -175,8 +175,8 @@ const Town = {
 
 // ── 상점 · 보관함 · 웨이포인트 창 ──
 const ENHANCE_RATE = [1, 1, 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
-const GAMBLE_SLOTS = ['weapon', 'shield', 'helm', 'armor', 'gloves', 'boots', 'belt', 'ring', 'amulet'];
-const GAMBLE_ICON = { weapon: 117, shield: 121, helm: 160, armor: 161, gloves: 154, boots: 164, belt: 208, ring: 207, amulet: 213 };
+const GAMBLE_SLOTS = ['weapon', 'shield', 'helm', 'armor', 'gloves', 'boots', 'belt', 'ring', 'amulet', 'charm'];
+const GAMBLE_ICON = { weapon: 117, shield: 121, helm: 160, armor: 161, gloves: 154, boots: 164, belt: 208, ring: 207, amulet: 213, charm: 217 };
 
 const Shop = {
   npc: null, tab: null, sel: null, target: null, stock: [], buyback: [], lastGamble: null,
@@ -187,6 +187,34 @@ const Shop = {
   gamblePrice(slot) { return Math.round((90 + this.level() * 28) * (slot === 'ring' || slot === 'amulet' ? 1.6 : slot === 'weapon' ? 1.2 : 1)); },
   canEnhance(it) { return !!it && (it.dmg || it.def !== undefined) && (it.plus || 0) < 10; },
   enhanceCost(it) { return Math.round((40 + it.ilvl * 12) * Math.pow((it.plus || 0) + 1, 1.5)); },
+  canAddSocket(it) { return !!it && !!SOCKET_MAX[it.slot] && (it.sockets || 0) < SOCKET_MAX[it.slot]; },
+  socketCost(it) { return Math.round((200 + it.ilvl * 30) * Math.pow((it.sockets || 0) + 1, 1.6)); },
+  combineCost(grade) { return 100 * (grade + 1) * (grade + 1); },
+  // 가방 속 보석을 종류·등급별로 묶음
+  gemGroups() {
+    const g = {};
+    player.inventory.forEach((it, i) => { if (it && it.slot === 'gem') { const k = it.gem + ':' + it.grade; (g[k] = g[k] || { gem: it.gem, grade: it.grade, idx: [] }).idx.push(i); } });
+    return Object.values(g).sort((a, b) => a.gem.localeCompare(b.gem) || a.grade - b.grade);
+  },
+  addSocket() {
+    const it = this.target;
+    if (!this.canAddSocket(it) || !this.pay(this.socketCost(it))) return;
+    it.sockets = (it.sockets || 0) + 1;
+    it.gems = it.gems || [];
+    finalizeItem(it);
+    SFX.play('anvil');
+    UI.message(`소켓을 뚫었습니다 (${it.sockets} / ${SOCKET_MAX[it.slot]})`, '#ffd36a');
+  },
+  combineGems(key) {
+    const grp = this.gemGroups().find(x => x.gem + ':' + x.grade === key);
+    if (!grp || grp.idx.length < 3 || grp.grade >= GEM_GRADES.length - 1 || !this.pay(this.combineCost(grp.grade))) return;
+    const p = player;
+    for (const i of grp.idx.slice(0, 3)) p.inventory[i] = null;
+    const gem = generateGem(GEM_GRADES[grp.grade + 1].lvl, grp.gem, grp.grade + 1);
+    p.inventory[p.inventory.indexOf(null)] = gem;
+    SFX.play('anvil'); SFX.play('rare');
+    UI.message(`합성 성공: ${gem.name}`, GEM_TYPES[gem.gem].color);
+  },
   rerollCost(it) { return Math.round(it.value * 2.5); },
   upgradeCost(it) { return Math.round(it.value * (it.rarity === 0 ? 5 : 6)); },
 
@@ -342,7 +370,7 @@ const Shop = {
     const p = player;
     panel.querySelector('h2').textContent = n.name;
     const tabs = {
-      smith: [['buy', '사기 · 팔기'], ['enhance', '강화']],
+      smith: [['buy', '사기 · 팔기'], ['enhance', '강화'], ['socket', '소켓 · 보석']],
       refiner: [['reroll', '재련'], ['upgrade', '승급']],
     }[n.role] || [];
     panel.querySelector('.shop-tabs').innerHTML = tabs.map(([id, label]) => `<button data-tab="${id}" class="${this.tab === id ? 'on' : ''}">${label}</button>`).join('');
@@ -387,6 +415,24 @@ const Shop = {
         } else body += hint(it.plus >= 10 ? '이미 최대(+10)로 강화된 장비입니다.' : '반지와 목걸이는 강화할 수 없습니다.');
         body += detail(it);
       }
+    } else if (n.role === 'smith' && this.tab === 'socket') {
+      body = gold + hint('무기·갑옷·투구·방패를 소지품 창에서 골라 소켓을 뚫습니다 (무기·갑옷 최대 3, 투구·방패 최대 2). 보석은 소지품 창에서 장비 위로 끌어다 놓으면 박힙니다.');
+      const it = this.target;
+      if (it) {
+        if (this.canAddSocket(it)) {
+          const cost = this.socketCost(it);
+          body += `<div class="enh-box"><div class="enh-line">소켓 ${it.sockets || 0} → <b>${(it.sockets || 0) + 1}</b> (최대 ${SOCKET_MAX[it.slot]})</div><div class="enh-line">비용 <b class="gold">${cost.toLocaleString()} 골드</b></div></div>`;
+          foot = selFoot(it, `<button class="btn-main" data-act="socket">소켓 뚫기 <small>${cost.toLocaleString()} 골드</small></button>`);
+        } else body += hint(SOCKET_MAX[it.slot] ? '소켓이 이미 가득합니다.' : '무기·갑옷·투구·방패에만 소켓을 뚫을 수 있습니다.');
+        body += detail(it);
+      }
+      const groups = this.gemGroups();
+      body += `<h3>보석 합성</h3>` + hint('같은 종류·등급의 보석 3개를 한 등급 위 보석 1개로 합칩니다.')
+        + (groups.length ? `<ul class="shop-list">${groups.map(g => {
+          const k = g.gem + ':' + g.grade, top = g.grade >= GEM_GRADES.length - 1, cost = this.combineCost(g.grade);
+          return `<li><span class="sl-icon">${iconHtml(BASE_INDEX['gem_' + g.gem].ii)}</span><div class="sl-main"><div class="sl-name" style="color:${GEM_TYPES[g.gem].color}">${gemName(g.gem, g.grade)} × ${g.idx.length}</div><div class="sl-desc">${top ? '최고 등급입니다' : `→ ${gemName(g.gem, g.grade + 1)}`}</div></div>`
+            + `<div class="sl-btns"><button data-combine="${k}" ${top || g.idx.length < 3 ? 'disabled' : ''}>합성 <small>${cost.toLocaleString()}</small></button></div></li>`;
+        }).join('')}</ul>` : hint('가방에 보석이 없습니다. 보석은 몬스터, 특히 정예와 보스가 떨어뜨립니다.'));
     } else if (n.role === 'healer') {
       const pp = potionPrice();
       body = gold + `<ul class="shop-list">
@@ -440,6 +486,8 @@ const Shop = {
   onClick(e) {
     if (Drag.justDropped && performance.now() - Drag.justDropped < 350) return;
     const t = e.target;
+    const cb = t.closest('[data-combine]');
+    if (cb) { this.combineGems(cb.dataset.combine); return this.refresh(); }
     const dbtn = t.closest('[data-diff]');
     if (dbtn) { Game.setDifficulty(+dbtn.dataset.diff); this.sel = null; return this.refresh(); }
     const tab = t.closest('[data-tab]');
@@ -451,6 +499,7 @@ const Shop = {
       else if (a === 'buy' && this.sel) { const list = this.sel.list === 'bb' ? this.buyback : this.stock; this.buy(list, list.indexOf(this.sel.item), this.sel.list === 'bb' ? this.sel.item.value : this.buyPrice(this.sel.item)); }
       else if (a === 'restock') this.restockPaid();
       else if (a === 'enhance') this.enhance();
+      else if (a === 'socket') this.addSocket();
       else if (a === 'reroll') this.reroll();
       else if (a === 'upgrade') this.upgrade();
       else if (a === 'potion1') this.buyPotions(1);
@@ -491,7 +540,7 @@ const Shop = {
   // 소지품에서 물건을 골랐을 때 (강화·재련 대상)
   pickTarget(item) {
     if (!this.isOpen()) return false;
-    if ((this.npc.role === 'smith' && this.tab === 'enhance') || this.npc.role === 'refiner') {
+    if ((this.npc.role === 'smith' && (this.tab === 'enhance' || this.tab === 'socket')) || this.npc.role === 'refiner') {
       this.target = item;
       this.render();
       return true;

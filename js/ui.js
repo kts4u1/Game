@@ -8,7 +8,11 @@ function skillIconHtml(id) {
   return HAS_FLARE ? iconHtml(SKILL_ICON[id] != null ? SKILL_ICON[id] : 0, 'skill') : `<img src="${skillIcon(id)}" alt="">`;
 }
 function itemIconHtml(item) {
-  return HAS_FLARE ? iconHtml(itemIconIndex(item), 'item') : `<img src="${itemIcon(item)}" alt="">`;
+  const ic = HAS_FLARE ? iconHtml(itemIconIndex(item), 'item') : `<img src="${itemIcon(item)}" alt="">`;
+  // 소켓: 칸 아래쪽에 작은 점 (박힌 보석은 그 색으로)
+  if (!item.sockets) return ic;
+  const dots = Array.from({ length: item.sockets }, (_, i) => { const g = item.gems && item.gems[i]; return `<i${g ? ` style="background:${GEM_TYPES[g.gem].color}"` : ''}></i>`; }).join('');
+  return ic + `<span class="sockets">${dots}</span>`;
 }
 
 const UI = {
@@ -639,13 +643,15 @@ function dragTarget(x, y) {
   const cell = el.closest('#inv-panel [data-inv], #inv-panel [data-eq], #shop-panel [data-stash]');
   if (cell) {
     const loc = cellLoc(cell);
-    const ok = loc.c !== 'eq' || fitsKey(Drag.start.item, loc.k);
+    const it = Drag.start.item, onto = itemAt(loc);
+    let ok = loc.c !== 'eq' || fitsKey(it, loc.k);
+    if (it.slot === 'gem' && onto && onto !== it && onto.slot !== 'gem' && onto.slot !== 'charm') ok = canSocket(onto);
     return { kind: 'cell', el: cell, loc, ok };
   }
   const shop = el.closest('#shop-panel');
   if (shop && Shop.isOpen()) {
     const role = Shop.npc.role, from = Drag.start.loc;
-    if ((role === 'smith' && Shop.tab === 'enhance') || role === 'refiner') return { kind: 'target', el: shop, ok: true };
+    if ((role === 'smith' && (Shop.tab === 'enhance' || Shop.tab === 'socket')) || role === 'refiner') return { kind: 'target', el: shop, ok: true };
     if (Shop.canSell()) return { kind: 'sell', el: shop, ok: from.c === 'inv' };
   }
   return null;
@@ -666,7 +672,10 @@ function dragDrop(x, y) {
   const t = dragTarget(x, y);
   Drag.justDropped = performance.now();
   if (!t) return;
-  if (t.kind === 'cell') moveItem(s.loc, t.loc);
+  // 보석을 소켓 있는 장비 위에 놓으면 박음
+  const onto = t.kind === 'cell' ? itemAt(t.loc) : null;
+  if (t.kind === 'cell' && s.item.slot === 'gem' && onto && onto !== s.item && onto.slot !== 'gem' && onto.slot !== 'charm') insertGem(s.loc, t.loc);
+  else if (t.kind === 'cell') moveItem(s.loc, t.loc);
   else if (t.kind === 'sell') {
     if (s.loc.c === 'inv') sellInventory(s.loc.i);
     else UI.message('착용 중인 물건은 먼저 벗어야 팔 수 있습니다', '#ff7a6a');

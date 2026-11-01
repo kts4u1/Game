@@ -6,10 +6,10 @@ function pickSlot() {
   return weightedPick(slots, s => SLOT_WEIGHTS[s]);
 }
 
-// 아이템 레벨 이하의 기본형 중, 최근(높은) 기본형일수록 자주 나온다
+// 아이템 레벨 이하의 기본형 중, 아이템 레벨에 가까운(높은) 기본형일수록 자주 나온다
 function pickBase(slot, ilvl) {
   const list = ITEM_BASES[slot].filter(b => b.lvl <= ilvl);
-  return weightedPick(list, b => 1 + Math.max(0, 7 - (ilvl - b.lvl)) * 0.6);
+  return weightedPick(list, b => 0.04 + Math.exp(-(ilvl - b.lvl) / 18));
 }
 
 const ACTIVE_SKILLS = Object.keys(SKILLS).filter(id => SKILLS[id].type === 'active');
@@ -76,7 +76,42 @@ function finalizeItem(item) {
     item.enhanced = sum('edef') > 0 || item.plus > 0;
   }
   item.value = Math.round((6 + item.ilvl * 3) * RARITY_VALUE[item.rarity] * (1 + (item.plus || 0) * 0.25));
+  if (item.slot === 'charm') item.value = Math.round(item.value * (BASE_INDEX[item.baseId].ck || 1) * 1.5);
+  if (item.slot === 'gem') item.value = GEM_VALUE[item.grade];
+  // 소켓과 박힌 보석도 값에 반영
+  if (item.sockets) item.value = Math.round(item.value * (1 + item.sockets * 0.1) + (item.gems || []).reduce((t, g) => t + GEM_VALUE[g.grade] * 0.5, 0));
   return item;
+}
+const GEM_VALUE = [30, 80, 200, 500, 1200];
+
+// ── 보석 ──
+function gemName(type, grade) { const g = GEM_GRADES[grade].name; return `${g ? g + ' ' : ''}${GEM_TYPES[type].name}`; }
+function generateGem(ilvl, type, grade) {
+  type = type || pick(Object.keys(GEM_TYPES));
+  if (grade == null) {
+    // 아이템 레벨까지 나올 수 있는 등급 중 높은 쪽이 더 잘 나옴
+    const ok = GEM_GRADES.map((g, i) => i).filter(i => GEM_GRADES[i].lvl <= ilvl);
+    grade = weightedPick(ok, i => 1 + i);
+  }
+  const item = {
+    uid: uid(), slot: 'gem', baseId: 'gem_' + type, baseName: GEM_TYPES[type].name, icon: 'gem', look: 0,
+    rarity: 0, ilvl: Math.max(1, ilvl), affixes: [], name: gemName(type, grade), req: 1, plus: 0, gem: type, grade,
+  };
+  return finalizeItem(item);
+}
+// 보석 하나가 이 부위에 박혔을 때 [능력치, 값]
+function gemStat(g, slot) {
+  const G = GEM_TYPES[g.gem], k = slot === 'weapon' ? 'weapon' : 'armor';
+  return [G[k], G.vals[k][g.grade]];
+}
+// 새로 만든 무기·갑옷·투구·방패에 소켓이 생길 확률 (일반 아이템일수록 잘 생김)
+function rollSockets(item) {
+  const max = SOCKET_MAX[item.slot];
+  if (!max || item.rarity > 2) return;
+  if (!chance([0.3, 0.18, 0.08][item.rarity])) return;
+  const cap = Math.min(max, item.ilvl < 10 ? 1 : item.ilvl < 25 ? 2 : max);
+  item.sockets = randInt(1, cap);
+  item.gems = [];
 }
 
 function itemName(item) { return item.plus ? `+${item.plus} ${item.name}` : item.name; }
@@ -134,7 +169,7 @@ function rollAffixes(item) {
     item.name = `${s ? s.name + ' ' : ''}${p ? p.name + ' ' : ''}${base.name}`;
     item.req = Math.max(base.lvl, Math.floor(item.ilvl * 0.6));
   } else if (item.rarity === 2) {
-    const n = randInt(3, item.ilvl >= 12 ? 5 : 4) + (item.ilvl >= 24 && chance(0.4) ? 1 : 0);
+    const n = item.slot === 'charm' ? randInt(2, 3) : randInt(3, item.ilvl >= 12 ? 5 : 4) + (item.ilvl >= 24 && chance(0.4) ? 1 : 0);
     let pre = 0, suf = 0;
     for (let i = 0; i < n; i++) {
       const kind = pre >= 3 ? 'suf' : suf >= 3 ? 'pre' : (chance(0.5) ? 'pre' : 'suf');
@@ -151,6 +186,8 @@ function rollAffixes(item) {
 function generateItem(ilvl, rarity, opts = {}) {
   ilvl = Math.max(1, Math.round(ilvl));
   let slot = opts.slot || pickSlot();
+  if (slot === 'gem') return generateGem(ilvl);
+  if (slot === 'charm' && rarity > 2) rarity = 2;
   if (rarity === 4) {
     const s = generateSet(ilvl, opts.slot);
     if (s) return s;
@@ -161,11 +198,12 @@ function generateItem(ilvl, rarity, opts = {}) {
     if (u) return u;
     rarity = 2;
   }
-  if ((slot === 'ring' || slot === 'amulet') && rarity === 0) rarity = 1;
+  if ((slot === 'ring' || slot === 'amulet' || slot === 'charm') && rarity === 0) rarity = 1;
   const base = opts.baseId ? BASE_INDEX[opts.baseId] : BASE_INDEX[pickBase(slot, ilvl).id];
   slot = base.slot;
   const item = baseItem(base, slot, ilvl, rarity);
   rollAffixes(item);
+  rollSockets(item);
   return finalizeItem(item);
 }
 
@@ -230,9 +268,19 @@ function statLine(stat, value) {
 
 // ── 툴팁 HTML ──
 function itemTooltipHtml(item, opts = {}) {
-  const col = RARITY[item.rarity].color;
+  const col = item.slot === 'gem' ? GEM_TYPES[item.gem].color : RARITY[item.rarity].color;
   const lines = [];
   if (opts.header) lines.push(`<div class="tt-header">${opts.header}</div>`);
+  if (item.slot === 'gem') {
+    const [ws, wv] = gemStat(item, 'weapon'), [as, av] = gemStat(item, 'armor');
+    lines.push(`<div class="tt-name" style="color:${col}">${escapeHtml(item.name)}</div>`);
+    lines.push(`<div class="tt-type">보석 · ${item.grade + 1}등급</div>`);
+    lines.push(`<div class="tt-mod">무기: ${statLine(ws, wv)}</div>`);
+    lines.push(`<div class="tt-mod">갑옷·투구·방패: ${statLine(as, av)}</div>`);
+    lines.push(`<div class="tt-flavor">소켓이 있는 장비 위로 끌어다 놓으면 박힙니다. 같은 보석 3개는 대장장이가 한 등급 위로 합성해 줍니다.</div>`);
+    if (!opts.noValue) lines.push(`<div class="tt-value">${opts.price ? `가격 ${opts.price.toLocaleString()} 골드` : `판매 가격 ${item.value} 골드`}</div>`);
+    return lines.join('');
+  }
   lines.push(`<div class="tt-name" style="color:${col}">${escapeHtml(itemName(item))}</div>`);
   if (item.rarity >= 2) lines.push(`<div class="tt-base" style="color:${col}">${escapeHtml(item.baseName)}</div>`);
   const two = item.slot === 'weapon' && isTwoHanded(item) ? ' · 양손' : '';
@@ -252,6 +300,15 @@ function itemTooltipHtml(item, opts = {}) {
     const t = affixText(a);
     if (t) lines.push(`<div class="tt-mod${item.rarity === 4 ? ' tt-set' : ''}">${t}</div>`);
   }
+  if (item.sockets) {
+    lines.push(`<div class="tt-sock">소켓 ${(item.gems || []).length} / ${item.sockets}</div>`);
+    for (let i = 0; i < item.sockets; i++) {
+      const g = item.gems && item.gems[i];
+      if (g) { const [st, v] = gemStat(g, item.slot); lines.push(`<div class="tt-gem" style="color:${GEM_TYPES[g.gem].color}">◆ ${gemName(g.gem, g.grade)}: ${statLine(st, v)}</div>`); }
+      else lines.push(`<div class="tt-gem empty">◇ 빈 소켓</div>`);
+    }
+  }
+  if (item.slot === 'charm') lines.push(`<div class="tt-flavor">가방에 넣어 두기만 하면 효과가 있습니다 (보관함에서는 효과 없음).</div>`);
   if (item.setId && SETS[item.setId]) {
     const S = SETS[item.setId];
     const have = typeof player !== 'undefined' && player ? setCounts(player.equipment)[item.setId] || 0 : 0;

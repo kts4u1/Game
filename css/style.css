@@ -291,6 +291,12 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .card:nth-child(2) { animation-delay: .06s; }
 .card:nth-child(3) { animation-delay: .12s; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(16px); } }
+/* 소켓 표시 (칸 아래쪽 점) */
+.cell .sockets { position: absolute; left: 0; right: 0; bottom: 2px; display: flex; justify-content: center; gap: 2px; pointer-events: none; z-index: 2; }
+.cell .sockets i { width: 5px; height: 5px; border-radius: 50%; background: #1a1410; box-shadow: 0 0 0 1px #8a7a60; }
+.tt-sock { margin-top: 4px; color: #c9c1b3; font-size: 12px; }
+.tt-gem { font-size: 12px; }
+.tt-gem.empty { color: #7a7266; }
 /* 레벨업 창이 뜬 직후 잠깐: 흐리게, 누를 수 없음 */
 .lu-cards .card { transition: opacity .25s, filter .25s, transform .15s, border-color .15s, box-shadow .15s; }
 .lu-cards.locked .card { opacity: .5; filter: grayscale(.5); pointer-events: none; }

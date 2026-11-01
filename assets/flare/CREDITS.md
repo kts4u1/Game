@@ -48,7 +48,7 @@
 | 마을 사람, 오벨리스크 | `npcs/guild_man`, `knight`, `peasant_man1`, `peasant_man2`, `peasant_woman1`, `peasant_woman2`, `wandering_trader`, `return_obelisk1`, `empyrean_campaign/npcs/peddler_goblin` |
 | 던전·동굴 바닥과 벽, 화로, 상자, 계단, 뼈 | `tilesets/tileset_dungeon`, `tileset_cave` |
 | 마을 풀밭·돌길·나무·덤불·바위·천막·모루·모닥불·상자·묘비·돌 원 | `tilesets/tileset_grassland` |
-| 아이템·스킬 아이콘 | `icons/icons.png` |
+| 아이템·스킬 아이콘 (보석·부적 아이콘 포함) | `icons/icons.png` |
 | 칼날 궤적, 지진, 화염 폭발, 가시, 주황 보호막, 낙뢰, 번개, 타격 불꽃, 치유, 반짝임, 냉기, 땅 갈라짐 | `powers/cleave`, `quake`, `blast`, `spikes`, `shield_orange`, `thunderstrike`, `lightning`, `spark_*`, `heal`, `sparkle`, `freeze`, `rupture` |
 | 투척 도끼, 화살, 화염구, 얼음창, 독침, 마력구, 돌, 투척 단검, 창 | `powers/throw_axe`, `arrows`, `fireball`, `icicle`, `spit`, `plasmaball`, `stone`, `throw_knife`, `spear` |
 | 소환 마법진, 차원문 룬, 어둠 안개, 독 불꽃, 덫, 얼어붙음 | `powers/runes`, `runes_blue`, `dark_mist`, `spark_green`, `bear_trap`, `status_freeze` |

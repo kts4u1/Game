@@ -912,7 +912,7 @@ function drawLabels(ctx, explored) {
     let text, color;
     if (g.kind === 'gold') { text = `${g.amount} 골드`; color = '#e8d9a8'; }
     else if (g.kind === 'potion') { text = '생명력 물약'; color = '#ff7a7a'; }
-    else { text = itemName(g.item); color = RARITY[g.item.rarity].color; }
+    else { text = itemName(g.item); color = g.item.slot === 'gem' ? GEM_TYPES[g.item.gem].color : RARITY[g.item.rarity].color; }
     const w = ctx.measureText(text).width + 12, h = 18;
     const rect = { x: sp.x - w / 2, y: sp.y - h / 2, w, h };
     for (let k = 0; k < 8; k++) {
