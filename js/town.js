@@ -189,9 +189,9 @@ const Shop = {
   level() { return player ? player.level : 1; },
   buyPrice(it) { return Math.round(it.value * 4); },
   restockPrice() { return 40 + this.level() * 8; },
-  gamblePrice(slot) { return Math.round((90 + this.level() * 28) * (slot === 'ring' || slot === 'amulet' ? 1.6 : slot === 'weapon' ? 1.2 : 1)); },
+  gamblePrice(slot) { return Math.round((90 + this.level() * 28) * (slot === 'ring' || slot === 'amulet' ? 1.6 : slot === 'weapon' ? 1.2 : 1) * (1 - Math.min(40, player.gambleDiscount || 0) / 100)); },
   canEnhance(it) { return !!it && (it.dmg || it.def !== undefined) && (it.plus || 0) < 10; },
-  enhanceCost(it) { return Math.round((40 + it.ilvl * 12) * Math.pow((it.plus || 0) + 1, 1.5)); },
+  enhanceCost(it) { return player.freeEnhance > 0 ? 0 : Math.round((40 + it.ilvl * 12) * Math.pow((it.plus || 0) + 1, 1.5)); },
   canAddSocket(it) { return !!it && !!SOCKET_MAX[it.slot] && (it.sockets || 0) < SOCKET_MAX[it.slot]; },
   socketCost(it) { return player.freeSockets > 0 ? 0 : Math.round((200 + it.ilvl * 30) * Math.pow((it.sockets || 0) + 1, 1.6)); },
   combineCost(grade) { return 100 * (grade + 1) * (grade + 1); },
@@ -292,7 +292,9 @@ const Shop = {
   enhance() {
     const it = this.target;
     if (!this.canEnhance(it)) return;
+    const free = player.freeEnhance > 0;
     if (!this.pay(this.enhanceCost(it))) return;
+    if (free) player.freeEnhance--;
     const rate = ENHANCE_RATE[it.plus || 0];
     const p = player;
     SFX.play('anvil');
@@ -385,7 +387,11 @@ const Shop = {
       refiner: [['reroll', '재련'], ['upgrade', '승급']],
     }[n.role] || [];
     // 퀘스트를 주는 사람은 '퀘스트' 탭 (말만 하는 사람은 퀘스트 탭만)
-    if (Quests.hasContent(n) && n.role !== 'talk') tabs.push(['quest', `퀘스트${Quests.mark(n) ? ' ' + Quests.mark(n) : ''}`]);
+    if (Quests.hasContent(n) && n.role !== 'talk') {
+      // 탭이 없던 상인은 원래 화면으로 돌아갈 탭을 하나 만들어 줌
+      if (!tabs.length) tabs.push([n.role, { healer: '치료 · 물약', gambler: '도박' }[n.role] || '거래']);
+      tabs.push(['quest', `퀘스트${Quests.mark(n) ? ' ' + Quests.mark(n) : ''}`]);
+    }
     if (n.role === 'talk' && tabs.length === 0) this.tab = 'quest';
     panel.querySelector('.shop-tabs').innerHTML = tabs.map(([id, label]) => `<button data-tab="${id}" class="${this.tab === id ? 'on' : ''}">${label}</button>`).join('');
     panel.querySelector('.shop-tabs').hidden = !tabs.length;
@@ -438,8 +444,9 @@ const Shop = {
       if (it) {
         if (this.canEnhance(it)) {
           const cost = this.enhanceCost(it), rate = Math.round(ENHANCE_RATE[it.plus || 0] * 100);
-          body += `<div class="enh-box"><div class="enh-line">+${it.plus || 0} → <b>+${(it.plus || 0) + 1}</b></div><div class="enh-line">성공 확률 <b>${rate}%</b> · 비용 <b class="gold">${cost.toLocaleString()} 골드</b></div></div>`;
-          foot = selFoot(it, `<button class="btn-main" data-act="enhance">강화하기 <small>${cost.toLocaleString()} 골드</small></button>`);
+          const costTxt = player.freeEnhance > 0 ? `무료 (남은 ${player.freeEnhance}회)` : `${cost.toLocaleString()} 골드`;
+          body += `<div class="enh-box"><div class="enh-line">+${it.plus || 0} → <b>+${(it.plus || 0) + 1}</b></div><div class="enh-line">성공 확률 <b>${rate}%</b> · 비용 <b class="gold">${costTxt}</b></div></div>`;
+          foot = selFoot(it, `<button class="btn-main" data-act="enhance">강화하기 <small>${costTxt}</small></button>`);
         } else body += hint(it.plus >= 10 ? '이미 최대(+10)로 강화된 장비입니다.' : '반지와 목걸이는 강화할 수 없습니다.');
         body += detail(it);
       }
@@ -473,7 +480,7 @@ const Shop = {
         }).join('')}
       </ul>` + hint('소지품 창에서 가방의 물건을 <b>Shift + 클릭</b>하거나 이 창으로 끌어다 놓으면 바로 팝니다.');
     } else if (n.role === 'gambler') {
-      body = gold + hint('어떤 물건이 나올지는 열어 봐야 압니다. 대부분 마법 아이템이지만, 레어·세트·유니크가 나오기도 합니다.')
+      body = gold + hint('어떤 물건이 나올지는 열어 봐야 압니다. 대부분 마법 아이템이지만, 레어·세트·유니크가 나오기도 합니다.' + (p.gambleDiscount ? ` <b>빚을 갚아 준 덕분에 모든 물건이 ${Math.min(40, p.gambleDiscount)}% 쌉니다.</b>` : ''))
         + `<div class="gamble-grid">${GAMBLE_SLOTS.map(sl => `<button data-gamble="${sl}"><span class="gb-icon">${iconHtml(GAMBLE_ICON[sl])}</span><span class="gb-name">${SLOT_NAMES[sl]}</span><small>${this.gamblePrice(sl).toLocaleString()} 골드</small></button>`).join('')}</div>`;
       if (this.lastGamble) body += `<h3>방금 산 물건</h3>` + detail(this.lastGamble);
     } else if (n.role === 'refiner') {

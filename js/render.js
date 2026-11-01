@@ -391,7 +391,7 @@ function renderFrame(t, focus) {
     } else if (s.k === 1) drawMonster(ctx, s.m, t);
     else if (s.k === 2) drawPlayer(ctx, p, t);
     else if (s.k === 3) drawProjectile(ctx, s.pr, t);
-    else if (s.k === 4) drawChest(ctx, s.c);
+    else if (s.k === 4) drawChest(ctx, s.c, t);
     else if (s.k === 5) drawProp(ctx, 'brazier', isoX(s.tc.bx, s.tc.by), isoY(s.tc.bx, s.tc.by));
     else if (s.k === 6) drawNpc(ctx, s.n, t);
     else if (s.k === 7) drawTownProp(ctx, s.pr);
@@ -539,8 +539,14 @@ function drawGroundObject(ctx, g, t) {
   const sx = isoX(g.x, g.y), sy = isoY(g.x, g.y);
   drawShadow(ctx, sx, sy, 10, 4, 0.35);
   if (Assets.ready('icons.webp')) {
-    const idx = g.kind === 'gold' ? 88 : g.kind === 'potion' ? ICON_POTION : itemIconIndex(g.item);
-    const size = g.kind === 'item' ? 30 : 22;
+    const idx = g.kind === 'gold' ? 88 : g.kind === 'potion' ? ICON_POTION : g.kind === 'qtoken' ? g.icon : itemIconIndex(g.item);
+    const size = g.kind === 'item' ? 30 : g.kind === 'qtoken' ? 26 : 22;
+    if (g.kind === 'qtoken') {
+      const gr = ctx.createRadialGradient(sx, sy - g.z - 12, 2, sx, sy - g.z - 12, 22);
+      gr.addColorStop(0, 'rgba(255,211,106,.5)'); gr.addColorStop(1, 'rgba(255,211,106,0)');
+      ctx.fillStyle = gr;
+      ctx.fillRect(sx - 22, sy - g.z - 34, 44, 44);
+    }
     if (g.kind === 'item' && g.item.rarity > 0) {
       const col = RARITY[g.item.rarity].color;
       const gr = ctx.createRadialGradient(sx, sy - g.z - 12, 2, sx, sy - g.z - 12, 22);
@@ -559,6 +565,8 @@ function drawGroundObject(ctx, g, t) {
     ctx.fillStyle = '#5a3a24'; ctx.fillRect(-1.5, -14, 3, 4);
     circle(ctx, 0, -6, 5, '#b01d22');
     circle(ctx, -1.5, -7.5, 1.6, 'rgba(255,255,255,.5)');
+  } else if (g.kind === 'qtoken') {
+    poly(ctx, [-6, -2, 6, -2, 5, -12, -5, -12], '#c9a24e', '#5a4420', 1);
   } else {
     const img = Game.iconImage(g.item);
     if (img && img.complete) ctx.drawImage(img, -14, -24, 28, 28);
@@ -566,7 +574,42 @@ function drawGroundObject(ctx, g, t) {
   ctx.restore();
 }
 
-function drawChest(ctx, c) {
+// 던전에 갇힌 사람 (구출 퀘스트). 상자처럼 눌러서 구함
+function drawCaptive(ctx, c, t) {
+  if (c.open) return;
+  const sx = isoX(c.x, c.y), sy = isoY(c.x, c.y);
+  const hov = Input.hover && Input.hover.ref === c;
+  const pulse = 0.5 + 0.5 * Math.sin(t * 3);
+  ctx.save();
+  ctx.globalAlpha = 0.35 + 0.25 * pulse;
+  ctx.strokeStyle = '#8fd0ff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(sx, sy, 26, 13, 0, 0, TAU); ctx.stroke();
+  ctx.globalAlpha = 0.6;
+  ctx.strokeStyle = '#5a5e66'; ctx.lineWidth = 1.5;
+  for (const a of [-0.6, 0.6]) { ctx.beginPath(); ctx.moveTo(sx + Math.cos(a) * 26, sy + Math.sin(a) * 13); ctx.lineTo(sx + a * 6, sy - 26); ctx.stroke(); }
+  ctx.restore();
+  const set = spriteSet('npcs', 'peasant_man1');
+  if (set && Assets.ready(set.img)) {
+    drawBlobShadow(ctx, sx, sy, 14, null);
+    ctx.save();
+    if (HAS_FILTER) ctx.filter = hov ? 'brightness(1.35)' : 'brightness(0.8) saturate(0.7)';
+    drawSpriteFrame(ctx, set, 'stance', 6, animIndex(set.anims.stance, t * 700), sx, sy);
+    ctx.restore();
+  } else {
+    drawShadow(ctx, sx, sy, 14, 6, 0.4);
+    ctx.fillStyle = '#6b5a44'; ctx.fillRect(sx - 8, sy - 50, 16, 46);
+    circle(ctx, sx, sy - 58, 8, '#c78c5d');
+  }
+  ctx.font = '700 13px ' + Game.fontUI;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = 'rgba(0,0,0,.9)'; ctx.lineWidth = 3;
+  const label = hov ? `${c.who} — 눌러서 구출` : `${c.who} (갇힘)`;
+  ctx.fillStyle = hov ? '#d8f0ff' : '#8fd0ff';
+  ctx.strokeText(label, sx, sy - 92); ctx.fillText(label, sx, sy - 92);
+}
+
+function drawChest(ctx, c, t) {
+  if (c.captive) return drawCaptive(ctx, c, t || 0);
   const sx = isoX(c.x, c.y), sy = isoY(c.x, c.y);
   if (drawProp(ctx, c.open ? 'chestOpen' : 'chest', sx, sy)) return;
   drawShadow(ctx, sx, sy + 2, 22, 9, 0.5);
@@ -912,6 +955,7 @@ function drawLabels(ctx, explored) {
     let text, color;
     if (g.kind === 'gold') { text = `${g.amount} 골드`; color = '#e8d9a8'; }
     else if (g.kind === 'potion') { text = '생명력 물약'; color = '#ff7a7a'; }
+    else if (g.kind === 'qtoken') { text = g.label; color = '#ffd36a'; }
     else { text = itemName(g.item); color = g.item.slot === 'gem' ? GEM_TYPES[g.item.gem].color : RARITY[g.item.rarity].color; }
     const w = ctx.measureText(text).width + 12, h = 18;
     const rect = { x: sp.x - w / 2, y: sp.y - h / 2, w, h };
@@ -988,6 +1032,8 @@ function drawAutomap(ctx, cx, cy, s, alpha, big) {
   const dot = (x, y, r, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(ox + (x - y) / TILE * s, oy + (x + y) / TILE * s / 2, r, 0, TAU); ctx.fill(); };
   if (d.town) for (const n of d.npcs) if (n.role !== 'talk') dot(n.x, n.y, big ? 4 : 2.5, n.role === 'gate' ? '#8fd0ff' : '#ffd36a');
   for (const pt of portalsOf(world)) dot(pt.x, pt.y, big ? 5 : 3, '#6fb8ff');
+  // 구출할 사람은 처음부터 지도에 보임
+  for (const c of world.chests) if (c.captive && !c.open) dot(c.x, c.y, big ? 5 : 3.5, (Date.now() / 400 | 0) % 2 ? '#8fd0ff' : '#ffffff');
   const st = d.stairs;
   if (!st.none && d.explored[Math.floor(st.y / TILE) * d.w + Math.floor(st.x / TILE)]) {
     const mx = ox + (st.x - st.y) / TILE * s, my = oy + (st.x + st.y) / TILE * s / 2;

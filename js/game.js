@@ -75,6 +75,7 @@ const Game = {
     for (const t of types) { const sp = MONSTERS[t].sprite; if (sp && sp !== 'human' && !sprites.includes(sp)) sprites.push(sp); }
     const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player), ...humanAssetPaths(types)];
     if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) paths.push(FLARE.npcs[n.sprite].img);
+    if (world.chests.some(c => c.captive)) paths.push(FLARE.npcs.peasant_man1.img);
     // 색을 입힌 몬스터 그림, 그림자 실루엣, 타일 그림을 미리 만들어 한 번 그려 둠 (처음 화면에 나올 때 멈칫하지 않게)
     const warm = () => {
       for (const ty in MONSTERS) {
@@ -171,6 +172,7 @@ const Game = {
     this.bonusCards = s.bonusCards || 0;
     p.quests = d.quests || {}; p.bounty = d.bounty || null; p.bountyDone = d.bountyDone || 0;
     p.freeSockets = d.freeSockets || 0; p.potionCap = d.potionCap || 0;
+    p.freeEnhance = d.freeEnhance || 0; p.gambleDiscount = d.gambleDiscount || 0;
     this.levelUpDelay = 1.5;
     this.dungeonWorld = null;
     Shop.buyback = [];
@@ -212,6 +214,7 @@ const Game = {
     const p = player, d = world.dungeon;
     const prevDeep = p.deepest || 1;
     p.deepest = Math.max(prevDeep, n);
+    Quests.onFloor(n);
     this.arrive(d.start.x, d.start.y);
     const nm = diffTag(world.diff);
     if (n >= FINAL_FLOOR) UI.banner(`${nm}최종층 · ${d.theme.name}`, `망자의 왕이 기다립니다 · 몬스터 레벨 ${world.mlvl}`);
@@ -368,7 +371,7 @@ const Game = {
         equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, charms: p.charms, elixirs: p.elixirs,
         playTime: Math.round(p.playTime || 0), deaths: p.deaths || 0, cleared: p.cleared || null,
         clearedNM: p.clearedNM || null, clearedHell: p.clearedHell || null, difficulty: p.difficulty || 0, deepestBy: this.deepestBy(),
-        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0,
+        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0, freeEnhance: p.freeEnhance || 0, gambleDiscount: p.gambleDiscount || 0,
       },
     };
     store.set(SAVE_KEY, JSON.stringify(data));

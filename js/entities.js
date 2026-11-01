@@ -710,6 +710,7 @@ function updateGround(dt) {
       g.z = Math.sin(k * Math.PI) * 40;
     }
     if (p.dead || g.t < 0.3) continue;
+    if (g.kind === 'qtoken' && dist(p.x, p.y, g.x, g.y) < 42) { Quests.onToken(g); world.ground.splice(i, 1); continue; }
     if ((g.kind === 'gold' || g.kind === 'potion') && dist(p.x, p.y, g.x, g.y) < 38) {
       if (g.kind === 'gold') { p.gold += g.amount; fxText(g.x, g.y, `+${g.amount} 골드`, '#e8c35a', 13, { z: 20 }); SFX.play('gold'); }
       else {
@@ -737,7 +738,7 @@ function pickupGround(g) {
     UI.refreshPanels();
     Game.dirty = true;
   } else {
-    // 금화/물약은 근처로 가면 자동으로 주움
+    // 금화/물약/퀘스트 물건은 근처로 가면 자동으로 주움
     g.t = Math.max(g.t, 0.3);
     p.x = lerp(p.x, g.x, 0.9); p.y = lerp(p.y, g.y, 0.9);
   }
@@ -745,7 +746,9 @@ function pickupGround(g) {
 
 function openChest(c) {
   if (c.open) return;
+  if (c.captive) { Quests.freeCaptive(c); return; }
   c.open = true;
+  Quests.onChest();
   SFX.play('chest');
   fxSprite('sparkle', c.x, c.y, { life: 1.2, fade: 0.5 });
   fxSparks(c.x, c.y, 20, 14, '#ffd27a', 120);
