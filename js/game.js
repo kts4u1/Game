@@ -37,6 +37,7 @@ const Game = {
 
   init() {
     try { Object.assign(this.settings, JSON.parse(store.get(SETTINGS_KEY) || '{}')); } catch (e) { /* 무시 */ }
+    GFX.init(this.settings.gfx);
     initRender($('game'));
     UI.init();
     bindInput();
@@ -68,13 +69,23 @@ const Game = {
     if (world.monsters.some(m => m.final)) sprites.push('skeleton_knight_boss');
     const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player)];
     if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) paths.push(FLARE.npcs[n.sprite].img);
-    if (paths.every(p => Assets.ready(p))) return;
+    // 색을 입힌 몬스터 그림, 그림자 실루엣, 타일 그림을 미리 만들어 한 번 그려 둠 (처음 화면에 나올 때 멈칫하지 않게)
+    const warm = () => {
+      for (const ty in MONSTERS) {
+        const T = MONSTERS[ty], fs = spriteSet('monsters', T.sprite);
+        if (T.color && fs && sprites.includes(T.sprite) && Assets.ready(fs.img)) warmCanvas(monsterAtlas({ color: T.color }, fs));
+      }
+      const ta = tileAtlas(world.dungeon);
+      if (ta && ta.getContext) warmCanvas(ta);
+      if (GFX.q.shadows === 2) {
+        const imgs = [...monsterAssetPaths(sprites), ...heroAssetPaths(player)];
+        if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) imgs.push(FLARE.npcs[n.sprite].img);
+        for (const pth of imgs) { const img = Assets.ready(pth) && Assets.get(pth); if (img) ShadowAtlas.make(img); }
+      }
+    };
+    if (paths.every(p => Assets.ready(p))) { warm(); return; }
     this.loading = true;
-    Assets.preload(paths).then(() => {
-      // 색을 입힌 몬스터 그림도 미리 만들어 둠 (처음 나올 때 멈칫하지 않게)
-      for (const m of world.monsters) { const fs = monsterSprite(m); if (fs && m.color) monsterAtlas(m, fs); }
-      this.loading = false;
-    });
+    Assets.preload(paths).then(() => { warm(); this.loading = false; });
     setTimeout(() => { this.loading = false; }, 8000);
   },
 
@@ -540,6 +551,7 @@ function updateHover() {
 let lastT = 0;
 function loop(ts) {
   const dt = Math.min(0.05, Math.max(0.001, (ts - lastT) / 1000 || 0.016));
+  if (lastT) GFX.tick(ts - lastT, Game.loading || document.hidden);
   lastT = ts;
   try {
     update(dt);

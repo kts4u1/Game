@@ -86,23 +86,8 @@ function fxRing(x, y, r0, r1, dur, color, width = 4, add = true) {
   FX.rings.push({ x, y, r0, r1, t: 0, dur, color, width, add });
 }
 function fxDecal(type, x, y, size = 1, color) {
-  const d = { type, x, y, size, color, rot: Math.random() * TAU, blobs: [] };
-  if (type === 'blood') for (let i = 0; i < 5; i++) d.blobs.push([rand(-10, 10) * size, rand(-10, 10) * size, rand(4, 10) * size]);
-  if (type === 'crack') {
-    // 중심에서 갈라지는 짧은 균열
-    const branches = randInt(4, 6);
-    for (let b = 0; b < branches; b++) {
-      let a = (b / branches) * TAU + rand(-0.4, 0.4);
-      let px = 0, py = 0, len = rand(9, 15) * size;
-      for (let s = 0; s < 3; s++) {
-        a += rand(-0.5, 0.5);
-        const nx = px + Math.cos(a) * len, ny = py + Math.sin(a) * len;
-        d.blobs.push([px, py, nx, ny, 2.4 - s * 0.7]);
-        px = nx; py = ny; len *= 0.72;
-      }
-    }
-  }
-  FX.decals.push(d);
+  // 모양은 그릴 때 미리 그려 둔 변형(v) 중 하나를 씀 (gfx.js GfxTex)
+  FX.decals.push({ type, x, y, size, color, v: Math.floor(Math.random() * 6) });
   if (FX.decals.length > 260) FX.decals.shift();
 }
 function fxBolt(points, color = '#bfe4ff') {
@@ -155,27 +140,22 @@ function updateFX(dt) {
 
 // 바닥에 붙는 효과 (조명 전, 엔티티보다 먼저)
 function drawFXGround(ctx) {
-  for (const d of FX.decals) {
+  // 바닥 자국: 미리 그려 둔 그림을 늘려 씀, 화면 밖은 건너뜀
+  const hw = R.W / 2 / R.zoom + 120, hh = R.H / 2 / R.zoom + 120;
+  const max = GFX.q.decals, D = FX.decals, start = Math.max(0, D.length - max);
+  for (let i = start; i < D.length; i++) {
+    const d = D[i];
     const sx = isoX(d.x, d.y), sy = isoY(d.x, d.y);
-    if (d.type === 'blood' || d.type === 'drop') {
+    if (Math.abs(sx - R.camX) > hw || Math.abs(sy - R.camY) > hh) continue;
+    if (d.type === 'drop') {
       ctx.fillStyle = d.color || 'rgba(70,6,8,.8)';
-      if (d.type === 'drop') { ctx.beginPath(); ctx.ellipse(sx, sy, 3 * d.size, 1.6 * d.size, 0, 0, TAU); ctx.fill(); continue; }
-      for (const b of d.blobs) {
-        ctx.beginPath(); ctx.ellipse(sx + isoX(b[0], b[1]), sy + isoY(b[0], b[1]), b[2] * 1.4, b[2] * 0.7, 0, 0, TAU); ctx.fill();
-      }
-    } else if (d.type === 'crack') {
-      ctx.strokeStyle = 'rgba(8,5,3,.85)';
-      ctx.lineCap = 'round';
-      for (const b of d.blobs) {
-        ctx.lineWidth = b[4];
-        ctx.beginPath(); ctx.moveTo(sx + isoX(b[0], b[1]), sy + isoY(b[0], b[1])); ctx.lineTo(sx + isoX(b[2], b[3]), sy + isoY(b[2], b[3])); ctx.stroke();
-      }
-    } else if (d.type === 'scorch') {
-      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 40 * d.size);
-      g.addColorStop(0, 'rgba(10,6,4,.8)'); g.addColorStop(1, 'rgba(10,6,4,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.ellipse(sx, sy, 40 * d.size, 20 * d.size, 0, 0, TAU); ctx.fill();
+      ctx.fillRect(sx - 2.5 * d.size, sy - 1.2 * d.size, 5 * d.size, 2.4 * d.size);
+      continue;
     }
+    const v = d.v != null ? d.v : (d.v = Math.floor(Math.random() * 6));
+    const img = d.type === 'blood' ? GfxTex.splat(d.color || 'rgba(70,6,8,.8)', v) : d.type === 'crack' ? GfxTex.crack(v % 4) : GfxTex.scorch();
+    const k = d.type === 'scorch' ? d.size * 0.85 : d.size;
+    ctx.drawImage(img, sx - 48 * k, sy - 24 * k, 96 * k, 48 * k);
   }
   for (const r of FX.rings) {
     if (r.add) continue;

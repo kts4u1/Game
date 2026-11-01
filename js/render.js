@@ -16,7 +16,8 @@ function initRender(canvas) {
 }
 
 function resizeRender() {
-  R.dpr = Math.min(1.5, window.devicePixelRatio || 1);
+  R.dpr = Math.min(GFX.q.dpr, window.devicePixelRatio || 1);
+  R.lightScale = GFX.q.light;
   R.W = window.innerWidth;
   R.H = window.innerHeight;
   R.canvas.width = Math.round(R.W * R.dpr);
@@ -288,6 +289,9 @@ function renderFrame(t, focus) {
   ctx.fillRect(0, 0, R.canvas.width, R.canvas.height);
   if (!world) return;
   const d = world.dungeon;
+  R.focus = focus;
+  Atmo.update(t, focus);
+  ShadowAtlas.step();
 
   // 카메라: 초점을 부드럽게 따라감
   const fx = isoX(focus.x, focus.y), fy = isoY(focus.x, focus.y) - 30;
@@ -397,6 +401,8 @@ function renderFrame(t, focus) {
   if (!atlas) for (const tc of d.torches) if (explored(tc.x, tc.y)) drawTorchBracket(ctx, tc);
   safeDraw(ctx, () => drawFXParticles(ctx));
   safeDraw(ctx, () => drawFXSprites(ctx, 'top'));
+  safeDraw(ctx, () => Atmo.draw(ctx, false));
+  safeDraw(ctx, () => drawFog(ctx, t));
 
   // 3) 조명
   safeDraw(ctx, () => drawLighting(t, focus));
@@ -410,11 +416,13 @@ function renderFrame(t, focus) {
     for (const pt of portalsOf(world)) drawPortalGlow(ctx, pt, t);
     if (d.outdoor) drawTownGlow(ctx, d, t);
     drawFXSprites(ctx, 'glow');
+    Atmo.draw(ctx, true);
     if (p && p.whirl) drawWhirlArcs(ctx, p, t);
     if (d.stairs.open && !d.stairs.none && explored(d.stairs.x, d.stairs.y)) drawStairsGlow(ctx, d.stairs, t);
   });
   ctx.globalCompositeOperation = 'source-over';
   safeDraw(ctx, () => drawFXAdditive(ctx, t));
+  safeDraw(ctx, () => drawBloom(ctx));
 
   // 5) 화면 좌표 오버레이
   setXform(ctx, dpr, dpr, 0, 0);
@@ -612,6 +620,11 @@ function drawPlayer(ctx, p, t) {
   }
   if (HAS_FLARE && Assets.ready(FLARE.hero.default_chest.img)) {
     if (p.z > 0) drawShadow(ctx, sx, sy, 17 * shadowK, 7 * shadowK);
+    else if (!p.dead) {
+      const cast = GFX.q.shadows ? shadowCast(p.x, p.y, true) : null;
+      drawBlobShadow(ctx, sx, sy, 14, cast);
+      if (cast && GFX.q.shadows === 2) drawHeroShadow(ctx, p, t, sx, sy, cast);
+    }
     ctx.save();
     if (HAS_FILTER) {
       if (p.hurtT > 0) ctx.filter = 'brightness(1.6) sepia(1) saturate(4) hue-rotate(-40deg)';
@@ -675,20 +688,27 @@ function drawMonster(ctx, m, t) {
   const sy = sy0 - (m.z || 0);
   if (!m.dead && m.tier > 0) {
     const col = m.tier === 1 ? '70,110,255' : m.tier === 2 ? '214,169,92' : '255,70,30';
-    const pulse = 0.35 + Math.sin(t * 4 + m.seed) * 0.12;
-    const g = ctx.createRadialGradient(sx, sy0, 2, sx, sy0, 34 * s);
-    g.addColorStop(0, `rgba(${col},${pulse})`); g.addColorStop(1, `rgba(${col},0)`);
-    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy0, 34 * s, 16 * s, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.35 + Math.sin(t * 4 + m.seed) * 0.12;
+    ctx.drawImage(GfxTex.glow(col), sx - 34 * s, sy0 - 17 * s, 68 * s, 34 * s);
+    ctx.globalAlpha = 1;
   }
   const fs = monsterSprite(m);
   if (fs && Assets.ready(fs.img)) {
     const [anim, idx, dir] = monsterPose(m, fs, t);
+    let alpha = 1;
+    if (m.dead && m.deadT > 6) alpha = Math.max(0, 1 - (m.deadT - 6) / 2);
+    if (m.dead && !fs.anims.die) alpha = Math.max(0, 1 - m.deadT / 0.6);  // 죽는 동작이 없으면 금방 사라짐
+    if (m.act && m.act.kind === 'emerge' && !fs.anims.spawn) alpha = Math.min(1, m.act.t / m.act.dur);
+    if (m.act && m.act.kind === 'burrow') alpha = Math.max(0.15, 1 - m.act.t / 0.35);
+    if (m.alpha < 1) alpha *= m.alpha;
+    // 그림자 (공중에 뜬 몬스터는 위의 둥근 그림자만)
+    if (!m.z && !m.air && alpha > 0.05) {
+      const cast = GFX.q.shadows ? shadowCast(m.x, m.y, false) : null;
+      drawBlobShadow(ctx, sx, sy0, m.r * Math.max(1, s * 0.9), cast, alpha * (m.alpha < 1 ? 0.5 : 1));
+      if (cast && GFX.q.shadows === 2 && m.alpha >= 1) drawSpriteShadow(ctx, fs, anim, dir, idx, sx, sy0, m.scale, cast, alpha);
+    }
     ctx.save();
-    if (m.dead && m.deadT > 6) ctx.globalAlpha = Math.max(0, 1 - (m.deadT - 6) / 2);
-    if (m.dead && !fs.anims.die) ctx.globalAlpha = Math.max(0, 1 - m.deadT / 0.6);  // 죽는 동작이 없으면 금방 사라짐
-    if (m.act && m.act.kind === 'emerge' && !fs.anims.spawn) ctx.globalAlpha = Math.min(1, m.act.t / m.act.dur);
-    if (m.act && m.act.kind === 'burrow') ctx.globalAlpha = Math.max(0.15, 1 - m.act.t / 0.35);
-    if (m.alpha < 1) ctx.globalAlpha *= m.alpha;
+    ctx.globalAlpha = alpha;
     if (HAS_FILTER && m.hitFlash > 0 && !m.dead) ctx.filter = 'brightness(2.4)';
     else if (HAS_FILTER && m.tint) ctx.filter = m.tint;
     drawSpriteFrame(ctx, fs, anim, dir, idx, sx, sy, m.scale, monsterAtlas(m, fs));
@@ -803,23 +823,6 @@ function collectLights(t, focus) {
   return lights;
 }
 
-function flatLightImage(c, k) {
-  const key = c.join(',') + ':' + k;
-  if (R.flatLight && R.flatLight.key === key) return R.flatLight.img;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = 256;
-  const x = cv.getContext('2d');
-  const g = x.createRadialGradient(128, 128, 0, 128, 128, 128);
-  g.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${k})`);
-  g.addColorStop(0.6, `rgba(${c[0]},${c[1]},${c[2]},${k})`);
-  g.addColorStop(0.82, `rgba(${c[0]},${c[1]},${c[2]},${k * 0.4})`);
-  g.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
-  x.fillStyle = g;
-  x.fillRect(0, 0, 256, 256);
-  R.flatLight = { key, img: cv };
-  return cv;
-}
-
 // 절반 해상도 '빛 지도'에 색이 있는 빛을 더한 뒤, 장면에 곱하기(multiply)로 한 번에 합성
 function drawLighting(t, focus) {
   const l = R.lctx, s = R.lightScale, ctx = R.ctx;
@@ -834,27 +837,14 @@ function drawLighting(t, focus) {
     const r = L.r * R.zoom;
     if (sp.x < -r || sp.y < -r || sp.x > R.W + r || sp.y > R.H + r) continue;
     const c = L.c || [255, 236, 214];
-    const k = L.i;
-    if (L.flat) {
-      // 넓은 빛은 미리 그려 둔 그림을 늘려 씀 (큰 그라디언트를 매 프레임 칠하면 느림)
-      const img = flatLightImage(c, k);
-      const rs = r * s;
-      l.drawImage(img, sp.x * s - rs, sp.y * s - rs * 0.62, rs * 2, rs * 1.24);
-      continue;
-    }
-    l.save();
-    l.translate(sp.x * s, sp.y * s);
-    l.scale(1, 0.62);
+    // 빛마다 그라디언트를 새로 만들지 않고, 색별로 미리 그려 둔 빛 그림을 세기(globalAlpha)만 바꿔 늘려 씀
     const rs = r * s;
-    const g = l.createRadialGradient(0, 0, 0, 0, 0, rs);
-    g.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${k})`);
-    if (L.flat) { g.addColorStop(0.6, `rgba(${c[0]},${c[1]},${c[2]},${k})`); g.addColorStop(0.82, `rgba(${c[0]},${c[1]},${c[2]},${k * 0.4})`); }
-    else g.addColorStop(0.45, `rgba(${c[0]},${c[1]},${c[2]},${k * 0.62})`);
-    g.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
-    l.fillStyle = g;
-    l.fillRect(-rs, -rs, rs * 2, rs * 2);
-    l.restore();
+    l.globalAlpha = Math.min(1, L.i);
+    l.drawImage(GfxTex.light(c, L.flat), sp.x * s - rs, sp.y * s - rs * 0.62, rs * 2, rs * 1.24);
   }
+  l.globalAlpha = 1;
+  drawCloudShadows(l, s, t, focus);
+  drawVignetteToLight(l, R.light.width, R.light.height);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'multiply';
   ctx.drawImage(R.light, 0, 0, R.canvas.width, R.canvas.height);
@@ -1083,9 +1073,14 @@ function drawNpc(ctx, n, t) {
   const set = spriteSet('npcs', n.sprite);
   const hov = Input.hover && Input.hover.ref === n;
   if (set && Assets.ready(set.img)) {
+    const [anim, idx, dir] = npcPose(n, set, t);
+    if (n.role !== 'gate') {
+      const cast = GFX.q.shadows ? shadowCast(n.x, n.y, false) : null;
+      drawBlobShadow(ctx, sx, sy, 14, cast);
+      if (cast && GFX.q.shadows === 2) drawSpriteShadow(ctx, set, anim, dir, idx, sx, sy, 1, cast);
+    }
     ctx.save();
     if (hov && HAS_FILTER) ctx.filter = 'brightness(1.3)';
-    const [anim, idx, dir] = npcPose(n, set, t);
     drawSpriteFrame(ctx, set, anim, dir, idx, sx, sy);
     ctx.restore();
     return;

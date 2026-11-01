@@ -57,6 +57,7 @@ const UI = {
     $('btn-resume').addEventListener('click', () => this.toggleMenu(false));
     $('btn-sound').addEventListener('click', () => this.toggleSound());
     $('btn-loot').addEventListener('click', () => Game.cycleLootFilter());
+    $('btn-gfx').addEventListener('click', () => { Game.settings.gfx = GFX.cycle(); Game.saveSettings(); this.syncMenu(); this.message(`그래픽: ${GFX.label()}`, '#e8d9a8'); });
     $('btn-quit').addEventListener('click', () => { Game.save(); this.toggleMenu(false); Game.toTitle(); });
 
     // 소지품 이벤트 위임
@@ -239,6 +240,7 @@ const UI = {
   syncMenu() {
     $('btn-sound').textContent = SFX.muted ? '소리 켜기 (M)' : '소리 끄기 (M)';
     $('btn-loot').textContent = `바닥 아이템: ${LOOT_FILTER_NAMES[Game.settings.lootFilter || 0]} (L)`;
+    $('btn-gfx').textContent = `그래픽: ${GFX.label()}`;
   },
 
   cellHtml(item, attrs, label) {
