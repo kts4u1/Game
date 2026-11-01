@@ -43,6 +43,7 @@ function spawnMonster(type, x, y, mlvl, tier = 0, opts = {}) {
     m.r = T.r * m.scale * 0.8; m.name = opts.name; m.pal = opts.pal || {}; m.atkRange += 22; m.windupDur *= 1.3; m.baseWindup = m.windupDur;
     if (m.final) { m.life *= 1.5; m.xp *= 3; m.dmg = m.dmg.map(d => d * 0.8); }
   }
+  if (T.scale) { m.scale *= T.scale; if (tier !== 3) m.r = T.r * Math.max(1, m.scale * 0.9); }
   for (const mod of m.mods) {
     if (mod === 'fast') { m.speed *= 1.35; m.atkCD *= 0.75; }
     if (mod === 'strong') m.dmg = m.dmg.map(d => d * 1.5);
@@ -813,6 +814,17 @@ function updateHazards(dt) {
       fxSparks(h.x, h.y, 20, 14, '#cbbcff', 160);
       world.flashes.push({ x: h.x, y: h.y, r: 260, life: 0.25, color: [170, 150, 255] });
       if (!p.dead && dist(p.x, p.y, h.x, h.y) < h.r + p.r) damagePlayer(h.dmg, h.src, { magic: true });
+      continue;
+    }
+    if (h.kind === 'boulder') {
+      // 바위가 떨어져 부서짐
+      SFX.play('boom');
+      const bs = spriteSet('monsters', 'boulder');
+      if (bs) fxSprite(null, h.x, h.y, { set: bs, anim: 'die', layer: 'top', scale: 0.6, dir: randInt(0, 7) });
+      fxDust(h.x, h.y, 20, '130,120,105', 140);
+      fxDecal('crack', h.x, h.y, 1.4);
+      fxShake(9);
+      if (!p.dead && dist(p.x, p.y, h.x, h.y) < h.r + p.r && damagePlayer(h.dmg, h.src, {})) p.slowT = Math.max(p.slowT, 0.8);
       continue;
     }
     if (h.kind === 'fire') {

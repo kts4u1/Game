@@ -66,6 +66,8 @@ MONSTERS = {
     'wyvern_air': (['stance', 'run', 'swing', 'die'], None, 0.55),
     'goblin_minecart': (['stance', 'run'], EMP, None),
     'wyvern_air_boss': (['stance', 'run', 'swing', 'die'], EMP, 0.38),
+    # 굴러떨어지는 바위 (바위 투척 미노타우로스의 투사체, 부서지는 동작)
+    'boulder': (['stance', 'die'], EMP, None),
 }
 # 마을 사람들 (서 있는 모습만)
 NPCS = {

@@ -83,6 +83,64 @@ function tryMonsterAbility(m, dp) {
           return true;
         }
         break;
+      case 'lunge':
+        // 도적: 짧은 거리를 순식간에 파고들어 찌름
+        if (dp > 90 && dp < 240 && m.hasLos) {
+          m.cd.lunge = rand(4, 6);
+          const a = angleTo(m.x, m.y, p.x, p.y);
+          castThen(m, 0.22, () => { m.act = { kind: 'charge', t: 0, a, left: dp + 30, hit: false, lunge: true }; });
+          return true;
+        }
+        break;
+      case 'heal': {
+        // 광신도·성기사: 가까운 다친 동료(자신 포함)를 치유
+        let best = null, low = 0.72;
+        for (const o of world.monsters) {
+          if (o.dead || o.hidden || o.type === 'grave' || dist(m.x, m.y, o.x, o.y) > 340) continue;
+          const k = o.life / o.maxLife;
+          if (k < low) { low = k; best = o; }
+        }
+        if (!best) break;
+        m.cd.heal = rand(6, 8);
+        m.castAnim = 'cast';
+        fxText(m.x, m.y, '치유', '#7dffa0', 14, { z: monsterHeight(m) });
+        castThen(m, 0.7, () => {
+          m.castAnim = null;
+          if (best.dead) return;
+          const amt = Math.round(best.maxLife * (m.type === 'paladin' ? 0.3 : 0.22));
+          best.life = Math.min(best.maxLife, best.life + amt);
+          fxSprite('heal', best.x, best.y, { follow: best, scale: 0.9 * best.scale });
+          fxText(best.x, best.y, `+${amt}`, '#7dffa0', 14, { z: monsterHeight(best) - 10 });
+          if (best !== m) fxBeam(best.x, best.y, '#7dffa0', 0.6);
+          SFX.play('revive', 0.6);
+        });
+        return true;
+      }
+      case 'cleave':
+        // 사형집행인: 앞쪽 넓은 범위를 표시한 뒤 크게 내려벰
+        if (dp < 170) {
+          m.cd.cleave = rand(5, 7);
+          const a = angleTo(m.x, m.y, p.x, p.y), hx = m.x + Math.cos(a) * 70, hy = m.y + Math.sin(a) * 70;
+          world.hazards.push({ x: hx, y: hy, r: 105, t: 0, delay: 0.95, dmg: m.dmg[1] * 1.7, src: m, kind: 'cleave', a });
+          m.facing = a;
+          fxText(m.x, m.y, '처형!', '#ff6a4a', 15, { z: monsterHeight(m) });
+          SFX.monster(m, 'ment');
+          castThen(m, 0.95, () => { m.atkTimer = Math.max(m.atkTimer, 0.9); fxSprite('cleave', hx, hy, { dir: flareDir(a), scale: 1.2 }); });
+          return true;
+        }
+        break;
+      case 'boulder':
+        // 바위 투척: 바위가 포물선을 그리며 날아와 표시된 곳에 떨어짐
+        if (dp > 160 && dp < 560 && m.hasLos) {
+          m.cd.boulder = rand(6, 8);
+          const tx = p.x + rand(-20, 20), ty = p.y + rand(-20, 20);
+          castThen(m, 0.6, () => {
+            world.hazards.push({ x: tx, y: ty, r: 90, t: 0, delay: 1.0, dmg: m.dmg[1] * 1.6, src: m, kind: 'boulder', fx: m.x, fy: m.y });
+            SFX.play('swing', 0.7);
+          });
+          return true;
+        }
+        break;
       case 'slam':
         if (dp < 520) {
           m.cd.slam = rand(5, 7);
@@ -91,9 +149,11 @@ function tryMonsterAbility(m, dp) {
           return true;
         }
         break;
+      case 'leap':
       case 'dive':
         if (dp > 120 && dp < 500 && m.hasLos) {
-          m.cd.dive = m.tier === 3 ? rand(6, 8) : rand(7, 10);
+          m.cd[ab] = m.tier === 3 ? rand(6, 8) : rand(7, 10);
+          if (ab === 'leap') fxText(m.x, m.y, '도약!', '#ff8a5a', 15, { z: monsterHeight(m) });
           const tx = p.x, ty = p.y, dur = 1.15;
           world.hazards.push({ x: tx, y: ty, r: m.tier === 3 ? 120 : 95, t: 0, delay: dur, dmg: m.dmg[1] * 1.4, src: m, kind: 'slam' });
           m.act = { kind: 'dive', t: 0, dur, sx: m.x, sy: m.y, tx, ty };
@@ -203,23 +263,23 @@ function updateMonsterAction(m, dt, dp) {
       return true;
     }
     case 'charge': {
-      const sp = 560 * dt;
+      const sp = (a.lunge ? 520 : 560) * dt;
       const moved = monsterStep(m, a.a, sp, dt);
       m.facing = a.a;
       a.left -= moved;
       if (chance(0.5)) fxDust(m.x, m.y, 1, '120,100,80', 40);
       if (!a.hit && !p.dead && dist(m.x, m.y, p.x, p.y) < m.r + p.r + 10) {
         a.hit = true;
-        if (damagePlayer(m.dmg[1] * 1.6, m, { melee: true })) {
-          d.moveCircle(p, Math.cos(a.a) * 50, Math.sin(a.a) * 50);
-          p.slowT = Math.max(p.slowT, 0.6);
-          fxShake(8);
+        if (damagePlayer(m.dmg[1] * (a.lunge ? 1.25 : 1.6), m, { melee: true })) {
+          d.moveCircle(p, Math.cos(a.a) * (a.lunge ? 20 : 50), Math.sin(a.a) * (a.lunge ? 20 : 50));
+          if (!a.lunge) { p.slowT = Math.max(p.slowT, 0.6); fxShake(8); }
         }
         SFX.monster(m, 'phys');
         m.act = null;
         m.atkTimer = 0.8;
         return true;
       }
+      if (a.lunge && (moved < sp * 0.3 || a.left <= 0 || a.t > 0.6)) { m.act = null; m.atkTimer = Math.min(m.atkTimer, 0.3); return true; }
       if (moved < sp * 0.3) {
         // 벽에 부딪혀 잠시 비틀거림
         m.act = null;

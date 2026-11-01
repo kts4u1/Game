@@ -399,6 +399,7 @@ function renderFrame(t, focus) {
   ctx.globalAlpha = 1;
   ctx.filter = 'none';
   if (!atlas) for (const tc of d.torches) if (explored(tc.x, tc.y)) drawTorchBracket(ctx, tc);
+  safeDraw(ctx, () => drawFlyingBoulders(ctx, t));
   safeDraw(ctx, () => drawFXParticles(ctx));
   safeDraw(ctx, () => drawFXSprites(ctx, 'top'));
   safeDraw(ctx, () => Atmo.draw(ctx, false));
@@ -513,11 +514,24 @@ function drawHazards(ctx, t) {
     if (h.t < 0) continue;  // 시차를 두고 떨어지는 공격은 차례가 올 때까지 표시하지 않음
     const k = clamp(h.t / h.delay, 0, 1);
     const sx = isoX(h.x, h.y), sy = isoY(h.x, h.y);
-    const col = h.kind === 'fire' ? '255,120,40' : h.kind === 'frost' ? '140,200,255' : h.kind === 'shock' ? '180,150,255' : '255,40,30';
+    const col = h.kind === 'fire' ? '255,120,40' : h.kind === 'frost' ? '140,200,255' : h.kind === 'shock' ? '180,150,255' : h.kind === 'boulder' ? '230,170,90' : '255,40,30';
     ctx.fillStyle = `rgba(${col},${0.12 + k * 0.2})`;
     ctx.beginPath(); ctx.ellipse(sx, sy, h.r * 1.414 * k, h.r * 0.707 * k, 0, 0, TAU); ctx.fill();
     ctx.strokeStyle = `rgba(${col},${0.5 + Math.sin(t * 20) * 0.2})`; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(sx, sy, h.r * 1.414, h.r * 0.707, 0, 0, TAU); ctx.stroke();
+  }
+}
+// 날아오는 바위 (캐릭터보다 위에): 던진 곳에서 표시된 곳까지 포물선, 굴러가듯 방향 그림을 바꿔 가며 그림
+function drawFlyingBoulders(ctx, t) {
+  for (const h of world.hazards) {
+    if (h.kind !== 'boulder' || h.t < 0) continue;
+    const k = clamp(h.t / h.delay, 0, 1);
+    const bs = spriteSet('monsters', 'boulder');
+    const bx = lerp(h.fx, h.x, k), by = lerp(h.fy, h.y, k), z = Math.sin(k * Math.PI) * 170 + (1 - k) * 60;
+    const gx = isoX(bx, by), gy = isoY(bx, by);
+    drawShadow(ctx, gx, gy, 26 * (0.6 + k * 0.4), 11 * (0.6 + k * 0.4), 0.35);
+    if (bs && Assets.ready(bs.img)) drawSpriteFrame(ctx, bs, 'stance', Math.floor(t * 14) % 8, 0, gx, gy - z + 26, 0.5);
+    else circle(ctx, gx, gy - z, 18, '#7a7066');
   }
 }
 
@@ -705,13 +719,17 @@ function drawMonster(ctx, m, t) {
     if (!m.z && !m.air && alpha > 0.05) {
       const cast = GFX.q.shadows ? shadowCast(m.x, m.y, false) : null;
       drawBlobShadow(ctx, sx, sy0, m.r * Math.max(1, s * 0.9), cast, alpha * (m.alpha < 1 ? 0.5 : 1));
-      if (cast && GFX.q.shadows === 2 && m.alpha >= 1) drawSpriteShadow(ctx, fs, anim, dir, idx, sx, sy0, m.scale, cast, alpha);
+      if (cast && GFX.q.shadows === 2 && m.alpha >= 1) {
+        if (MONSTERS[m.type].gear) drawLayeredShadow(ctx, humanLayers(m.type), anim, idx, dir, sx, sy0, m.scale, cast, alpha);
+        else drawSpriteShadow(ctx, fs, anim, dir, idx, sx, sy0, m.scale, cast, alpha);
+      }
     }
     ctx.save();
     ctx.globalAlpha = alpha;
     if (HAS_FILTER && m.hitFlash > 0 && !m.dead) ctx.filter = 'brightness(2.4)';
     else if (HAS_FILTER && m.tint) ctx.filter = m.tint;
-    drawSpriteFrame(ctx, fs, anim, dir, idx, sx, sy, m.scale, monsterAtlas(m, fs));
+    if (MONSTERS[m.type].gear) drawHumanLayers(ctx, m, anim, idx, dir, sx, sy);
+    else drawSpriteFrame(ctx, fs, anim, dir, idx, sx, sy, m.scale, monsterAtlas(m, fs));
     ctx.restore();
   } else {
     drawMonsterFallback(ctx, m, t, sx, sy);
@@ -729,7 +747,7 @@ function monsterHeight(m) { return (MONSTERS[m.type].h || 70) * m.scale * (m.spr
 
 // Flare 그림이 아직 없을 때 쓰는 코드 그림
 // 코드 그림이 없는 새 몬스터는 비슷한 모양으로 대신 그림
-const FALLBACK_DRAW = { cartGoblin: 'fallen', fireMage: 'shaman', iceMage: 'shaman', frostZombie: 'zombie', ghost: 'zombie', stormWyvern: 'brute', fossilAnt: 'wraith', fireGrave: 'skeleton', iceGrave: 'skeleton', fireBoneling: 'skeleton', iceBoneling: 'skeleton', stormKing: 'brute', deathKing: 'shaman', swarm: 'wraith', hobgoblin: 'fallen', hobArcher: 'fallen', darkZombie: 'zombie', thief: 'fallen', fireAnt: 'wraith', iceAnt: 'wraith', wyvern: 'brute', iceWyvern: 'brute', armorAnt: 'wraith', grave: 'skeleton', boneling: 'skeleton', knight: 'skeleton', lich: 'shaman', lichKing: 'shaman' };
+const FALLBACK_DRAW = { bandit: 'fallen', knifeThrower: 'fallen', axeThrower: 'fallen', cultist: 'shaman', fallenKnight: 'skeleton', executioner: 'skeleton', berserker: 'fallen', spectralKnight: 'zombie', paladin: 'skeleton', stoneBrute: 'brute', plagueSpawn: 'wraith', cartGoblin: 'fallen', fireMage: 'shaman', iceMage: 'shaman', frostZombie: 'zombie', ghost: 'zombie', stormWyvern: 'brute', fossilAnt: 'wraith', fireGrave: 'skeleton', iceGrave: 'skeleton', fireBoneling: 'skeleton', iceBoneling: 'skeleton', stormKing: 'brute', deathKing: 'shaman', swarm: 'wraith', hobgoblin: 'fallen', hobArcher: 'fallen', darkZombie: 'zombie', thief: 'fallen', fireAnt: 'wraith', iceAnt: 'wraith', wyvern: 'brute', iceWyvern: 'brute', armorAnt: 'wraith', grave: 'skeleton', boneling: 'skeleton', knight: 'skeleton', lich: 'shaman', lichKing: 'shaman' };
 function drawMonsterFallback(ctx, m, t, sx, sy) {
   const s = m.scale;
   if (!m.dead) drawShadow(ctx, sx, sy, m.r * 1.2, m.r * 0.5);
@@ -749,8 +767,8 @@ function drawMonsterFallback(ctx, m, t, sx, sy) {
   ctx.restore();
 }
 
-const PROJ_SPRITE = { axe: 'throw_axe', arrow: 'arrows', icicle: 'icicle', spit: 'spit', plasma: 'plasmaball', bolt: 'lightning', stone: 'stone' };
-const PROJ_SCALE = { axe: 0.9, icicle: 0.75, spit: 0.8, plasma: 0.6, bolt: 0.45, stone: 1 };
+const PROJ_SPRITE = { axe: 'throw_axe', knife: 'throw_knife', arrow: 'arrows', icicle: 'icicle', spit: 'spit', plasma: 'plasmaball', bolt: 'lightning', stone: 'stone' };
+const PROJ_SCALE = { axe: 0.9, knife: 0.8, icicle: 0.75, spit: 0.8, plasma: 0.6, bolt: 0.45, stone: 1 };
 
 function drawProjectile(ctx, pr, t) {
   const sx = isoX(pr.x, pr.y), sy = isoY(pr.x, pr.y);

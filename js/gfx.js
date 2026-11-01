@@ -278,29 +278,33 @@ function drawSpriteShadow(ctx, set, animName, dir, idx, sx, sy, scale, cast, alp
 }
 // 주인공은 장비 그림이 여러 겹이라, 작은 캔버스에 실루엣을 겹쳐 그린 뒤 한 번에 눕힘 (겹친 곳만 진해지지 않게)
 function drawHeroShadow(ctx, p, t, sx, sy, cast) {
+  const [anim, idx, dir] = heroPose(p, t);
+  drawLayeredShadow(ctx, heroLayers(p), anim, idx, dir, sx, sy, 1, cast, 1);
+}
+// 여러 겹 그림(주인공, 사람형 몬스터)의 실루엣 그림자
+function drawLayeredShadow(ctx, layers, anim, idx, dir, sx, sy, scale, cast, alpha) {
   const S = ShadowAtlas.scratch || (ShadowAtlas.scratch = document.createElement('canvas'));
-  if (S.width !== 320) { S.width = 320; S.height = 320; }
+  if (S.width !== 360) { S.width = 360; S.height = 360; }
   const x = S.getContext('2d');
-  x.clearRect(0, 0, 320, 320);
-  const layers = heroLayers(p), [anim, idx, dir] = heroPose(p, t);
+  x.clearRect(0, 0, 360, 360);
   let any = false;
   for (const slot of HERO_LAYER_ORDER[dir]) {
     let name = layers[slot];
-    if (name && !Assets.ready(FLARE.hero[name].img)) name = HERO_FALLBACK[slot];
+    if (name && (!FLARE.hero[name] || !Assets.ready(FLARE.hero[name].img))) name = HERO_FALLBACK[slot];
     if (!name) continue;
     const set = FLARE.hero[name], A = set.anims[anim] || set.anims.stance;
     const row = A && (A.f[dir] && A.f[dir][0] ? A.f[dir] : A.f[0]), fr = row && row[idx];
     const simg = fr && ShadowAtlas.get(Assets.get(set.img));
     if (!simg) continue;
-    const k = (2 / 3) / (set.scale || FLARE.scale);
-    x.drawImage(simg, fr[0] / 2, fr[1] / 2, fr[2] / 2, fr[3] / 2, 160 - fr[4] * k, 260 - fr[5] * k, fr[2] * k, fr[3] * k);
+    const k = (2 / 3) / (set.scale || FLARE.scale) * scale;
+    x.drawImage(simg, fr[0] / 2, fr[1] / 2, fr[2] / 2, fr[3] / 2, 180 - fr[4] * k, 300 - fr[5] * k, fr[2] * k, fr[3] * k);
     any = true;
   }
   if (!any) return;
   ctx.save();
   castMatrix(ctx, sx, sy, cast);
-  ctx.globalAlpha = cast.a;
-  ctx.drawImage(S, -160, -260);
+  ctx.globalAlpha = cast.a * alpha;
+  ctx.drawImage(S, -180, -300);
   ctx.restore();
 }
 

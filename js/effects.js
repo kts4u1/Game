@@ -13,15 +13,17 @@ const FX = {
 // layer: 'ground' 바닥(조명 전) · 'top' 캐릭터 위(조명 전) · 'glow' 빛나는 효과(조명 뒤 더하기 합성)
 // opts: dir(0~7), scale, scale1(끝 크기), life(초), alpha, fade(사라지는 시간), follow(따라갈 대상), z, speed
 function fxSprite(name, x, y, opts = {}) {
-  const set = typeof spriteSet === 'function' ? spriteSet('effects', name) : null;
+  const set = opts.set || (typeof spriteSet === 'function' ? spriteSet('effects', name) : null);
   if (!set) return null;
-  const a = set.anims.power;
+  const animName = opts.anim || 'power';
+  const a = set.anims[animName] || set.anims.power;
+  if (!a) return null;
   const speed = opts.speed || 1;
   const e = {
     set, a, x, y, z: opts.z || 0, t: 0, speed,
     dur: opts.life != null ? opts.life : a.dur / 1000 / speed,
     scale: opts.scale || 1, scale1: opts.scale1, dir: opts.dir || 0, layer: opts.layer || 'glow',
-    alpha: opts.alpha != null ? opts.alpha : 1, fade: opts.fade || 0, follow: opts.follow || null,
+    alpha: opts.alpha != null ? opts.alpha : 1, fade: opts.fade || 0, follow: opts.follow || null, anim: animName,
   };
   FX.sprites.push(e);
   if (FX.sprites.length > 180) FX.sprites.shift();
@@ -37,7 +39,7 @@ function drawFXSprites(ctx, layer) {
     if (e.fade) al *= clamp((e.dur - e.t) / e.fade, 0, 1);
     if (al <= 0.01) continue;
     ctx.globalAlpha = al;
-    drawSpriteFrame(ctx, e.set, 'power', e.dir, animIndex(e.a, e.t * 1000 * e.speed), isoX(e.x, e.y), isoY(e.x, e.y) - e.z, sc);
+    drawSpriteFrame(ctx, e.set, e.anim || 'power', e.dir, animIndex(e.a, e.t * 1000 * e.speed), isoX(e.x, e.y), isoY(e.x, e.y) - e.z, sc);
   }
   ctx.globalAlpha = 1;
 }

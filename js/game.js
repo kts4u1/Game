@@ -67,7 +67,11 @@ const Game = {
     // 소환되는 졸개 그림도 미리
     if (world.monsters.some(m => m.abil.includes('summon'))) sprites.push('skeleton_weak');
     if (world.monsters.some(m => m.final)) sprites.push('skeleton_knight_boss');
-    const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player)];
+    if (world.monsters.some(m => m.abil.includes('boulder'))) sprites.push('boulder');
+    const types = [...new Set(world.monsters.map(m => m.type))];
+    // 호위·소환으로 나중에 나오는 종류도 함께
+    for (const t of types.slice()) { const T = MONSTERS[t]; if (T.escort && !types.includes(T.escort)) types.push(T.escort); }
+    const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player), ...humanAssetPaths(types)];
     if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) paths.push(FLARE.npcs[n.sprite].img);
     // 색을 입힌 몬스터 그림, 그림자 실루엣, 타일 그림을 미리 만들어 한 번 그려 둠 (처음 화면에 나올 때 멈칫하지 않게)
     const warm = () => {
@@ -75,10 +79,19 @@ const Game = {
         const T = MONSTERS[ty], fs = spriteSet('monsters', T.sprite);
         if (T.color && fs && sprites.includes(T.sprite) && Assets.ready(fs.img)) warmCanvas(monsterAtlas({ color: T.color }, fs));
       }
+      // 색을 입힌 사람형: 부위마다 색을 입힌 그림
+      for (const t of types) {
+        const T = MONSTERS[t];
+        if (!T.gear || !T.color) continue;
+        for (const n of Object.values(humanLayers(t))) {
+          const set = n && FLARE.hero[n];
+          if (set && Assets.ready(set.img)) warmCanvas(Assets.tintedAtlas(set.img, `rgb(${T.color[0]},${T.color[1]},${T.color[2]})`));
+        }
+      }
       const ta = tileAtlas(world.dungeon);
       if (ta && ta.getContext) warmCanvas(ta);
       if (GFX.q.shadows === 2) {
-        const imgs = [...monsterAssetPaths(sprites), ...heroAssetPaths(player)];
+        const imgs = [...monsterAssetPaths(sprites), ...heroAssetPaths(player), ...humanAssetPaths(types)];
         if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) imgs.push(FLARE.npcs[n.sprite].img);
         for (const pth of imgs) { const img = Assets.ready(pth) && Assets.get(pth); if (img) ShadowAtlas.make(img); }
       }

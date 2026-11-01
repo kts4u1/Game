@@ -41,6 +41,8 @@
 | 고블린, 고블린 약탈자, 개미귀신, 새끼 개미귀신, 불개미, 서리 개미 | `enemies/goblin`, `goblin_elite`, `antlion`, `antlion_small`, `fire_ant`, `ice_ant` |
 | 미노타우로스, 화염·독·서리·폭풍 비룡, 저주받은 무덤 | `enemies/minotaur`, `wyvern_fire`, `wyvern`, `wyvern_water`, `wyvern_air`, `cursed_grave` |
 | 광차 고블린, 폭풍의 비룡왕 | `empyrean_campaign/enemies/goblin_minecart`, `wyvern_air_boss` |
+| 바위 투척 미노타우로스의 바위 | `empyrean_campaign/enemies/boulder` |
+| 사람형 적(도적, 투척수, 광신도, 기사, 사형집행인, 광전사, 망령 기사, 성기사) | 주인공 장비 레이어 `avatar/male` (가죽·사슬·판금 갑옷, 무기, 방패)에 색을 입혀 겹쳐 그림 |
 | 홉고블린, 홉고블린 궁수, 어둠의 망자, 갑각 개미귀신 | `empyrean_campaign/enemies/hobgoblin`, `hobgoblin_archer`, `zombie_dark`, `antlion_armored` |
 | 해골 기사, 해골 대마법사, 해골왕 (보스) | `empyrean_campaign/enemies/skeleton_knight_boss`, `skeleton_mage_boss`, `skeleton_mage_high_boss` |
 | 마을 사람, 오벨리스크 | `npcs/guild_man`, `knight`, `peasant_man1`, `peasant_man2`, `peasant_woman1`, `peasant_woman2`, `wandering_trader`, `return_obelisk1`, `empyrean_campaign/npcs/peddler_goblin` |

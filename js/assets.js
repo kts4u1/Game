@@ -182,7 +182,32 @@ function drawHeroFlare(ctx, p, t, x, y) {
 }
 
 // ── 몬스터 ──
-function monsterSprite(m) { return spriteSet('monsters', m.sprite || MONSTERS[m.type].sprite); }
+function monsterSprite(m) {
+  // 사람형은 주인공 몸 그림의 동작(서기·달리기·휘두르기·시전·죽음)을 기준으로 씀
+  if (MONSTERS[m.type].gear) return HAS_FLARE ? FLARE.hero.default_chest : null;
+  return spriteSet('monsters', m.sprite || MONSTERS[m.type].sprite);
+}
+// 사람형 몬스터의 부위별 그림 (없는 부위는 맨몸)
+function humanLayers(type) { return Object.assign({}, HERO_FALLBACK, MONSTERS[type].gear || {}); }
+function humanAssetPaths(types) {
+  const out = new Set();
+  for (const t of types) {
+    if (!MONSTERS[t] || !MONSTERS[t].gear) continue;
+    for (const n of Object.values(humanLayers(t))) if (n && FLARE.hero[n]) out.add(FLARE.hero[n].img);
+  }
+  return [...out];
+}
+// 부위를 주인공과 같은 순서로 겹쳐 그림. 색이 있으면 부위마다 색을 입힌 그림을 씀
+function drawHumanLayers(ctx, m, anim, idx, dir, x, y) {
+  const L = humanLayers(m.type), col = m.color ? `rgb(${m.color[0]},${m.color[1]},${m.color[2]})` : null;
+  for (const slot of HERO_LAYER_ORDER[dir]) {
+    const name = L[slot];
+    if (!name) continue;
+    const set = FLARE.hero[name];
+    if (!set || !Assets.ready(set.img)) continue;
+    drawSpriteFrame(ctx, set, anim, dir, idx, x, y, m.scale, col ? Assets.tintedAtlas(set.img, col) : null);
+  }
+}
 // Flare의 color_mod처럼 그림 전체에 색을 곱한 아틀라스 (처음 한 번만 만들고 재사용)
 function monsterAtlas(m, set) {
   if (!m.color) return null;
@@ -191,7 +216,8 @@ function monsterAtlas(m, set) {
 
 function monsterPose(m, set, t) {
   const dir = flareDir(m.facing);
-  const atk = set.anims.swing ? 'swing' : set.anims.shoot ? 'shoot' : 'cast';
+  const atkAnim = MONSTERS[m.type].atkAnim;
+  const atk = (m.castAnim && m.windup > 0 && set.anims[m.castAnim] ? m.castAnim : null) || atkAnim || (set.anims.swing ? 'swing' : set.anims.shoot ? 'shoot' : 'cast');
   const A = set.anims;
   // 죽는 동작이 없는 그림(광차 고블린 등)은 서 있는 모습으로 두고 render.js에서 사라지게 함
   if (m.dead) return A.die ? ['die', animIndex(A.die, m.deadT * 1000, true), dir] : ['stance', 0, dir];

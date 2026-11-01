@@ -49,6 +49,7 @@ const MONSTER_SOUND = {
   antlion_small: 'antlion', antlion_armored: 'antlion', fire_ant: 'antlion', ice_ant: 'antlion',
   wyvern: 'wyvern', wyvern_water: 'wyvern', cursed_grave: 'grave',
   wyvern_air: 'wyvern', wyvern_air_boss: 'wyvern', goblin_minecart: 'goblin',
+  human: 'male',  // 사람형 적: 주인공과 같은 맞는·죽는 소리
 };
 
 const SFX = {
@@ -152,6 +153,7 @@ const SFX = {
     const base = MONSTER_SOUND[m.sprite];
     let key = base && `${base}_${kind}`;
     if (base === 'grave' && (kind === 'ment' || kind === 'phys')) key = 'grave_attack';
+    if (base === 'male' && kind === 'phys') key = pick(['swing1', 'swing2', 'swing3']);
     if (key && !this.buffers[key] && kind === 'critdie') key = `${base}_die`;
     const gap = kind === 'hit' ? 0.18 : kind === 'ment' ? 1.2 : 0.06;
     if (!this.gate('m:' + key, gap)) return;
