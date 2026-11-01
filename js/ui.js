@@ -107,6 +107,15 @@ const UI = {
     set('pot', p.potions, v => { this.el['potion-slot'].querySelector('.count').textContent = v; this.el['potion-slot'].classList.toggle('empty', v === 0); });
     set('lowlife', lifeK < 0.3, v => this.el['orb-life'].classList.toggle('low', v));
     set('shopopen', !this.el['shop-panel'].hidden && !this.el['inv-panel'].hidden, v => document.body.classList.toggle('shop-open', v));
+    // 퀘스트 진행 표시
+    this.questT = (this.questT || 0) - dt;
+    if (this.questT <= 0) {
+      this.questT = 0.25;
+      const lines = Quests.trackerLines();
+      set('qtrack', lines.map(l => l.text + (l.ready ? '!' : '')).join('|'), () => {
+        $('quest-track').innerHTML = lines.map(l => `<li class="${l.ready ? 'ready' : ''}">${escapeHtml(l.text)}</li>`).join('');
+      });
+    }
     // 스킬 슬롯
     p.hotbar.forEach((id, i) => {
       const b = this.el.slotBtns[i];
@@ -225,7 +234,7 @@ const UI = {
     this.selected = null;
     Shop.render();
     // 웨이포인트 창 말고는 소지품도 함께 엶
-    if (Shop.npc.role !== 'gate') { this.el['inv-panel'].hidden = false; this.renderInventory(); }
+    if (Shop.npc.role !== 'gate' && Shop.npc.role !== 'talk') { this.el['inv-panel'].hidden = false; this.renderInventory(); }
   },
   closePanels() {
     this.moveFrom = null;
@@ -480,7 +489,9 @@ const UI = {
     this.el['char-panel'].querySelector('.panel-body').innerHTML = `
       <dl class="stats">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>
       <h3>스킬</h3>
-      <ul class="skill-list">${skills}</ul>`;
+      <ul class="skill-list">${skills}</ul>
+      <h3>퀘스트</h3>
+      <ul class="quest-list">${Quests.logHtml()}</ul>`;
   },
 
   skillTooltip(i, b) {
@@ -511,11 +522,11 @@ const UI = {
   hideTooltip() { this.el.tooltip.hidden = true; },
 
   // ── 레벨업 카드 ──
-  showLevelUp(cards, first) {
+  showLevelUp(cards, first, quest) {
     const p = player;
     const lu = this.el.levelup;
     this.cards = cards;
-    lu.querySelector('.lu-eyebrow').textContent = first ? '모험의 시작' : `레벨 ${p.level - Game.pendingLevels + 1} 달성`;
+    lu.querySelector('.lu-eyebrow').textContent = first ? '모험의 시작' : quest ? '퀘스트 보상' : `레벨 ${p.level - Game.pendingLevels + 1} 달성`;
     lu.querySelector('.lu-title').textContent = first ? '첫 번째 기술을 고르세요' : '기술 하나를 고르세요';
     lu.querySelector('.lu-cards').innerHTML = cards.map((id, i) => {
       if (id.startsWith('_')) {

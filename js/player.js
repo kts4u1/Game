@@ -5,7 +5,7 @@ function createPlayer() {
   const p = {
     x: 0, y: 0, r: 14, z: 0, facing: 0.8, level: 1, xp: 0, life: 100, fury: 50, gold: 0, potions: 3, bonusLife: 0,
     skills: {}, hotbar: [null, null, null, null, null, null], cds: {}, difficulty: 0, deepestBy: [1, 1, 1], bonusDmg: 0, bonusArmor: 0,
-    frenzy: { n: 0, t: 0 }, rampage: { n: 0, t: 0 }, rush: null,
+    frenzy: { n: 0, t: 0 }, rampage: { n: 0, t: 0 }, rush: null, quests: {}, bounty: null, bountyDone: 0, freeSockets: 0, potionCap: 0,
     equipment: { weapon: null, shield: null, helm: null, amulet: null, armor: null, ring1: null, ring2: null, gloves: null, belt: null, boots: null },
     inventory: new Array(40).fill(null), stash: new Array(STASH_SIZE).fill(null), charms: new Array(CHARM_SLOTS).fill(null), elixirs: {}, poisonT: 0, poisonDps: 0,
     walkPhase: 0, moving: false, attack: null, leap: null, whirl: null, pose: null, poseT: 0, poseDur: 0,
@@ -783,8 +783,8 @@ function afterEquipChange(item) {
 // 양손 무기와 방패는 함께 들 수 없으므로 다른 쪽은 가방 빈칸으로
 function equipInto(loc, key) {
   const p = player, it = itemAt(loc);
-  if (it && (it.slot === 'gem' || it.slot === 'charm')) {
-    UI.message(it.slot === 'gem' ? '보석은 소켓이 있는 장비 위로 끌어다 놓으면 박힙니다' : '부적은 가방에 넣어 두기만 하면 효과가 있습니다', '#c9c1b3');
+  if (it && (it.slot === 'gem' || it.slot === 'charm' || it.slot === 'quest')) {
+    UI.message(it.slot === 'gem' ? '보석은 소켓이 있는 장비 위로 끌어다 놓으면 박힙니다' : it.slot === 'quest' ? '퀘스트 물건입니다. 부탁한 사람에게 가져가세요' : '부적은 부적 주머니에 넣으면 효과가 있습니다', '#c9c1b3');
     return false;
   }
   if (!it || !fitsKey(it, key)) return false;
@@ -906,6 +906,7 @@ function sellInventory(idx) {
   const p = player;
   const item = p.inventory[idx];
   if (!item) return;
+  if (item.slot === 'quest') { UI.message('퀘스트 물건은 팔 수 없습니다', '#ff7a6a'); SFX.play('nope'); return; }
   p.gold += item.value;
   Shop.addBuyback(item);
   p.inventory[idx] = null;
@@ -917,6 +918,7 @@ function dropInventory(idx) {
   const p = player;
   const item = p.inventory[idx];
   if (!item) return;
+  if (item.slot === 'quest') { UI.message('퀘스트 물건은 버릴 수 없습니다', '#ff7a6a'); SFX.play('nope'); return; }
   p.inventory[idx] = null;
   const g = spawnGround('item', p.x, p.y, { item });
   g.t = 0.2;
@@ -934,7 +936,7 @@ function sellAllNormal() {
 function potionPrice() { return 25 + ((player && player.deepest) || 1) * 5; }
 function buyPotion() {
   const p = player, price = potionPrice();
-  if (p.potions >= MAX_POTIONS) { UI.message(`물약은 ${MAX_POTIONS}개까지 들 수 있습니다`, '#c9c1b3'); return; }
+  if (p.potions >= maxPotions()) { UI.message(`물약은 ${maxPotions()}개까지 들 수 있습니다`, '#c9c1b3'); return; }
   if (p.gold < price) { UI.message('골드가 부족합니다', '#ff7a6a'); SFX.play('nope'); return; }
   p.gold -= price;
   p.potions++;
@@ -983,7 +985,7 @@ function learnSkill(id) {
   else if (id === '_gold') p.gold += bonusGoldAmount(p.level);
   else if (id === '_might') p.bonusDmg = (p.bonusDmg || 0) + 3;
   else if (id === '_guard') p.bonusArmor = (p.bonusArmor || 0) + 5;
-  else if (id === '_potion') p.potions = Math.min(MAX_POTIONS, p.potions + 3);
+  else if (id === '_potion') p.potions = Math.min(maxPotions(), p.potions + 3);
   else {
     p.skills[id] = (p.skills[id] || 0) + 1;
     if (SKILLS[id].type === 'active' && !p.hotbar.includes(id)) {

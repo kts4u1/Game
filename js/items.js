@@ -271,6 +271,13 @@ function itemTooltipHtml(item, opts = {}) {
   const col = item.slot === 'gem' ? GEM_TYPES[item.gem].color : RARITY[item.rarity].color;
   const lines = [];
   if (opts.header) lines.push(`<div class="tt-header">${opts.header}</div>`);
+  if (item.slot === 'quest') {
+    lines.push(`<div class="tt-name" style="color:${col}">${escapeHtml(item.name)}</div>`);
+    lines.push(`<div class="tt-type">퀘스트 물건</div>`);
+    if (item.flavor) lines.push(`<div class="tt-flavor">“${escapeHtml(item.flavor)}”</div>`);
+    lines.push(`<div class="tt-flavor">부탁한 사람에게 가져가세요. 팔거나 버릴 수 없습니다.</div>`);
+    return lines.join('');
+  }
   if (item.slot === 'gem') {
     const [ws, wv] = gemStat(item, 'weapon'), [as, av] = gemStat(item, 'armor');
     lines.push(`<div class="tt-name" style="color:${col}">${escapeHtml(item.name)}</div>`);

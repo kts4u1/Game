@@ -460,12 +460,17 @@ class Dungeon {
     return best;
   }
 
-  nearestWalkable(tx, ty) {
+  // 막힌 칸 둘레에서 걸을 수 있는 가장 가까운 칸. 같은 거리면 출발점(fx, fy 칸)에 가까운 쪽 (상인 뒤로 돌아가지 않게)
+  nearestWalkable(tx, ty, fx, fy) {
     if (this.walkable(tx, ty)) return { tx, ty };
     for (let r = 1; r < 6; r++) {
+      let best = null, bd = Infinity;
       for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-        if (this.walkable(tx + dx, ty + dy)) return { tx: tx + dx, ty: ty + dy };
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || !this.walkable(tx + dx, ty + dy)) continue;
+        const d = (fx == null ? 0 : (tx + dx - fx) ** 2 + (ty + dy - fy) ** 2) + (dx * dx + dy * dy) * 0.01;
+        if (d < bd) { bd = d; best = { tx: tx + dx, ty: ty + dy }; }
       }
+      if (best) return best;
     }
     return null;
   }
@@ -473,7 +478,7 @@ class Dungeon {
   // A* 길찾기 (8방향, 대각선은 모서리 통과 금지)
   findPath(sx, sy, gx, gy) {
     const s = { tx: Math.floor(sx / TILE), ty: Math.floor(sy / TILE) };
-    let g = this.nearestWalkable(Math.floor(gx / TILE), Math.floor(gy / TILE));
+    let g = this.nearestWalkable(Math.floor(gx / TILE), Math.floor(gy / TILE), s.tx, s.ty);
     if (!g || !this.walkable(s.tx, s.ty)) return null;
     const W = this.w;
     const N = W * this.h;

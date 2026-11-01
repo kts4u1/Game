@@ -291,6 +291,26 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .card:nth-child(2) { animation-delay: .06s; }
 .card:nth-child(3) { animation-delay: .12s; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(16px); } }
+/* 퀘스트 */
+#quest-track { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+#quest-track li { font-size: 12px; color: #e8dcc0; text-shadow: 0 1px 2px #000, 0 0 3px #000; }
+#quest-track li::before { content: "◆ "; color: #c9a040; }
+#quest-track li.ready { color: #fff27a; font-weight: 700; }
+.quest-box { margin: 10px 0; padding: 12px 14px; background: rgba(20, 15, 10, .8); border: 1px solid #5a4630; border-radius: 4px; }
+.quest-box.bounty { border-color: #6a3a2a; }
+.quest-label { font-size: 11px; letter-spacing: .12em; color: #c9a040; }
+.quest-name { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: #f3e6c8; margin: 2px 0 6px; }
+.quest-text { margin: 0 0 8px; color: var(--ink-dim); line-height: 1.7; font-size: 13.5px; }
+.quest-goal { color: #e8dcc0; font-size: 13px; }
+.quest-reward { color: var(--gold); font-size: 13px; margin: 2px 0 10px; }
+.quest-sub { margin-top: 8px; font-size: 11px; color: var(--ink-faint); }
+.quest-box button { min-height: 36px; padding: 0 16px; }
+.quest-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.quest-row { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #2a2118; }
+.quest-row small { color: var(--ink-faint); }
+.quest-row span { margin-left: auto; color: #e8dcc0; }
+.quest-row.ready span { color: #fff27a; font-weight: 700; }
+.quest-row.done { opacity: .55; }
 /* 부적 주머니 */
 .charm-pouch .cell { background: #120e16; border-color: #3e3248; }
 .charm-pouch .cell .cell-label { color: #8a7aa0; }
@@ -380,6 +400,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   #bar { padding: 6px; }
   #topinfo { max-width: 50vw; }
   #floor-name { font-size: 15px; }
+  #quest-track li { font-size: 11px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .card, #banner.show, .orb-fill::before, .orb.low { animation: none; }

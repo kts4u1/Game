@@ -479,6 +479,7 @@ function killMonster(m) {
   p.kills++;
   gainXp(m.xp);
   if (s.killLife) healPlayer(s.killLife);
+  Quests.onKill(m);
   // 학살: 처치할 때마다 피해·공격 속도 중첩
   const rl = effLevel(p, 'rampage');
   if (rl && !m.summoned) { const rv = SKILLS.rampage.vals(rl); p.rampage.n = Math.min(rv.stacks, p.rampage.n + 1); p.rampage.t = rv.dur; recalcStats(p); }
@@ -712,7 +713,7 @@ function updateGround(dt) {
     if ((g.kind === 'gold' || g.kind === 'potion') && dist(p.x, p.y, g.x, g.y) < 38) {
       if (g.kind === 'gold') { p.gold += g.amount; fxText(g.x, g.y, `+${g.amount} 골드`, '#e8c35a', 13, { z: 20 }); SFX.play('gold'); }
       else {
-        if (p.potions >= MAX_POTIONS) continue;
+        if (p.potions >= maxPotions()) continue;
         p.potions++; fxText(g.x, g.y, '생명력 물약', '#ff6b6b', 13, { z: 20 }); SFX.play('pickup');
       }
       world.ground.splice(i, 1);
@@ -730,6 +731,7 @@ function pickupGround(g) {
     p.inventory[slot] = g.item;
     world.ground.splice(idx, 1);
     SFX.play('pickup');
+    Quests.onPickup(g.item);
     if (g.item.rarity >= 2) SFX.synth(g.item.rarity >= 3 ? 'unique' : 'rare');
     UI.message(`${itemName(g.item)} 획득`, RARITY[g.item.rarity].color);
     UI.refreshPanels();

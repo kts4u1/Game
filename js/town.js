@@ -145,8 +145,13 @@ const Town = {
     const p = player;
     n.facing = angleTo(n.x, n.y, p.x, p.y);
     if (n.voice) SFX.voice(pick(n.voice));
+    // 새 퀘스트·보고할 퀘스트가 있으면 퀘스트 창부터
+    if (Quests.mark(n)) { Shop.open(n, 'quest'); return; }
+    const qa = Quests.forNpc(n).active;
+    if (n.role === 'talk' && qa) { n.say = { text: `${qa.name} — ${Quests.progressText(qa)}`, t: 5 }; if (n.id !== 'captain') return; }
     switch (n.role) {
       case 'talk':
+        if (n.id === 'captain' && Quests.bountyOpen()) { Shop.open(n, 'quest'); break; }
         n.lineIdx = ((n.lineIdx == null ? -1 : n.lineIdx) + 1) % n.lines.length;
         n.say = { text: n.lines[n.lineIdx], t: 6 };
         break;
@@ -188,7 +193,7 @@ const Shop = {
   canEnhance(it) { return !!it && (it.dmg || it.def !== undefined) && (it.plus || 0) < 10; },
   enhanceCost(it) { return Math.round((40 + it.ilvl * 12) * Math.pow((it.plus || 0) + 1, 1.5)); },
   canAddSocket(it) { return !!it && !!SOCKET_MAX[it.slot] && (it.sockets || 0) < SOCKET_MAX[it.slot]; },
-  socketCost(it) { return Math.round((200 + it.ilvl * 30) * Math.pow((it.sockets || 0) + 1, 1.6)); },
+  socketCost(it) { return player.freeSockets > 0 ? 0 : Math.round((200 + it.ilvl * 30) * Math.pow((it.sockets || 0) + 1, 1.6)); },
   combineCost(grade) { return 100 * (grade + 1) * (grade + 1); },
   // 가방 속 보석을 종류·등급별로 묶음
   gemGroups() {
@@ -198,7 +203,9 @@ const Shop = {
   },
   addSocket() {
     const it = this.target;
+    const free = player.freeSockets > 0;
     if (!this.canAddSocket(it) || !this.pay(this.socketCost(it))) return;
+    if (free) player.freeSockets--;
     it.sockets = (it.sockets || 0) + 1;
     it.gems = it.gems || [];
     finalizeItem(it);
@@ -235,12 +242,12 @@ const Shop = {
     if (this.buyback.length > 8) this.buyback.pop();
   },
 
-  open(npc) {
+  open(npc, tab) {
     this.npc = npc;
     this.sel = null;
     this.target = null;
     this.lastGamble = null;
-    this.tab = { smith: 'buy', refiner: 'reroll' }[npc.role] || npc.role;
+    this.tab = tab || { smith: 'buy', refiner: 'reroll' }[npc.role] || npc.role;
     if (npc.greet) UI.message(`${npc.name}: "${pick(npc.greet)}"`, '#e8d9a8');
     UI.openShop();
   },
@@ -333,7 +340,7 @@ const Shop = {
     fxSparks(player.x, player.y, 40, 24, RARITY[it.rarity].color, 160);
     UI.message(`승급 완료: ${itemName(it)}`, RARITY[it.rarity].color);
   },
-  buyPotions(n) { for (let i = 0; i < n; i++) { if (player.potions >= MAX_POTIONS) break; const g = player.gold; buyPotion(); if (player.gold === g) break; } },
+  buyPotions(n) { for (let i = 0; i < n; i++) { if (player.potions >= maxPotions()) break; const g = player.gold; buyPotion(); if (player.gold === g) break; } },
   buyElixir(id) {
     const E = ELIXIRS[id];
     if (!this.pay(E.price(this.level()))) return;
@@ -377,6 +384,9 @@ const Shop = {
       smith: [['buy', '사기 · 팔기'], ['enhance', '강화'], ['socket', '소켓 · 보석']],
       refiner: [['reroll', '재련'], ['upgrade', '승급']],
     }[n.role] || [];
+    // 퀘스트를 주는 사람은 '퀘스트' 탭 (말만 하는 사람은 퀘스트 탭만)
+    if (Quests.hasContent(n) && n.role !== 'talk') tabs.push(['quest', `퀘스트${Quests.mark(n) ? ' ' + Quests.mark(n) : ''}`]);
+    if (n.role === 'talk' && tabs.length === 0) this.tab = 'quest';
     panel.querySelector('.shop-tabs').innerHTML = tabs.map(([id, label]) => `<button data-tab="${id}" class="${this.tab === id ? 'on' : ''}">${label}</button>`).join('');
     panel.querySelector('.shop-tabs').hidden = !tabs.length;
     // 보관함: 쪽 선택 (쪽마다 48칸)
@@ -395,6 +405,12 @@ const Shop = {
       panel.querySelector('.shop-tabs').hidden = false;
     }
     let body = '', foot = '';
+    if (this.tab === 'quest') {
+      const q = Quests.panelHtml(n);
+      panel.querySelector('.panel-body').innerHTML = q.body;
+      panel.querySelector('.panel-foot').innerHTML = q.foot;
+      return;
+    }
     const gold = `<div class="inv-meta"><span>${n.role === 'stash' ? `보관함 ${p.stash.filter(Boolean).length} / ${p.stash.length}` : '가진 골드'}</span><span class="gold">${p.gold.toLocaleString()} 골드</span></div>`;
     const cell = (it, attrs, price, target) => {
       const mv = target && UI.moveFrom ? ' move-target' : '';
@@ -448,7 +464,7 @@ const Shop = {
     } else if (n.role === 'healer') {
       const pp = potionPrice();
       body = gold + `<ul class="shop-list">
-        <li><span class="sl-icon">${iconHtml(ICON_POTION)}</span><div class="sl-main"><div class="sl-name">생명력 물약</div><div class="sl-desc">생명력의 45%를 회복합니다. 가진 수 ${p.potions} / ${MAX_POTIONS}</div></div>
+        <li><span class="sl-icon">${iconHtml(ICON_POTION)}</span><div class="sl-main"><div class="sl-name">생명력 물약</div><div class="sl-desc">생명력의 45%를 회복합니다. 가진 수 ${p.potions} / ${maxPotions()}</div></div>
           <div class="sl-btns"><button data-act="potion1">1개 <small>${pp}</small></button><button data-act="potion5">5개 <small>${pp * 5}</small></button></div></li>
         ${Object.entries(ELIXIRS).map(([id, E]) => {
           const left = p.elixirs[id] > 0 ? ` <em>남은 시간 ${Math.ceil(p.elixirs[id] / 60)}분</em>` : '';
@@ -498,6 +514,8 @@ const Shop = {
   onClick(e) {
     if (Drag.justDropped && performance.now() - Drag.justDropped < 350) return;
     const t = e.target;
+    const qa = t.closest('[data-qact]');
+    if (qa) { Quests.onClick(qa.dataset.qact); return this.refresh(); }
     const sp = t.closest('[data-spage]');
     if (sp) { this.stashPage = +sp.dataset.spage; this.sel = null; return this.refresh(); }
     const cb = t.closest('[data-combine]');

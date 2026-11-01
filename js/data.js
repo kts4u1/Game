@@ -11,7 +11,7 @@ const RARITY = [
 
 const SLOT_NAMES = {
   weapon: '무기', shield: '방패', helm: '투구', armor: '갑옷', gloves: '장갑',
-  boots: '장화', belt: '허리띠', ring: '반지', amulet: '목걸이', charm: '부적', gem: '보석',
+  boots: '장화', belt: '허리띠', ring: '반지', amulet: '목걸이', charm: '부적', gem: '보석', quest: '퀘스트 물건',
 };
 // 보관함: 48칸 × 4쪽
 const STASH_PAGE = 48, STASH_PAGES = 4, STASH_SIZE = STASH_PAGE * STASH_PAGES;
@@ -378,6 +378,11 @@ const ITEM_BASES = {
     { id: 'gem_sapphire', name: '사파이어', lvl: 1, icon: 'gem', ii: 68 },
     { id: 'gem_emerald', name: '에메랄드', lvl: 1, icon: 'gem', ii: 69 },
     { id: 'gem_diamond', name: '다이아몬드', lvl: 1, icon: 'gem', ii: 71 },
+  ],
+  // 퀘스트 물건 (팔거나 버릴 수 없음)
+  quest: [
+    { id: 'quest_ring', name: '반지', lvl: 1, icon: 'ring', ii: 205 },
+    { id: 'quest_hammer', name: '망치', lvl: 1, icon: 'hammer', ii: 101 },
   ],
 };
 // ── 보석: 소켓에 박으면 무기와 방어구에서 효과가 다름 ──

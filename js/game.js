@@ -23,7 +23,7 @@ const Input = {
 };
 
 const Game = {
-  state: 'title', time: 0, pendingLevels: 0, levelUpDelay: 0, deathT: 0, deathShown: false,
+  state: 'title', time: 0, pendingLevels: 0, bonusCards: 0, levelUpDelay: 0, deathT: 0, deathShown: false,
   dirty: false, saveT: 0, revealT: 0, godMode: false, cardsFirst: false, newConfirm: false,
   fontUI: "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
   titleFocus: { x: 0, y: 0 }, titleA: 0, imgCache: {}, dungeonWorld: null, settings: { lootFilter: 0 },
@@ -168,6 +168,9 @@ const Game = {
     recalcStats(p);
     p.life = p.stats.maxLife;
     this.pendingLevels = s.pending || 0;
+    this.bonusCards = s.bonusCards || 0;
+    p.quests = d.quests || {}; p.bounty = d.bounty || null; p.bountyDone = d.bountyDone || 0;
+    p.freeSockets = d.freeSockets || 0; p.potionCap = d.potionCap || 0;
     this.levelUpDelay = 1.5;
     this.dungeonWorld = null;
     Shop.buyback = [];
@@ -326,12 +329,13 @@ const Game = {
     UI.syncMenu();
   },
 
-  openCards(first) {
+  openCards(first, quest) {
     this.state = 'levelup';
     this.cardsFirst = first;
+    this.cardsQuest = !!quest;
     UI.closePanels();
     UI.el.banner.hidden = true;
-    UI.showLevelUp(rollCards(first), first);
+    UI.showLevelUp(rollCards(first), first, quest);
   },
 
   chooseCard(id) {
@@ -339,7 +343,8 @@ const Game = {
     const lv = player.skills[id] || 0;
     learnSkill(id);
     UI.hideLevelUp();
-    if (!this.cardsFirst) this.pendingLevels = Math.max(0, this.pendingLevels - 1);
+    if (this.cardsQuest) this.bonusCards = Math.max(0, this.bonusCards - 1);
+    else if (!this.cardsFirst) this.pendingLevels = Math.max(0, this.pendingLevels - 1);
     else if (UI.lastBanner) UI.banner(...UI.lastBanner);
     this.cardsFirst = false;
     this.state = 'playing';
@@ -349,7 +354,7 @@ const Game = {
       const slot = player.hotbar.indexOf(id);
       UI.message(lv ? `${sk.name} 레벨 ${lv + 1}` : `${sk.name} 습득${slot >= 0 ? ` · ${slot + 1}번 키` : ''}`, '#ffd36a');
     }
-    if (this.pendingLevels > 0) this.levelUpDelay = 0.25;
+    if (this.pendingLevels > 0 || this.bonusCards > 0) this.levelUpDelay = 0.25;
     this.save();
   },
 
@@ -357,12 +362,13 @@ const Game = {
     if (!player || this.state === 'title' || !world) return;
     const p = player;
     const data = {
-      v: 1, floor: world.town ? 0 : world.floor, pending: this.pendingLevels || 0,
+      v: 1, floor: world.town ? 0 : world.floor, pending: this.pendingLevels || 0, bonusCards: this.bonusCards || 0,
       p: {
         level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, bonusLife: p.bonusLife, bonusDmg: p.bonusDmg || 0, bonusArmor: p.bonusArmor || 0, skills: p.skills, hotbar: p.hotbar,
         equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, charms: p.charms, elixirs: p.elixirs,
         playTime: Math.round(p.playTime || 0), deaths: p.deaths || 0, cleared: p.cleared || null,
         clearedNM: p.clearedNM || null, clearedHell: p.clearedHell || null, difficulty: p.difficulty || 0, deepestBy: this.deepestBy(),
+        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0,
       },
     };
     store.set(SAVE_KEY, JSON.stringify(data));
@@ -629,9 +635,9 @@ function update(dt) {
     if (world.monsters.some(m => m.dead && m.deadT > 9)) world.monsters = world.monsters.filter(m => !(m.dead && m.deadT > 9));
     Game.revealT -= dt;
     if (Game.revealT <= 0) { Game.revealT = 0.1; world.dungeon.reveal(player.x, player.y, world.dungeon.outdoor ? 12 : 9); }
-    if (Game.pendingLevels > 0 && !player.dead && !(Game.endingT > 0)) {
+    if ((Game.pendingLevels > 0 || Game.bonusCards > 0) && !player.dead && !(Game.endingT > 0) && !UI.anyPanel()) {
       Game.levelUpDelay -= dt;
-      if (Game.levelUpDelay <= 0) Game.openCards(false);
+      if (Game.levelUpDelay <= 0) Game.openCards(false, Game.pendingLevels <= 0);
     }
     if (player.dead && !Game.deathShown) {
       Game.deathT -= dt;

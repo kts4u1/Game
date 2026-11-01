@@ -1137,6 +1137,15 @@ function drawTownLabels(ctx) {
     ctx.strokeStyle = 'rgba(0,0,0,.9)'; ctx.lineWidth = 3;
     ctx.fillStyle = hov ? '#fff2c4' : n.role === 'gate' ? '#8fd0ff' : shop ? '#e8c35a' : '#d8cfbd';
     ctx.strokeText(n.name, sp.x, sp.y); ctx.fillText(n.name, sp.x, sp.y);
+    // 퀘스트 표시: ! 새 퀘스트, ? 보고할 퀘스트 (위아래로 살짝 흔들림)
+    const mk = Quests.mark(n);
+    if (mk && !n.say) {
+      const by = sp.y - 22 + Math.sin(Game.time * 4 + n.seed) * 3;
+      ctx.font = `900 24px ${Game.fontUI}`;
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.95)';
+      ctx.fillStyle = mk === '?' ? '#fff27a' : '#ffb03a';
+      ctx.strokeText(mk, sp.x, by); ctx.fillText(mk, sp.x, by);
+    }
     if (n.say) {
       ctx.font = '500 13px ' + Game.fontUI;
       const lines = wrapText(ctx, n.say.text, 230);
