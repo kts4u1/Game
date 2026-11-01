@@ -34,7 +34,7 @@ function spawnMonster(type, x, y, mlvl, tier = 0, opts = {}) {
     abil: (opts.abil || T.abil || []).slice(), cd: {}, act: null, pending: null, z: 0,
     undead: !!T.undead, armorK: T.armorK || 1, stationary: !!T.stationary, summoned: !!opts.summoned,
     proj: opts.proj || (T.ranged && T.ranged.proj) || null, shots: 0, stolen: 0, tint: opts.tint || null,
-    color: T.color || null, alpha: T.alpha || 1, final: !!opts.final, phase: 1,
+    color: T.color || null, alpha: T.alpha || 1, final: !!opts.final, phase: 1, summonType: opts.summon || null,
   };
   if (tier === 1) { m.life *= 2.6; m.dmg = m.dmg.map(d => d * 1.3); m.speed *= 1.12; m.xp *= 3; m.scale = 1.12; }
   if (tier === 2) { m.life *= 4; m.dmg = m.dmg.map(d => d * 1.5); m.xp *= 6; m.scale = 1.22; m.name = opts.name; }
@@ -166,10 +166,20 @@ function populateFloor() {
     }
   }
   if (isBossFloor(f)) {
-    const B = BOSSES[Math.min(BOSSES.length, f / 5) - 1];
+    const B = bossForFloor(f);
     const r = d.stairsRoom;
     const pos = d.randomPointInRoom(r, 2);
-    world.monsters.push(spawnMonster(B.type, pos.x, pos.y, world.mlvl + 3, 3, { name: B.name, scale: B.scale, pal: B.pal, sprite: B.sprite, abil: B.abil, proj: B.proj, tint: B.tint, final: B.final, pack: packId++ }));
+    const boss = spawnMonster(B.type, pos.x, pos.y, world.mlvl + 3, 3, { name: B.name, scale: B.scale, pal: B.pal, sprite: B.sprite, abil: B.abil, proj: B.proj, tint: B.tint, final: B.final, summon: B.summon, pack: packId++ });
+    // 같은 층의 원래 보스와 체력·초당 피해가 비슷하도록 맞춤 (몸이 약한 종류로 만든 보스용)
+    const ref = BOSSES.find(b => b.floor === B.floor);
+    if (ref && ref !== B) {
+      const R0 = MONSTERS[ref.type], T0 = MONSTERS[B.type];
+      const dps = T => (T.dmg[0] + T.dmg[1]) / 2 / (T.atkCD || 2);
+      boss.maxLife = boss.life = Math.round(boss.life * R0.life / T0.life);
+      const k = clamp(dps(R0) / dps(T0), 0.6, 2.5);
+      boss.dmg = boss.dmg.map(x => x * k);
+    }
+    world.monsters.push(boss);
     d.stairs.open = false;
     // 마지막 층에는 더 내려가는 계단이 없음
     if (f >= FINAL_FLOOR) d.stairs.none = true;
@@ -468,6 +478,9 @@ function killMonster(m) {
   p.kills++;
   gainXp(m.xp);
   if (s.killLife) healPlayer(s.killLife);
+  // 학살: 처치할 때마다 피해·공격 속도 중첩
+  const rl = effLevel(p, 'rampage');
+  if (rl && !m.summoned) { const rv = SKILLS.rampage.vals(rl); p.rampage.n = Math.min(rv.stacks, p.rampage.n + 1); p.rampage.t = rv.dur; recalcStats(p); }
   if (s.killFury) p.fury = Math.min(s.maxFury, p.fury + s.killFury);
   const bony = m.sprite && m.sprite.startsWith('skeleton');
   SFX.monster(m, m.overkill ? 'critdie' : 'die');
@@ -506,7 +519,7 @@ function killMonster(m) {
 // 플레이어 피해. 막았거나 무시되면 false
 function damagePlayer(amount, src, opts = {}) {
   const p = player;
-  if (p.dead || p.leap || Game.godMode || world.town) return false;
+  if (p.dead || p.leap || p.rush || Game.godMode || world.town) return false;
   const s = p.stats;
   // 방패 막기: 근접 공격과 투사체
   if ((opts.melee || opts.proj) && s.block > 0 && chance(s.block / 100)) {
@@ -514,6 +527,7 @@ function damagePlayer(amount, src, opts = {}) {
     fxSparks(p.x, p.y, 40, 8, '#e8eef8', 120);
     SFX.play('block', 0.8);
     p.blockT = 0.25;
+    if (s.blockFury) p.fury = Math.min(s.maxFury, p.fury + s.blockFury);
     return false;
   }
   const red = damageReduction(p, src ? src.mlvl : world.mlvl);
@@ -522,6 +536,9 @@ function damagePlayer(amount, src, opts = {}) {
   let dmg = elem ? amount * (1 - red * 0.4) * (1 - s.res / 100) : amount * (1 - red);
   if (fireMod && opts.melee) { dmg *= 1.3; fxEmbers(p.x, p.y, 8); }
   if (opts.fireTouch) fxEmbers(p.x, p.y, 6);
+  // 받는 피해 감소: 강철 의지, 최후의 저항(위기 때), 강철 피부
+  let cut = (s.dmgTakenPct || 0) + (s.lastStand && p.life < s.maxLife * 0.35 ? s.lastStand : 0) + (p.buffs.ironskin > 0 ? SKILLS.ironskin.vals(Math.max(1, effLevel(p, 'ironskin'))).reduce : 0);
+  dmg *= 1 - Math.min(75, cut) / 100;
   dmg = Math.max(1, Math.round(dmg - s.dmgReduce));
   p.life -= dmg;
   p.hurtT = 0.15;
@@ -534,6 +551,12 @@ function damagePlayer(amount, src, opts = {}) {
   if (opts.poison) poisonPlayer(opts.poison);
   if (src && opts.melee) {
     if (s.thorns > 0 && !src.dead) damageMonster(src, s.thorns, false, { color: '#c7a0ff' });
+    // 응징: 확률로 즉시 반격
+    if (s.retaliate && !src.dead && chance(s.retaliate.chance / 100) && dist(p.x, p.y, src.x, src.y) < s.reach + src.r + 30) {
+      fxText(p.x, p.y, '응징', '#ffb04a', 14, { z: 80 });
+      fxSprite('cleave', src.x, src.y, { dir: flareDir(angleTo(p.x, p.y, src.x, src.y)), scale: 0.9, alpha: 0.8 });
+      playerStrike(src, s.retaliate.mult, { proc: true, knock: 60 });
+    }
     if (src.mods && src.mods.includes('cold')) chillPlayer(2);
     if (src.lifeSteal && !src.dead) src.life = Math.min(src.maxLife, src.life + dmg * src.lifeSteal);
   }
@@ -543,6 +566,8 @@ function damagePlayer(amount, src, opts = {}) {
 
 function chillPlayer(t) {
   const p = player;
+  if (p.buffs.ironskin > 0) return;  // 강철 피부: 둔화되지 않음
+  t *= 1 - (p.stats.ccRed || 0) / 100;
   if (p.slowT <= 0.2) { fxSprite('freeze', p.x, p.y, { layer: 'top', scale: 0.7, alpha: 0.85 }); SFX.play('freeze'); }
   p.slowT = Math.max(p.slowT, t * (1 - p.stats.res / 150));
   fxSparks(p.x, p.y, 30, 8, '#9fdcff', 100);
@@ -552,9 +577,10 @@ function poisonPlayer(total) {
   const p = player;
   if (p.dead || world.town) return;
   if (p.poisonT <= 0) UI.message('중독되었습니다', '#8aff5a');
+  const dur = 4 * (1 - (p.stats.ccRed || 0) / 100);
   const dps = total / 4;
   p.poisonDps = p.poisonT > 0 ? Math.max(p.poisonDps, dps) : dps;
-  p.poisonT = 4;
+  p.poisonT = dur;
 }
 
 function chainLightning(start) {
@@ -752,7 +778,8 @@ function updateProjectiles(dt) {
         if (Math.abs(m.x - pr.x) > 50 || Math.abs(m.y - pr.y) > 50) continue;
         if (dist(m.x, m.y, pr.x, pr.y) < m.r + pr.r) {
           pr.hit.add(m.id);
-          playerStrike(m, pr.mult, { knock: 70 });
+          playerStrike(m, pr.mult, { knock: pr.pull ? 0 : 70 });
+          if (pr.pull) harpoonPull(m, pr.pull);
           pr.pierce--;
           if (pr.pierce < 0) { dead = true; break; }
         }
@@ -814,6 +841,14 @@ function updateHazards(dt) {
       fxSparks(h.x, h.y, 20, 14, '#cbbcff', 160);
       world.flashes.push({ x: h.x, y: h.y, r: 260, life: 0.25, color: [170, 150, 255] });
       if (!p.dead && dist(p.x, p.y, h.x, h.y) < h.r + p.r) damagePlayer(h.dmg, h.src, { magic: true });
+      continue;
+    }
+    if (h.kind === 'poison') {
+      // 역병: 떨어진 자리에 독 웅덩이
+      fxSprite('spark_green', h.x, h.y, { z: -20, scale: 1.2 });
+      fxSparks(h.x, h.y, 10, 16, '#9be070', 120);
+      addPool(h.x, h.y, h.r * 0.9, 5, h.dmg * 0.45, 'poison', h.src);
+      if (!p.dead && dist(p.x, p.y, h.x, h.y) < h.r + p.r) damagePlayer(h.dmg, h.src, { poisonHit: true, poison: h.dmg * 0.6 });
       continue;
     }
     if (h.kind === 'boulder') {

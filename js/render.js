@@ -514,7 +514,7 @@ function drawHazards(ctx, t) {
     if (h.t < 0) continue;  // 시차를 두고 떨어지는 공격은 차례가 올 때까지 표시하지 않음
     const k = clamp(h.t / h.delay, 0, 1);
     const sx = isoX(h.x, h.y), sy = isoY(h.x, h.y);
-    const col = h.kind === 'fire' ? '255,120,40' : h.kind === 'frost' ? '140,200,255' : h.kind === 'shock' ? '180,150,255' : h.kind === 'boulder' ? '230,170,90' : '255,40,30';
+    const col = h.kind === 'fire' ? '255,120,40' : h.kind === 'frost' ? '140,200,255' : h.kind === 'shock' ? '180,150,255' : h.kind === 'boulder' ? '230,170,90' : h.kind === 'poison' ? '120,220,80' : '255,40,30';
     ctx.fillStyle = `rgba(${col},${0.12 + k * 0.2})`;
     ctx.beginPath(); ctx.ellipse(sx, sy, h.r * 1.414 * k, h.r * 0.707 * k, 0, 0, TAU); ctx.fill();
     ctx.strokeStyle = `rgba(${col},${0.5 + Math.sin(t * 20) * 0.2})`; ctx.lineWidth = 2;
@@ -767,8 +767,8 @@ function drawMonsterFallback(ctx, m, t, sx, sy) {
   ctx.restore();
 }
 
-const PROJ_SPRITE = { axe: 'throw_axe', knife: 'throw_knife', arrow: 'arrows', icicle: 'icicle', spit: 'spit', plasma: 'plasmaball', bolt: 'lightning', stone: 'stone' };
-const PROJ_SCALE = { axe: 0.9, knife: 0.8, icicle: 0.75, spit: 0.8, plasma: 0.6, bolt: 0.45, stone: 1 };
+const PROJ_SPRITE = { spear: 'spear', axe: 'throw_axe', knife: 'throw_knife', arrow: 'arrows', icicle: 'icicle', spit: 'spit', plasma: 'plasmaball', bolt: 'lightning', stone: 'stone' };
+const PROJ_SCALE = { spear: 0.9, axe: 0.9, knife: 0.8, icicle: 0.75, spit: 0.8, plasma: 0.6, bolt: 0.45, stone: 1 };
 
 function drawProjectile(ctx, pr, t) {
   const sx = isoX(pr.x, pr.y), sy = isoY(pr.x, pr.y);

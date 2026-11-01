@@ -158,6 +158,7 @@ function heroPose(p, t) {
   if (p.dead) return ['die', anims.die.n - 1, dir];
   if (p.whirl) { dir = Math.floor(t * 22) % 8; return ['swing', 2, dir]; }
   if (p.leap) return at('swing', p.leap.t / p.leap.dur);
+  if (p.rush) return ['run', Math.floor(p.walkPhase * 0.9) % anims.run.n, dir];
   if (p.attack) return at('swing', p.attack.t / p.attack.dur);
   if (p.pose === 'roar') return at('cast', p.poseT / p.poseDur);
   if (p.tp) return at('cast', Math.min(0.6, p.tp.t / p.tp.dur));
@@ -261,7 +262,9 @@ const ITEM_ICON = {
 const SKILL_ICON = {
   bash: 39, whirlwind: 46, leap: 19, warcry: 10, slam: 14, axes: 44, berserk: 18,
   mastery: 1, hide: 4, toughness: 11, bloodlust: 25, swiftness: 9, furyheart: 37,
-  executioner: 12, regen: 17, thornskin: 15, treasure: 30, _life: 11, _gold: 88, _potion: 64,
+  executioner: 12, regen: 17, thornskin: 15, treasure: 30, _life: 11, _gold: 88, _potion: 64, _might: 31, _guard: 4,
+  frenzy: 40, execute: 33, quake: 21, rush: 23, harpoon: 43, ironskin: 29, battleorders: 20, rally: 42,
+  shieldmaster: 13, resist: 24, ironwill: 6, laststand: 38, rampage: 32, retaliate: 22, heavyhand: 16, vitality: 64,
 };
 const ICON_POTION = 64;
 

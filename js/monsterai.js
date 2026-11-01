@@ -186,7 +186,9 @@ function tryMonsterAbility(m, dp) {
         }
         break;
       case 'summon': {
-        const max = m.type === 'grave' ? 4 : m.tier === 3 ? 5 : 3;
+        const st = m.summonType || MONSTERS[m.type].summon || 'boneling';
+        // 튼튼한 졸개(기사·광전사 등)는 적게
+        const max = m.type === 'grave' ? 4 : m.tier === 3 ? (MONSTERS[st] && MONSTERS[st].life >= 30 ? 3 : 5) : 3;
         if (livingMinions(m) >= max || dp > 650) break;
         m.cd.summon = m.type === 'grave' ? 5.5 : rand(10, 13);
         const n = Math.min(max - livingMinions(m), m.type === 'grave' ? 1 : m.tier === 3 ? 3 : 2);
@@ -195,7 +197,7 @@ function tryMonsterAbility(m, dp) {
             const s = spotNear(m.x, m.y, 50, 120, true);
             if (s) summonMinion(m, s.x, s.y);
           }
-          if (m.tier === 3) UI.message(`${m.name}: "일어나라, 망자들이여!"`, '#c9b6ff');
+          if (m.tier === 3) UI.message(`${m.name}: "${UNDEAD.has(st) ? '일어나라, 망자들이여!' : '나와라, 놈을 쳐라!'}"`, '#c9b6ff');
         };
         if (m.type === 'grave') { go(); SFX.play('grave', 0.8); m.strikeT = 0.6; }
         else castThen(m, 0.8, go);
@@ -223,6 +225,19 @@ function tryMonsterAbility(m, dp) {
               world.hazards.push({ x: q.x, y: q.y, r: 70, t: -i * 0.18, delay: 0.95, dmg: m.dmg[1] * 1.0, src: m, kind: 'shock' });
             }
             SFX.play('zap');
+          });
+          return true;
+        }
+        break;
+      case 'plague':
+        // 역병의 여왕: 플레이어 둘레에 독 덩어리를 떨어뜨림
+        if (dp < 620) {
+          m.cd.plague = rand(6, 8);
+          castThen(m, 0.5, () => {
+            const pts = [{ x: p.x, y: p.y }];
+            for (let i = 0; i < 3; i++) pts.push({ x: p.x + rand(-170, 170), y: p.y + rand(-170, 170) });
+            pts.forEach((q, i) => world.hazards.push({ x: q.x, y: q.y, r: 80, t: -i * 0.2, delay: 1.1, dmg: m.dmg[1] * 0.9, src: m, kind: 'poison' }));
+            SFX.play('spit');
           });
           return true;
         }
@@ -406,7 +421,7 @@ function reviveMonster(o) {
 }
 
 function summonMinion(m, x, y) {
-  const type = MONSTERS[m.type].summon || 'boneling';
+  const type = m.summonType || MONSTERS[m.type].summon || 'boneling';
   const o = spawnMonster(type, x, y, Math.max(1, m.mlvl - 1), 0, { pack: m.pack, summoned: true });
   o.summoner = m.id;
   o.aggro = true;

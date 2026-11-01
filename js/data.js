@@ -64,10 +64,58 @@ const SKILLS = {
     desc: v => `회전하는 도끼 ${v.count}개를 던져 적을 최대 ${v.pierce}회 관통합니다. 도끼마다 ${pct(v.mult)} 피해. 분노 ${v.cost}.`,
   },
   berserk: {
-    name: '광폭화', type: 'active', max: 5,
+    name: '광폭화', type: 'active', def: true, max: 5,
     vals: L => ({ dmg: 20 + 10 * L, ias: 15 + 3 * L, dur: 5 + L, lifeSteal: 2, move: 15, cost: 25, cd: Math.max(14, 22 - 1.5 * L) }),
     key: v => `피해 +${v.dmg}% · ${v.dur}초`,
     desc: v => `${v.dur}초 동안 광기에 빠져 피해 +${v.dmg}%, 공격 속도 +${v.ias}%, 이동 속도 +${v.move}%, 생명력 흡수 +${v.lifeSteal}%. 재사용 ${v.cd.toFixed(0)}초, 분노 ${v.cost}.`,
+  },
+  frenzy: {
+    name: '광란', type: 'active', max: 5,
+    vals: L => ({ mult: 0.7 + 0.1 * L, ias: 5 + 2 * L, move: 4 + L, stacks: 5, dur: 4, cost: 5, cd: 0 }),
+    key: v => `2연타 ${pct(v.mult)}`,
+    desc: v => `대상을 두 번 연달아 베어 각각 ${pct(v.mult)} 피해를 줍니다. 맞힐 때마다 ${v.dur}초 동안 공격 속도 +${v.ias}%, 이동 속도 +${v.move}% (최대 ${v.stacks}번 겹침). 분노 ${v.cost}.`,
+  },
+  execute: {
+    name: '처형 일격', type: 'active', max: 5,
+    vals: L => ({ mult: 2.4 + 0.45 * L, low: 30, refund: 10 + 3 * L, cost: 14, cd: Math.max(2, 5 - 0.5 * L) }),
+    key: v => `피해 ${pct(v.mult)}`,
+    desc: v => `무거운 일격으로 ${pct(v.mult)} 피해. 생명력이 ${v.low}% 아래인 적에게는 피해 2배, 처치하면 분노 ${v.refund}를 돌려받습니다. 재사용 ${v.cd.toFixed(1)}초, 분노 ${v.cost}.`,
+  },
+  quake: {
+    name: '지진', type: 'active', max: 5,
+    vals: L => ({ mult: 0.9 + 0.2 * L, radius: 170 + 15 * L, slow: 1.5, cost: 22, cd: Math.max(6, 11 - L) }),
+    key: v => `3회 ${pct(v.mult)}`,
+    desc: v => `발을 굴러 땅을 세 번 뒤흔듭니다. 반경 ${v.radius} 안의 적에게 매번 ${pct(v.mult)} 피해를 주고 느리게 만듭니다. 재사용 ${v.cd.toFixed(0)}초, 분노 ${v.cost}.`,
+  },
+  rush: {
+    name: '돌진', type: 'active', max: 5,
+    vals: L => ({ mult: 1.4 + 0.3 * L, range: 260 + 30 * L, stun: 0.4, cost: 12, cd: Math.max(2.5, 6 - 0.6 * L) }),
+    key: v => `피해 ${pct(v.mult)}`,
+    desc: v => `커서 쪽으로 ${v.range}까지 돌진하며 길목의 적에게 ${pct(v.mult)} 피해를 주고 밀쳐냅니다. 돌진하는 동안은 공격을 받지 않습니다. 재사용 ${v.cd.toFixed(1)}초, 분노 ${v.cost}.`,
+  },
+  harpoon: {
+    name: '작살', type: 'active', max: 5,
+    vals: L => ({ mult: 1.2 + 0.25 * L, stun: 0.6 + 0.1 * L, cost: 8, cd: Math.max(2, 5 - 0.5 * L) }),
+    key: v => `끌어오기 ${pct(v.mult)}`,
+    desc: v => `사슬 달린 창을 던져 처음 맞은 적에게 ${pct(v.mult)} 피해를 주고 앞으로 끌어와 ${v.stun.toFixed(1)}초 기절시킵니다 (보스는 끌려오지 않음). 재사용 ${v.cd.toFixed(1)}초, 분노 ${v.cost}.`,
+  },
+  ironskin: {
+    name: '강철 피부', type: 'active', def: true, max: 5,
+    vals: L => ({ reduce: 25 + 5 * L, dur: 4 + 0.5 * L, cost: 15, cd: Math.max(12, 20 - 1.5 * L) }),
+    key: v => `받는 피해 -${v.reduce}%`,
+    desc: v => `${v.dur.toFixed(1)}초 동안 피부가 강철처럼 단단해져 받는 피해 -${v.reduce}%, 둔화되지 않습니다. 재사용 ${v.cd.toFixed(0)}초, 분노 ${v.cost}.`,
+  },
+  battleorders: {
+    name: '전투 명령', type: 'active', def: true, max: 5,
+    vals: L => ({ life: 15 + 5 * L, armor: 20 + 10 * L, dur: 30 + 6 * L, cost: 20, cd: 45 }),
+    key: v => `생명력 +${v.life}%`,
+    desc: v => `${v.dur}초 동안 최대 생명력 +${v.life}%, 방어력 +${v.armor}%. 늘어난 만큼 생명력도 바로 채워집니다. 재사용 ${v.cd}초, 분노 ${v.cost}.`,
+  },
+  rally: {
+    name: '투지 회복', type: 'active', def: true, max: 5,
+    vals: L => ({ heal: 20 + 5 * L, cost: 18, cd: Math.max(10, 18 - 1.5 * L) }),
+    key: v => `회복 ${v.heal}%`,
+    desc: v => `숨을 고르며 3초 동안 최대 생명력의 ${v.heal}%를 회복하고, 중독과 둔화를 떨쳐냅니다. 재사용 ${v.cd.toFixed(0)}초, 분노 ${v.cost}.`,
   },
   // 패시브
   mastery: {
@@ -130,14 +178,66 @@ const SKILLS = {
     key: v => `발견 +${v.mf}%`,
     desc: v => `마법 아이템 발견 확률 +${v.mf}%, 골드 획득량 +${v.gf}%. 레어·유니크가 더 자주 나옵니다.`,
   },
+  shieldmaster: {
+    name: '방패 숙련', type: 'passive', max: 5,
+    vals: L => ({ block: 3 * L, fury: 2 + L }),
+    key: v => `막기 +${v.block}%`,
+    desc: v => `방패를 들었을 때 막기 확률 +${v.block}%. 공격을 막을 때마다 분노 ${v.fury}를 얻습니다.`,
+  },
+  resist: {
+    name: '자연 저항', type: 'passive', max: 5,
+    vals: L => ({ res: 6 * L }),
+    key: v => `저항 +${v.res}%`,
+    desc: v => `모든 원소 저항 +${v.res}% (최대 75%).`,
+  },
+  ironwill: {
+    name: '강철 의지', type: 'passive', max: 5,
+    vals: L => ({ reduce: 2 * L, cc: 10 * L }),
+    key: v => `받는 피해 -${v.reduce}%`,
+    desc: v => `받는 모든 피해 -${v.reduce}%. 둔화와 중독 시간이 ${v.cc}% 짧아집니다.`,
+  },
+  laststand: {
+    name: '최후의 저항', type: 'passive', max: 5,
+    vals: L => ({ reduce: 6 * L, below: 35 }),
+    key: v => `위기 시 -${v.reduce}%`,
+    desc: v => `생명력이 ${v.below}% 아래일 때 받는 피해 -${v.reduce}%.`,
+  },
+  rampage: {
+    name: '학살', type: 'passive', max: 5,
+    vals: L => ({ dmg: 3, ias: 2, stacks: 4 + L, dur: 5 }),
+    key: v => `최대 ${v.stacks}중첩`,
+    desc: v => `적을 처치할 때마다 ${v.dur}초 동안 피해 +${v.dmg}%, 공격 속도 +${v.ias}% (최대 ${v.stacks}번 겹침).`,
+  },
+  retaliate: {
+    name: '응징', type: 'passive', max: 5,
+    vals: L => ({ chance: 5 * L, mult: 1 + 0.1 * L }),
+    key: v => `반격 ${v.chance}%`,
+    desc: v => `근접 공격을 받으면 ${v.chance}% 확률로 즉시 반격해 ${pct(v.mult)} 피해를 줍니다.`,
+  },
+  heavyhand: {
+    name: '무거운 일격', type: 'passive', max: 5,
+    vals: L => ({ dmg2h: 6 * L, stun: 3 * L }),
+    key: v => `양손 +${v.dmg2h}%`,
+    desc: v => `양손 무기를 들면 피해 +${v.dmg2h}%. 기본 공격이 ${v.stun}% 확률로 적을 0.4초 기절시킵니다.`,
+  },
+  vitality: {
+    name: '생명의 샘', type: 'passive', max: 5,
+    vals: L => ({ potion: 15 * L, kill: L }),
+    key: v => `물약 +${v.potion}%`,
+    desc: v => `물약 회복량 +${v.potion}%. 적을 처치할 때마다 생명력을 (2 + 캐릭터 레벨×0.15)×${v.kill} 회복합니다.`,
+  },
 };
 
-// 모든 스킬이 최대일 때 나오는 보너스 카드
+// 고를 기술이 모자랄 때 나오는 보너스 카드 (생명력·피해·방어는 영구히 쌓임)
 const BONUS_CARDS = [
-  { id: '_life', name: '생명의 정수', key: '최대 생명력 +25', desc: '최대 생명력이 영구히 25 증가합니다.' },
-  { id: '_gold', name: '전쟁 자금', key: '골드 +500', desc: '골드 500을 얻습니다.' },
+  { id: '_life', name: '생명의 정수', key: '최대 생명력 +', desc: '최대 생명력이 영구히 늘어납니다 (레벨이 높을수록 더 많이).' },
+  { id: '_might', name: '전사의 힘', key: '모든 피해 +3%', desc: '모든 피해가 영구히 3% 늘어납니다.' },
+  { id: '_guard', name: '불굴의 몸', key: '방어력 +5%', desc: '총 방어력이 영구히 5% 늘어납니다.' },
+  { id: '_gold', name: '전쟁 자금', key: '골드', desc: '골드를 얻습니다 (레벨이 높을수록 더 많이).' },
   { id: '_potion', name: '물약 꾸러미', key: '물약 +3', desc: '생명력 물약 3개를 얻습니다.' },
 ];
+function bonusLifeAmount(level) { return 20 + Math.floor(level / 2); }
+function bonusGoldAmount(level) { return 300 + level * 40; }
 
 // ── 아이템 기본형 ──
 // ii: 아이콘 번호(icons.webp), layer: 주인공 그림 레이어, two: 양손 무기(방패 불가), block: 방패 막기 확률(%)
@@ -575,6 +675,25 @@ const BOSSES = [
   { name: '폭풍의 비룡왕 볼타르', type: 'stormKing', scale: 0.85, abil: ['dive', 'storm', 'volley'] },
   { name: '망자의 왕 오르쿠스', type: 'deathKing', scale: 1.45, final: true, abil: ['phases', 'teleport', 'nova', 'summon', 'meteor', 'storm', 'volley'], tint: 'hue-rotate(195deg) saturate(1.4) brightness(1.05)' },
 ];
+// 같은 층에 번갈아 나오는 두 번째 보스들 (층에 올 때마다 둘 중 하나가 무작위로)
+// summon: 불러내는 졸개 종류
+BOSSES.push(
+  { floor: 5, name: '도적 두목 라스크', type: 'bandit', scale: 1.35, abil: ['lunge', 'summon', 'charge'], summon: 'bandit', tint: 'saturate(1.3) brightness(0.85)' },
+  { floor: 10, name: '피의 대사제 모르간', type: 'cultist', scale: 1.35, abil: ['heal', 'summon', 'teleport', 'meteor'], summon: 'cultist' },
+  { floor: 15, name: '흑기사 단장 발드릭', type: 'fallenKnight', scale: 1.35, abil: ['charge', 'block', 'slam', 'cleave'], tint: 'brightness(0.55) saturate(0.6)' },
+  { floor: 20, name: '사형집행인 고르', type: 'executioner', scale: 1.3, abil: ['cleave', 'charge', 'slam', 'enrage'] },
+  { floor: 25, name: '광전사 군주 브락', type: 'berserker', scale: 1.4, abil: ['leap', 'enrage', 'slam', 'summon'], summon: 'berserker' },
+  { floor: 30, name: '바위 거인 고르곤', type: 'stoneBrute', scale: 1.6, abil: ['boulder', 'charge', 'slam', 'enrage'], tint: 'brightness(0.85) saturate(0.4)' },
+  { floor: 35, name: '망령 기사단장 엘라스', type: 'spectralKnight', scale: 1.4, abil: ['blink', 'block', 'nova', 'summon'], summon: 'spectralKnight' },
+  { floor: 40, name: '타락한 대성기사 아우렐', type: 'paladin', scale: 1.4, abil: ['slam', 'heal', 'storm', 'summon'], summon: 'fallenKnight' },
+  { floor: 45, name: '역병의 여왕 니크사', type: 'wraith', sprite: 'antlion', scale: 1.9, abil: ['burrow', 'summon', 'plague'], summon: 'plagueSpawn', tint: 'hue-rotate(60deg) saturate(1.6) brightness(0.85)' },
+);
+BOSSES.forEach((b, i) => { if (!b.floor) b.floor = (i + 1) * 5; });
+// 이 층의 보스 후보 중 하나
+function bossForFloor(f) {
+  const list = BOSSES.filter(b => b.floor === Math.min(FINAL_FLOOR, f));
+  return list.length ? pick(list) : BOSSES[Math.min(9, Math.floor(f / 5) - 1)];
+}
 const FINAL_FLOOR = 50;
 
 // ── 층별 테마 ──

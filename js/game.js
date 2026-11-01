@@ -7,7 +7,7 @@ const LOOT_FILTER_NAMES = ['모든 아이템', '마법 이상', '레어 이상']
 
 const Input = {
   mx: 0, my: 0, world: { x: 0, y: 0 }, left: false, right: false, leftMode: null,
-  keys: new Set(), slotDown: [false, false, false, false], hover: null, holdT: 0,
+  keys: new Set(), slotDown: [false, false, false, false, false, false], hover: null, holdT: 0,
   slotHeld(i) { return this.slotDown[i] || this.keys.has('Digit' + (i + 1)) || (i === 0 && this.right); },
   // WASD/방향키 → 월드 방향 (화면 기준 위/아래/좌/우)
   keyDir() {
@@ -71,6 +71,8 @@ const Game = {
     const types = [...new Set(world.monsters.map(m => m.type))];
     // 호위·소환으로 나중에 나오는 종류도 함께
     for (const t of types.slice()) { const T = MONSTERS[t]; if (T.escort && !types.includes(T.escort)) types.push(T.escort); }
+    for (const m of world.monsters) if (m.summonType && !types.includes(m.summonType)) types.push(m.summonType);
+    for (const t of types) { const sp = MONSTERS[t].sprite; if (sp && sp !== 'human' && !sprites.includes(sp)) sprites.push(sp); }
     const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player), ...humanAssetPaths(types)];
     if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) paths.push(FLARE.npcs[n.sprite].img);
     // 색을 입힌 몬스터 그림, 그림자 실루엣, 타일 그림을 미리 만들어 한 번 그려 둠 (처음 화면에 나올 때 멈칫하지 않게)
@@ -146,7 +148,8 @@ const Game = {
     player = createPlayer();
     const p = player, d = s.p;
     p.level = d.level; p.xp = d.xp; p.gold = d.gold; p.potions = d.potions; p.bonusLife = d.bonusLife || 0;
-    p.skills = d.skills || {}; p.hotbar = d.hotbar || [null, null, null, null];
+    p.skills = d.skills || {}; p.hotbar = (d.hotbar || []).concat([null, null, null, null, null, null]).slice(0, 6);
+    p.bonusDmg = d.bonusDmg || 0; p.bonusArmor = d.bonusArmor || 0;
     p.equipment = Object.assign(p.equipment, d.equipment || {});
     p.inventory = (d.inventory || []).concat(new Array(40).fill(null)).slice(0, 40);
     p.kills = d.kills || 0;
@@ -184,7 +187,7 @@ const Game = {
     const p = player, d = world.dungeon;
     const spot = d.freeSpot(x, y, p.r);  // 벽 안에 서지 않게
     p.x = spot.x; p.y = spot.y; p.z = 0;
-    p.order = p.path = p.attack = p.leap = p.whirl = p.tp = null;
+    p.order = p.path = p.attack = p.leap = p.whirl = p.tp = p.rush = p.quake = null;
     p.dead = false;
     if (R.themeName !== d.theme.name) buildThemeSprites(d.theme);
     if (!d.art) prepareFloorArt(d);
@@ -206,7 +209,10 @@ const Game = {
     this.arrive(d.start.x, d.start.y);
     const nm = diffTag(world.diff);
     if (n >= FINAL_FLOOR) UI.banner(`${nm}최종층 · ${d.theme.name}`, `망자의 왕이 기다립니다 · 몬스터 레벨 ${world.mlvl}`);
-    else UI.banner(`${nm}${n}층 · ${d.theme.name}`, isBossFloor(n) ? `보스가 계단을 지키고 있습니다 · 몬스터 레벨 ${world.mlvl}` : `몬스터 레벨 ${world.mlvl}`);
+    else {
+      const boss = isBossFloor(n) && world.monsters.find(m => m.tier === 3);
+      UI.banner(`${nm}${n}층 · ${d.theme.name}`, boss ? `${boss.name}이(가) 계단을 지키고 있습니다 · 몬스터 레벨 ${world.mlvl}` : `몬스터 레벨 ${world.mlvl}`);
+    }
     if (n > prevDeep && n > 1 && (n - 1) % 5 === 0) UI.message(`${n}층 웨이포인트가 열렸습니다. 마을의 심연의 문에서 바로 올 수 있습니다.`, '#8fd0ff');
     this.save();
   },
@@ -350,7 +356,7 @@ const Game = {
     const data = {
       v: 1, floor: world.town ? 0 : world.floor, pending: this.pendingLevels || 0,
       p: {
-        level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, bonusLife: p.bonusLife, skills: p.skills, hotbar: p.hotbar,
+        level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, bonusLife: p.bonusLife, bonusDmg: p.bonusDmg || 0, bonusArmor: p.bonusArmor || 0, skills: p.skills, hotbar: p.hotbar,
         equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, elixirs: p.elixirs,
         playTime: Math.round(p.playTime || 0), deaths: p.deaths || 0, cleared: p.cleared || null,
         clearedNM: p.clearedNM || null, clearedHell: p.clearedHell || null, difficulty: p.difficulty || 0, deepestBy: this.deepestBy(),
@@ -423,7 +429,7 @@ function bindInput() {
     if (Game.state !== 'playing') return;
     const free = !UI.anyPanel() && UI.el.menu.hidden;
     switch (k) {
-      case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4':
+      case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5': case 'Digit6':
         if (free) useSkill(+k.slice(5) - 1);
         break;
       case 'KeyQ': if (free) drinkPotion(); break;
@@ -477,16 +483,16 @@ function handleHeldInput(dt) {
     }
   }
   // 스킬 키를 누르고 있으면 반복 사용
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     const id = p.hotbar[i];
     if (!id || id === 'whirlwind' || !Input.slotHeld(i)) continue;
-    if (p.attack || p.leap || p.pose) continue;
+    if (p.attack || p.leap || p.rush || p.pose) continue;
     const v = SKILLS[id].vals(effLevel(p, id));
     if ((p.cds[id] || 0) > 0 || p.fury < v.cost) continue;
     useSkill(i);
   }
   // 소용돌이는 누르고 있는 동안 유지
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     if (p.hotbar[i] === 'whirlwind' && Input.slotHeld(i) && !p.whirl && !p.leap && p.fury >= 5) useSkill(i);
   }
 }

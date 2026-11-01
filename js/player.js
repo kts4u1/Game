@@ -4,7 +4,8 @@
 function createPlayer() {
   const p = {
     x: 0, y: 0, r: 14, z: 0, facing: 0.8, level: 1, xp: 0, life: 100, fury: 50, gold: 0, potions: 3, bonusLife: 0,
-    skills: {}, hotbar: [null, null, null, null], cds: {}, difficulty: 0, deepestBy: [1, 1, 1],
+    skills: {}, hotbar: [null, null, null, null, null, null], cds: {}, difficulty: 0, deepestBy: [1, 1, 1], bonusDmg: 0, bonusArmor: 0,
+    frenzy: { n: 0, t: 0 }, rampage: { n: 0, t: 0 }, rush: null,
     equipment: { weapon: null, shield: null, helm: null, amulet: null, armor: null, ring1: null, ring2: null, gloves: null, belt: null, boots: null },
     inventory: new Array(40).fill(null), stash: new Array(STASH_SIZE).fill(null), elixirs: {}, poisonT: 0, poisonDps: 0,
     walkPhase: 0, moving: false, attack: null, leap: null, whirl: null, pose: null, poseT: 0, poseDur: 0,
@@ -65,6 +66,19 @@ function recalcStats(p) {
   if ((v = pv('regen'))) s.regenPct += v.regenPct;
   if ((v = pv('thornskin'))) s.thorns += Math.round((4 + p.level * 1.5) * v.mult);
   if ((v = pv('treasure'))) { s.mf += v.mf; s.gf += v.gf; }
+  if ((v = pv('shieldmaster'))) { s.blockChance += v.block; s.blockFury = v.fury; }
+  if ((v = pv('resist'))) s.resAll += v.res;
+  if ((v = pv('ironwill'))) { s.dmgTakenPct = (s.dmgTakenPct || 0) + v.reduce; s.ccRed = v.cc; }
+  if ((v = pv('laststand'))) s.lastStand = v.reduce;
+  if ((v = pv('retaliate'))) s.retaliate = v;
+  if ((v = pv('heavyhand'))) { if (p.equipment.weapon && isTwoHanded(p.equipment.weapon)) s.dmgPct += v.dmg2h; s.bashChance = v.stun; }
+  if ((v = pv('vitality'))) { s.potionBoost += v.potion; s.killLife += Math.round((2 + p.level * 0.15) * v.kill); }
+  // 영구 보너스 카드, 광란·학살 중첩, 전투 명령
+  s.dmgPct += p.bonusDmg || 0;
+  s.armorPct += p.bonusArmor || 0;
+  if (p.frenzy && p.frenzy.n > 0) { const f = SKILLS.frenzy.vals(Math.max(1, effLevel(p, 'frenzy'))); s.ias += f.ias * p.frenzy.n; s.moveSpeed += f.move * p.frenzy.n; }
+  if (p.rampage && p.rampage.n > 0) { const r = SKILLS.rampage.vals(Math.max(1, effLevel(p, 'rampage'))); s.dmgPct += r.dmg * p.rampage.n; s.ias += r.ias * p.rampage.n; }
+  if (p.buffs.orders > 0) { const o = SKILLS.battleorders.vals(Math.max(1, effLevel(p, 'battleorders'))); s.lifePct += o.life; s.armorPct += o.armor; }
   if (p.buffs.berserk > 0) {
     const b = SKILLS.berserk.vals(Math.max(1, effLevel(p, 'berserk')));
     s.dmgPct += b.dmg; s.ias += b.ias; s.moveSpeed += b.move; s.lifeSteal += b.lifeSteal;
@@ -150,6 +164,16 @@ function updatePlayer(dt) {
     if (p.buffs.berserk <= 0) { p.buffs.berserk = 0; recalcStats(p); }
     else if (chance(dt * 25)) fxEmbers(p.x, p.y, 1, '#ff3a22', 14);
   }
+  // 지속 효과: 강철 피부, 전투 명령, 광란·학살 중첩
+  if (p.buffs.ironskin > 0) { p.buffs.ironskin -= dt; if (chance(dt * 10)) fxSparks(p.x, p.y, 50, 1, '#d8dde8', 40); }
+  if (p.buffs.orders > 0) {
+    p.buffs.orders -= dt;
+    if (p.buffs.orders <= 0) { p.buffs.orders = 0; recalcStats(p); UI.message('전투 명령의 효과가 끝났습니다', '#c9c1b3'); }
+  }
+  for (const k of ['frenzy', 'rampage']) {
+    const st = p[k];
+    if (st && st.n > 0) { st.t -= dt; if (st.t <= 0) { st.n = 0; recalcStats(p); } }
+  }
   // 비약 남은 시간
   for (const k in p.elixirs) {
     if (p.elixirs[k] <= 0) continue;
@@ -171,10 +195,11 @@ function updatePlayer(dt) {
   healPlayer(s.lifeRegenTotal * dt);
   p.fury = Math.min(s.maxFury, p.fury + s.furyRegenTotal * dt);
   if (p.pose) { p.poseT += dt; if (p.poseT >= p.poseDur) p.pose = null; }
+  if (p.quake) updateQuake(dt);
   p.moving = false;
 
   // 안전장치: 어떤 이유로든 벽 안에 끼었으면 가장 가까운 빈자리로 빼냄
-  if (!p.leap && world.dungeon.circleBlocked(p.x, p.y, p.r * 0.8)) {
+  if (!p.leap && !p.rush && world.dungeon.circleBlocked(p.x, p.y, p.r * 0.8)) {
     const s2 = world.dungeon.freeSpot(p.x, p.y, p.r);
     p.x = s2.x; p.y = s2.y; p.path = null;
   }
@@ -186,6 +211,7 @@ function updatePlayer(dt) {
     return;
   }
   if (p.leap) { updateLeap(dt); return; }
+  if (p.rush) { updateRush(dt); return; }
   if (p.whirl) { updateWhirl(dt); return; }
   if (p.attack) { updateAttack(dt); return; }
   if (p.pose === 'roar' || p.pose === 'slam') return;
@@ -250,10 +276,15 @@ function updatePlayer(dt) {
 function startAttack(kind, target, ax, ay) {
   const p = player, s = p.stats;
   let dur = clamp(1 / s.apsTotal, 0.25, 1.4);
-  if (kind === 'bash') {
-    const cost = skillCost(SKILLS.bash.vals(effLevel(p, 'bash')));
-    if (p.fury < cost) { kind = 'basic'; noFury(); }
-    else { p.fury -= cost; dur *= 1.1; }
+  if (kind === 'bash' || kind === 'frenzy' || kind === 'execute') {
+    const v = SKILLS[kind].vals(effLevel(p, kind));
+    const cost = skillCost(v);
+    if (p.fury < cost || (p.cds[kind] || 0) > 0) { if (p.fury < cost) noFury(); kind = 'basic'; }
+    else {
+      p.fury -= cost;
+      if (v.cd) p.cds[kind] = v.cd * (1 - p.stats.cdr / 100);
+      dur *= kind === 'bash' ? 1.1 : kind === 'execute' ? 1.3 : 0.85;
+    }
   }
   const angle = target ? angleTo(p.x, p.y, target.x, target.y) : angleTo(p.x, p.y, ax, ay);
   p.facing = angle;
@@ -271,10 +302,13 @@ function updateAttack(dt) {
 function resolveSwing(a) {
   const p = player, s = p.stats;
   SFX.play('swing');
+  if (a.kind === 'frenzy' || a.kind === 'execute') { resolveSkillSwing(a); return; }
   const bash = a.kind === 'bash';
   fxSprite('cleave', p.x + Math.cos(a.angle) * 30, p.y + Math.sin(a.angle) * 30, { dir: flareDir(a.angle), scale: bash ? 1.25 : 0.95, alpha: 0.8 });
   const v = bash ? SKILLS.bash.vals(effLevel(p, 'bash')) : null;
   const opts = bash ? { knock: v.knock, stun: v.stun, fury: 2 } : { fury: 5 };
+  // 무거운 일격: 기본 공격이 가끔 기절시킴
+  if (!bash && s.bashChance && chance(s.bashChance / 100)) opts.stun = 0.4;
   const mult = bash ? v.mult : 1;
   let targets = [];
   if (a.target && !a.target.dead && dist(p.x, p.y, a.target.x, a.target.y) <= s.reach + a.target.r + 24) targets = [a.target];
@@ -290,6 +324,127 @@ function resolveSwing(a) {
   if (bash && targets.length) { fxShake(4); fxSparks(targets[0].x, targets[0].y, 30, 10, '#ffd28a', 160); fxSprite('spark_orange', targets[0].x, targets[0].y, { z: monsterHeight(targets[0]) * 0.5 - 52, scale: 1.2 }); }
 }
 
+// 광란(두 번 베기 + 속도 중첩)과 처형 일격(약한 적에게 2배, 처치하면 분노 환급)
+function resolveSkillSwing(a) {
+  const p = player, s = p.stats, id = a.kind, v = SKILLS[id].vals(effLevel(p, id));
+  let t = a.target && !a.target.dead && dist(p.x, p.y, a.target.x, a.target.y) <= s.reach + a.target.r + 24 ? a.target : null;
+  if (!t) {
+    let bd = s.reach + 30;
+    for (const m of world.monsters) {
+      if (!hittable(m)) continue;
+      const d = dist(p.x, p.y, m.x, m.y) - m.r;
+      if (d < bd && Math.abs(angleDiff(a.angle, angleTo(p.x, p.y, m.x, m.y))) < 0.9) { bd = d; t = m; }
+    }
+  }
+  const fx = p.x + Math.cos(a.angle) * 30, fy = p.y + Math.sin(a.angle) * 30;
+  if (id === 'frenzy') {
+    SFX.play('swing');
+    fxSprite('cleave', fx, fy, { dir: flareDir(a.angle), scale: 0.95, alpha: 0.8 });
+    setTimeout(() => { SFX.play('swing'); fxSprite('cleave', fx, fy, { dir: (flareDir(a.angle) + 1) % 8, scale: 0.9, alpha: 0.7 }); }, 90);
+    if (!t) return;
+    playerStrike(t, v.mult, { fury: 3 });
+    if (!t.dead) playerStrike(t, v.mult, { fury: 3, knock: 40 });
+    p.frenzy.n = Math.min(v.stacks, p.frenzy.n + 1);
+    p.frenzy.t = v.dur;
+    recalcStats(p);
+    if (p.frenzy.n === v.stacks) fxEmbers(p.x, p.y, 4, '#ffb04a', 14);
+    return;
+  }
+  // 처형 일격
+  SFX.play('swing');
+  fxSprite('cleave', fx, fy, { dir: flareDir(a.angle), scale: 1.4, alpha: 0.9 });
+  if (!t) return;
+  const low = t.life < t.maxLife * v.low / 100;
+  playerStrike(t, v.mult * (low ? 2 : 1), { knock: 120, fury: 0 });
+  fxShake(low ? 8 : 5);
+  fxSparks(t.x, t.y, 30, low ? 18 : 10, low ? '#ff5a3a' : '#ffd28a', 180);
+  if (low) fxText(t.x, t.y, '처형!', '#ff5a3a', 16, { z: monsterHeight(t) + 6 });
+  if (t.dead) { p.fury = Math.min(s.maxFury, p.fury + v.refund); SFX.play('crit'); }
+}
+
+// 지진: 0.35초 간격으로 세 번 흔들림 (게임 시간 기준, 멈추면 같이 멈춤)
+function quake(v) {
+  const p = player;
+  p.pose = 'slam'; p.poseT = 0; p.poseDur = 0.4;
+  p.quake = { t: 0, n: 0, v };
+}
+function updateQuake(dt) {
+  const p = player, q = p.quake;
+  q.t += dt;
+  while (q.n < 3 && q.t >= q.n * 0.35) {
+    const i = q.n++, v = q.v, r = v.radius * (0.65 + i * 0.175);
+    SFX.play('boom', 0.7);
+    fxShake(6 + i * 2);
+    fxSprite('quake', p.x, p.y, { layer: 'ground', scale: r / 80 });
+    fxRing(p.x, p.y, 10, r, 0.45, '#d8b07a', 5);
+    fxDust(p.x, p.y, 10, '130,110,85', 160);
+    for (const m of world.monsters) {
+      if (!hittable(m) || dist(p.x, p.y, m.x, m.y) > r + m.r) continue;
+      playerStrike(m, v.mult, { knock: 40, fury: 1 });
+      if (!m.dead) m.slow = Math.max(m.slow, v.slow);
+    }
+  }
+  if (q.n >= 3) p.quake = null;
+}
+
+// 돌진: 땅을 박차고 미끄러지듯 달려가며 길목의 적을 들이받음 (그동안 무적)
+function startRush(aim, v) {
+  const p = player, d = world.dungeon;
+  const a = angleTo(p.x, p.y, aim.x, aim.y);
+  const len = Math.min(v.range, Math.max(80, dist(p.x, p.y, aim.x, aim.y)));
+  let tx = p.x, ty = p.y;
+  for (let s = 8; s <= len; s += 8) {
+    const x = p.x + Math.cos(a) * s, y = p.y + Math.sin(a) * s;
+    if (d.circleBlocked(x, y, p.r * 0.8)) break;
+    tx = x; ty = y;
+  }
+  p.order = null; p.path = null;
+  p.facing = a;
+  p.rush = { sx: p.x, sy: p.y, tx, ty, a, t: 0, dur: Math.max(0.12, dist(p.x, p.y, tx, ty) / 950), v, hit: new Set() };
+  SFX.play('whirl');
+  fxDust(p.x, p.y, 8);
+}
+function updateRush(dt) {
+  const p = player, r = p.rush;
+  r.t += dt;
+  const k = Math.min(1, r.t / r.dur);
+  p.x = lerp(r.sx, r.tx, k); p.y = lerp(r.sy, r.ty, k);
+  p.moving = true; p.walkPhase += dt * 30;
+  if (chance(0.7)) fxDust(p.x, p.y, 1, '120,100,80', 50);
+  for (const m of world.monsters) {
+    if (!hittable(m) || r.hit.has(m.id) || dist(p.x, p.y, m.x, m.y) > m.r + p.r + 22) continue;
+    r.hit.add(m.id);
+    playerStrike(m, r.v.mult, { knock: 170, stun: r.v.stun, fury: 3 });
+    fxShake(4);
+  }
+  if (k >= 1) { p.rush = null; p.attack = null; }
+}
+
+// 작살: 처음 맞은 적을 끌어옴
+function throwHarpoon(aim, v) {
+  const p = player;
+  const a = angleTo(p.x, p.y, aim.x, aim.y);
+  p.facing = a;
+  p.pose = 'throw'; p.poseT = 0; p.poseDur = 0.3;
+  spawnProjectile({
+    owner: 'player', type: 'spear', x: p.x + Math.cos(a) * 14, y: p.y + Math.sin(a) * 14,
+    vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, r: 12, mult: v.mult, pierce: 0, life: 0.6, angle: a, pull: v.stun,
+  });
+  SFX.play('throw');
+}
+function harpoonPull(m, stun) {
+  const p = player;
+  if (m.tier < 3 && !m.stationary && !m.dead) {
+    const a = angleTo(p.x, p.y, m.x, m.y), want = p.r + m.r + 12;
+    const s = world.dungeon.freeSpot(p.x + Math.cos(a) * want, p.y + Math.sin(a) * want, m.r * 0.8, 80);
+    fxDust(m.x, m.y, 6);
+    m.x = s.x; m.y = s.y; m.kvx = m.kvy = 0;
+  }
+  if (!m.dead) { m.stun = Math.max(m.stun, m.tier === 3 ? stun * 0.3 : stun); m.windup = 0; m.pending = null; m.act = m.act && m.act.kind === 'emerge' ? m.act : null; }
+  fxSparks(m.x, m.y, 40, 10, '#e8e2d0', 120);
+  SFX.play('block', 0.6);
+}
+
 function noFury() {
   if (Game.time - (Game.lastNoFury || 0) > 1.2) {
     Game.lastNoFury = Game.time;
@@ -301,7 +456,7 @@ function noFury() {
 // ── 스킬 ──
 function useSkill(slot) {
   const p = player;
-  if (!p || p.dead || p.leap || Game.state !== 'playing') return;
+  if (!p || p.dead || p.leap || p.rush || Game.state !== 'playing') return;
   const id = p.hotbar[slot];
   if (!id) return;
   const v = SKILLS[id].vals(effLevel(p, id));
@@ -315,11 +470,11 @@ function useSkill(slot) {
     return;
   }
   if ((p.cds[id] || 0) > 0) { SFX.play('nope'); return; }
-  if (id === 'bash') {
+  if (id === 'bash' || id === 'frenzy' || id === 'execute') {
     const hov = Input.hover && Input.hover.kind === 'monster' ? Input.hover.ref : null;
     const target = hov || nearestMonsterNear(aim.x, aim.y, 120);
-    if (target) p.order = { type: 'attack', target, skill: 'bash' };
-    else if (!p.attack) startAttack('bash', null, aim.x, aim.y);
+    if (target) p.order = { type: 'attack', target, skill: id };
+    else if (!p.attack) startAttack(id, null, aim.x, aim.y);
     return;
   }
   if (p.fury < skillCost(v)) { noFury(); return; }
@@ -331,6 +486,38 @@ function useSkill(slot) {
     case 'warcry': warcry(v); break;
     case 'slam': slam(aim, v); break;
     case 'axes': throwAxes(aim, v); break;
+    case 'quake': quake(v); break;
+    case 'rush': startRush(aim, v); break;
+    case 'harpoon': throwHarpoon(aim, v); break;
+    case 'ironskin':
+      p.buffs.ironskin = v.dur;
+      p.slowT = 0;
+      SFX.play('berserk');
+      fxSprite('shield_orange', p.x, p.y, { follow: p, life: v.dur, scale: 0.7, alpha: 0.35, fade: 0.5 });
+      fxRing(p.x, p.y, 10, 90, 0.5, '#d8dde8', 6);
+      UI.message('강철 피부!', '#d8dde8');
+      break;
+    case 'battleorders': {
+      const before = p.stats.maxLife;
+      p.buffs.orders = v.dur;
+      recalcStats(p);
+      healPlayer(p.stats.maxLife - before);
+      p.pose = 'roar'; p.poseT = 0; p.poseDur = 0.45;
+      SFX.play('warcry');
+      fxRing(p.x, p.y, 10, 140, 0.6, '#8fd0ff', 6);
+      fxSprite('sparkle', p.x, p.y, { follow: p, life: 1, scale: 1.2 });
+      UI.message(`전투 명령! 최대 생명력 +${v.life}% · 방어력 +${v.armor}%`, '#8fd0ff');
+      break;
+    }
+    case 'rally': {
+      const heal = p.stats.maxLife * v.heal / 100;
+      p.healLeft += heal; p.healRate = Math.max(p.healRate, heal / 3);
+      p.poisonT = 0; p.slowT = 0;
+      SFX.play('revive');
+      fxSprite('heal', p.x, p.y, { follow: p, scale: 1.1 });
+      fxRing(p.x, p.y, 10, 100, 0.6, '#7dffa0', 5);
+      break;
+    }
     case 'berserk':
       p.buffs.berserk = v.dur;
       recalcStats(p);
@@ -673,6 +860,8 @@ function buyPotion() {
 }
 
 // ── 레벨업 카드 ──
+// 단축키 칸 수 = 배울 수 있는 공격·방어 기술 수
+const MAX_ACTIVES = 6;
 function rollCards(first) {
   const p = player;
   const ids = Object.keys(SKILLS);
@@ -680,8 +869,8 @@ function rollCards(first) {
   let pool = ids.filter(id => {
     const lv = p.skills[id] || 0;
     if (lv >= SKILLS[id].max) return false;
-    if (SKILLS[id].type === 'active' && !lv && learnedActives.length >= 4) return false;
-    if (first && (SKILLS[id].type !== 'active' || id === 'berserk')) return false;  // 첫 기술은 공격 기술로
+    if (SKILLS[id].type === 'active' && !lv && learnedActives.length >= MAX_ACTIVES) return false;
+    if (first && (SKILLS[id].type !== 'active' || SKILLS[id].def)) return false;  // 첫 기술은 공격 기술로
     return true;
   });
   const weight = id => {
@@ -697,17 +886,21 @@ function rollCards(first) {
   }
   // 액티브가 1개뿐이면 새 액티브를 최소 하나 보장
   if (!first && learnedActives.length < 2 && !out.some(id => SKILLS[id].type === 'active' && !p.skills[id])) {
-    const cand = ids.filter(id => SKILLS[id].type === 'active' && !p.skills[id]);
+    const cand = ids.filter(id => SKILLS[id].type === 'active' && !SKILLS[id].def && !p.skills[id]);
     if (cand.length) out[out.length - 1] = pick(cand);
   }
-  for (const b of BONUS_CARDS) if (out.length < 3) out.push(b.id);
+  // 고를 기술이 모자라면 보너스 카드로 채움 (생명력·피해·방어가 먼저)
+  const bonus = shuffle(BONUS_CARDS.slice(0, 3).map(b => b.id)).concat(shuffle(BONUS_CARDS.slice(3).map(b => b.id)));
+  for (const b of bonus) if (out.length < 3) out.push(b);
   return out;
 }
 
 function learnSkill(id) {
   const p = player;
-  if (id === '_life') p.bonusLife += 25;
-  else if (id === '_gold') p.gold += 500;
+  if (id === '_life') p.bonusLife += bonusLifeAmount(p.level);
+  else if (id === '_gold') p.gold += bonusGoldAmount(p.level);
+  else if (id === '_might') p.bonusDmg = (p.bonusDmg || 0) + 3;
+  else if (id === '_guard') p.bonusArmor = (p.bonusArmor || 0) + 5;
   else if (id === '_potion') p.potions = Math.min(MAX_POTIONS, p.potions + 3);
   else {
     p.skills[id] = (p.skills[id] || 0) + 1;
@@ -727,7 +920,7 @@ function playerDie() {
   p.deaths = (p.deaths || 0) + 1;
   p.dead = true;
   p.life = 0;
-  p.attack = p.leap = p.whirl = p.order = null;
+  p.attack = p.leap = p.whirl = p.order = p.rush = p.quake = null;
   p.z = 0;
   SFX.play('pdie');
   fxBlood(p.x, p.y, 30, 30);

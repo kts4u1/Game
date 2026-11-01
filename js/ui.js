@@ -445,6 +445,9 @@ const UI = {
     for (const id in ELIXIRS) if (p.elixirs[id] > 0) rows.push([ELIXIRS[id].name, `${Math.ceil(p.elixirs[id] / 60)}분 남음`]);
     const sc = setCounts(p.equipment);
     for (const id in sc) if (SETS[id]) rows.push([SETS[id].name, `${sc[id]}세트`]);
+    if (p.bonusDmg || p.bonusArmor) rows.push(['영구 보너스', `피해 +${p.bonusDmg || 0}% · 방어력 +${p.bonusArmor || 0}%`]);
+    if (p.frenzy && p.frenzy.n) rows.push(['광란 중첩', `${p.frenzy.n}`]);
+    if (p.rampage && p.rampage.n) rows.push(['학살 중첩', `${p.rampage.n}`]);
     if (p.cleared) rows.push(['난이도', DIFFICULTIES[p.difficulty || 0].name]);
     rows.push(['가장 깊은 층', `${p.deepest || 1}층`], ['처치 수', p.kills]);
     const ids = Object.keys(p.skills);
@@ -496,13 +499,13 @@ const UI = {
     lu.querySelector('.lu-cards').innerHTML = cards.map((id, i) => {
       if (id.startsWith('_')) {
         const b = BONUS_CARDS.find(x => x.id === id);
-        return `<button class="card bonus" data-id="${id}"><span class="card-n">${i + 1}</span><div class="card-type">보너스</div><span class="card-icon">${skillIconHtml(id)}</span><div class="card-name">${b.name}</div><div class="card-key">${b.key}</div><p class="card-desc">${b.desc}</p></button>`;
+        return `<button class="card bonus" data-id="${id}"><span class="card-n">${i + 1}</span><div class="card-type">보너스</div><span class="card-icon">${skillIconHtml(id)}</span><div class="card-name">${b.name}</div><div class="card-key">${id === '_life' ? `최대 생명력 +${bonusLifeAmount(p.level)}` : id === '_gold' ? `골드 +${bonusGoldAmount(p.level).toLocaleString()}` : b.key}</div><p class="card-desc">${b.desc}</p></button>`;
       }
       const sk = SKILLS[id];
       const lv = p.skills[id] || 0;
       const bonus = lv ? effLevel(p, id) - lv : 0;
       const nv = sk.vals(lv + 1 + bonus);
-      const type = sk.type === 'active' ? '액티브' : '패시브';
+      const type = sk.type === 'active' ? (sk.def ? '방어·강화' : '공격') : '패시브';
       const tag = lv ? `Lv ${lv} → ${lv + 1}` : '새 기술';
       const key = lv ? `${sk.key(sk.vals(lv + bonus))} → ${sk.key(nv)}` : sk.key(nv);
       return `<button class="card ${sk.type}${lv ? '' : ' new'}" data-id="${id}"><span class="card-n">${i + 1}</span><div class="card-type">${type} · ${tag}</div><span class="card-icon">${skillIconHtml(id)}</span><div class="card-name">${sk.name}</div><div class="card-key">${key}</div><p class="card-desc">${sk.desc(nv)}</p></button>`;
