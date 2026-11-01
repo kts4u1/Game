@@ -51,6 +51,7 @@ function spawnMonster(type, x, y, mlvl, tier = 0, opts = {}) {
     if (mod === 'blink' && !m.abil.includes('teleport')) m.abil.push('blink');
   }
   if (m.summoned) m.xp *= 0.5;
+  m.speed *= DIFFICULTIES[(world && world.diff) || 0].speed;  // 지옥은 몬스터가 조금 더 빠름
   // 특수 행동 첫 사용은 조금 늦게
   for (const a of m.abil) m.cd[a] = rand(1.5, 3.5);
   if (m.abil.includes('ambush')) { m.hidden = true; m.ambushWait = true; }
@@ -121,9 +122,9 @@ function populateFloor() {
   const types = pickRoster(f);
   world.roster = types;
   const rooms = d.rooms.filter(r => r !== d.startRoom);
-  const nm = world.diff === 1;
-  // 악몽: 정예 무리가 더 많고, 이름 있는 정예는 특성이 하나 더
-  const champRooms = shuffle(rooms.slice()).slice(0, (f === 1 ? 1 : randInt(1, 2)) + (nm ? 1 : 0));
+  // 악몽·지옥: 정예 무리가 더 많고, 이름 있는 정예는 특성이 하나 더
+  const DF = DIFFICULTIES[world.diff || 0];
+  const champRooms = shuffle(rooms.slice()).slice(0, (f === 1 ? 1 : randInt(1, 2)) + DF.champ);
   const uniqCands = rooms.filter(r => !champRooms.includes(r) && r !== d.stairsRoom);
   const uniqueRoom = f >= 2 && uniqCands.length ? pick(uniqCands) : null;
   let packId = 1;
@@ -137,7 +138,7 @@ function populateFloor() {
     if (r === uniqueRoom) {
       const cands = types.filter(t => t !== 'fallen' && t !== 'swarm');
       const type = weightedPick(cands.length ? cands : types, t => MONSTERS[t].weight);
-      const mods = shuffle(Object.keys(ELITE_MODS)).slice(0, (f >= 6 ? 3 : 2) + (nm ? 1 : 0));
+      const mods = shuffle(Object.keys(ELITE_MODS)).slice(0, (f >= 6 ? 3 : 2) + DF.mods);
       const name = `${pick(UNIQUE_NAME_A)} ${pick(UNIQUE_NAME_B)}`;
       const c = d.randomPointInRoom(r, 2);
       const pid = packId++;

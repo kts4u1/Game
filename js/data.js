@@ -599,12 +599,25 @@ function themeForFloor(f) {
   while (i + 1 < THEME_STARTS.length && THEME_STARTS[i + 1] <= f) i++;
   return THEMES[i];
 }
-// ── 난이도 ── 일반 난이도의 망자의 왕을 쓰러뜨리면 악몽이 열림
-// res: 원소 저항 감소, mf: 마법 아이템 발견 보너스, gold: 골드 배율
+// ── 난이도 ── 한 난이도의 망자의 왕을 쓰러뜨리면 다음 난이도가 열림 (일반 → 악몽 → 지옥)
+// key: 정복 기록 이름, lv0·step: 1층 몬스터 레벨과 층마다 오르는 양, res: 원소 저항 감소,
+// mf: 마법 아이템 발견 보너스, gold: 골드 배율, champ: 정예 무리 추가, mods: 이름 있는 정예 특성 추가, speed: 몬스터 속도
 const DIFFICULTIES = [
-  { name: '일반', color: '#e8d9a8', res: 0, mf: 0, gold: 1 },
-  { name: '악몽', color: '#ff6a5a', res: -20, mf: 60, gold: 1.5 },
+  { name: '일반', cls: '', key: 'cleared', lv0: 1, step: 1.5, res: 0, mf: 0, gold: 1, champ: 0, mods: 0, speed: 1 },
+  { name: '악몽', cls: 'nm', key: 'clearedNM', lv0: 48, step: 1, res: -20, mf: 60, gold: 1.5, champ: 1, mods: 1, speed: 1 },
+  { name: '지옥', cls: 'hell', key: 'clearedHell', lv0: 82, step: 0.75, res: -40, mf: 120, gold: 2, champ: 2, mods: 1, speed: 1.08 },
 ];
-// 몬스터 레벨: 일반 1층 1 → 50층 75, 악몽 1층 48 → 50층 97
-function monsterLevelForFloor(f, diff = 0) { return diff === 1 ? 48 + (f - 1) : 1 + Math.round((f - 1) * 1.5); }
+// 몬스터 레벨: 일반 1층 1 → 50층 75, 악몽 1층 48 → 50층 97, 지옥 1층 82 → 50층 119
+function monsterLevelForFloor(f, diff = 0) { const D = DIFFICULTIES[diff] || DIFFICULTIES[0]; return D.lv0 + Math.round((f - 1) * D.step); }
+// 이 난이도가 열렸는지 (바로 앞 난이도를 정복해야 열림)
+function diffUnlocked(p, diff) { return diff === 0 || !!(p && DIFFICULTIES[diff] && p[DIFFICULTIES[diff - 1].key]); }
+// 화면에 붙이는 난이도 머리말 ('악몽 · ')
+function diffTag(diff) { return diff ? `${DIFFICULTIES[diff].name} · ` : ''; }
+// 난이도별 엔딩
+const ENDING_TITLES = ['심연이 잠들었습니다', '악몽이 끝났습니다', '지옥이 무너졌습니다'];
+const ENDING_STORIES = [
+  '망자의 왕 오르쿠스가 쓰러지자 그의 머리에서 굴러떨어진 왕관이 산산이 부서졌습니다. 묘지를 깨우던 저주가 걷히고, 국경 야영지에는 오랜만에 새소리가 돌아왔습니다. 쉰 개의 층을 뚫고 내려간 야만용사의 이름은 노래가 되어 북방의 모든 부족에게 전해질 것입니다.',
+  '부서진 왕관의 조각들이 악몽 속에서 다시 맞붙어 망자의 왕을 일으켰지만, 야만용사는 더 깊은 어둠을 뚫고 내려가 그를 두 번째로 쓰러뜨렸습니다. 이번에는 왕관의 파편마저 재가 되어 바람에 흩어졌습니다. 이제 심연은 그의 이름만 들어도 떨게 될 것입니다.',
+  '재가 된 왕관은 지옥불 속에서 마지막으로 타올라 망자의 왕을 불꽃의 몸으로 되살렸습니다. 땅이 갈라지고 하늘이 붉게 물든 그 밤, 야만용사는 세 번째로 그를 쓰러뜨리고 지옥의 문을 스스로의 도끼로 부숴 닫았습니다. 북방의 부족들은 이제 그를 사람이 아니라 전설이라 부릅니다.',
+];
 function isBossFloor(f) { return f > 0 && f % 5 === 0; }

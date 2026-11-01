@@ -402,3 +402,9 @@ body.item-dragging, body.item-dragging * { cursor: grabbing !important; }
 .shop-tabs button.nm.on { color: #ff8070; background: #2e1614; border-color: #6a2a22; }
 #ending.nm { background: radial-gradient(ellipse at 50% 40%, rgba(60, 10, 12, .88), rgba(4, 1, 2, .97) 75%); }
 #ending.nm h2 { background: linear-gradient(#ffe0d6, #ff6a5a 55%, #7a1a14); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 3px 0 #000) drop-shadow(0 0 24px rgba(255, 70, 50, .5)); }
+/* 지옥 난이도 */
+#floor-name.hell { color: #ffa040; text-shadow: 0 0 10px rgba(255, 110, 20, .45); }
+.shop-tabs button.hell.on { color: #ffb050; background: #2e1a0c; border-color: #7a4416; }
+.shop-tabs button.locked { opacity: .45; cursor: not-allowed; }
+#ending.hell { background: radial-gradient(ellipse at 50% 40%, rgba(80, 30, 4, .9), rgba(6, 2, 0, .97) 75%); }
+#ending.hell h2 { background: linear-gradient(#fff2c8, #ff9a30 50%, #8a2a06); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 3px 0 #000) drop-shadow(0 0 28px rgba(255, 120, 20, .6)); }

@@ -346,7 +346,9 @@ const Shop = {
     panel.querySelector('.shop-tabs').hidden = !tabs.length;
     // 심연의 문: 엔딩을 본 뒤에는 난이도 선택
     if (n.role === 'gate' && p.cleared) {
-      panel.querySelector('.shop-tabs').innerHTML = DIFFICULTIES.map((D, i) => `<button data-diff="${i}" class="${(p.difficulty || 0) === i ? 'on' : ''}${i ? ' nm' : ''}">${D.name}</button>`).join('');
+      panel.querySelector('.shop-tabs').innerHTML = DIFFICULTIES.map((D, i) => diffUnlocked(p, i)
+        ? `<button data-diff="${i}" class="${(p.difficulty || 0) === i ? 'on' : ''} ${D.cls}">${D.name}</button>`
+        : `<button class="locked" disabled title="${DIFFICULTIES[i - 1].name}의 망자의 왕을 쓰러뜨리면 열립니다">${D.name} (잠김)</button>`).join('');
       panel.querySelector('.shop-tabs').hidden = false;
     }
     let body = '', foot = '';
@@ -420,11 +422,12 @@ const Shop = {
         foot = selFoot(this.sel.item, '<button class="btn-main" data-act="take">가방으로 꺼내기</button><button data-act="stashmove">옮기기</button>');
       }
     } else if (n.role === 'gate') {
-      const dw = Game.dungeonWorld, diff = p.difficulty || 0;
-      body = (diff ? hint(`악몽: 몬스터가 훨씬 강하고 더 좋은 아이템과 골드(${DIFFICULTIES[1].gold}배)가 떨어집니다. 원소 저항 ${DIFFICULTIES[1].res}%.`) : '')
+      const dw = Game.dungeonWorld, diff = p.difficulty || 0, D = DIFFICULTIES[diff], next = DIFFICULTIES[diff + 1];
+      body = (diff ? hint(`${D.name}: 몬스터가 훨씬 강하고 더 좋은 아이템(마법 아이템 발견 +${D.mf}%)과 골드(${D.gold}배)가 떨어집니다. 원소 저항 ${D.res}%.${D.speed > 1 ? ` 몬스터가 ${Math.round((D.speed - 1) * 100)}% 더 빠릅니다.` : ''}`) : '')
+        + (p.cleared && next && !diffUnlocked(p, diff + 1) ? hint(`${D.name} 난이도의 망자의 왕을 쓰러뜨리면 ${next.name} 난이도가 열립니다.`) : '')
         + hint('웨이포인트는 1층과, 보스를 쓰러뜨린 다음 층(6, 11, 16층 …)에서 열립니다.')
         + `<ul class="shop-list">${dw && dw.portal ? `<li><div class="sl-main"><div class="sl-name">차원문으로 돌아가기</div><div class="sl-desc">${dw.floor}층 · ${dw.dungeon.theme.name}</div></div><div class="sl-btns"><button class="btn-main" data-act="back">돌아가기</button></div></li>` : ''}
-          ${Town.waypointFloors().map(f => `<li><div class="sl-main"><div class="sl-name">${f}층 · ${themeForFloor(f).name}</div><div class="sl-desc">${diff ? '악몽 · ' : ''}몬스터 레벨 ${monsterLevelForFloor(f, diff)}</div></div><div class="sl-btns"><button data-floor="${f}">이동</button></div></li>`).join('')}</ul>`
+          ${Town.waypointFloors().map(f => `<li><div class="sl-main"><div class="sl-name">${f}층 · ${themeForFloor(f).name}</div><div class="sl-desc">${diffTag(diff)}몬스터 레벨 ${monsterLevelForFloor(f, diff)}</div></div><div class="sl-btns"><button data-floor="${f}">이동</button></div></li>`).join('')}</ul>`
         + hint(`가장 깊이 내려간 곳: ${player.deepest || 1}층`);
     }
     panel.querySelector('.panel-body').innerHTML = body;
