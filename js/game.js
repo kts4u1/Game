@@ -74,6 +74,8 @@ const Game = {
     for (const m of world.monsters) if (m.summonType && !types.includes(m.summonType)) types.push(m.summonType);
     for (const t of types) { const sp = MONSTERS[t].sprite; if (sp && sp !== 'human' && !sprites.includes(sp)) sprites.push(sp); }
     const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player), ...humanAssetPaths(types)];
+    // 소품이 다른 타일셋 그림을 쓰면 그것도
+    for (const pr of world.dungeon.props || []) if (pr.set && FLARE.tiles[pr.set] && !paths.includes(FLARE.tiles[pr.set].img)) paths.push(FLARE.tiles[pr.set].img);
     if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) paths.push(FLARE.npcs[n.sprite].img);
     if (world.chests.some(c => c.captive)) paths.push(FLARE.npcs.peasant_man1.img);
     // 색을 입힌 몬스터 그림, 그림자 실루엣, 타일 그림을 미리 만들어 한 번 그려 둠 (처음 화면에 나올 때 멈칫하지 않게)
@@ -106,7 +108,10 @@ const Game = {
   },
 
   buildTitleWorld() {
-    const f = pick([1, 4, 7, 10, 13]);
+    // 처음 화면: 미리 불러 둔 타일셋(던전·동굴·풀밭)을 쓰는 층 중 하나
+    const fs = [];
+    for (let f = 1; f < 20; f++) if (['dungeon', 'cave', 'grassland'].includes(themeForFloor(f, 0, 1).tiles)) fs.push(f);
+    const f = pick(fs);
     world = makeWorld(f, 0);
     populateFloor();
     world.dungeon.explored.fill(1);
@@ -173,6 +178,8 @@ const Game = {
     p.quests = d.quests || {}; p.bounty = d.bounty || null; p.bountyDone = d.bountyDone || 0;
     p.freeSockets = d.freeSockets || 0; p.potionCap = d.potionCap || 0;
     p.freeEnhance = d.freeEnhance || 0; p.gambleDiscount = d.gambleDiscount || 0;
+    // 층마다 나오는 테마 순서 (예전 저장에는 없으므로 새로 정함)
+    if (d.mapSeed) p.mapSeed = d.mapSeed;
     this.levelUpDelay = 1.5;
     this.dungeonWorld = null;
     Shop.buyback = [];
@@ -371,7 +378,7 @@ const Game = {
         equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, charms: p.charms, elixirs: p.elixirs,
         playTime: Math.round(p.playTime || 0), deaths: p.deaths || 0, cleared: p.cleared || null,
         clearedNM: p.clearedNM || null, clearedHell: p.clearedHell || null, difficulty: p.difficulty || 0, deepestBy: this.deepestBy(),
-        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0, freeEnhance: p.freeEnhance || 0, gambleDiscount: p.gambleDiscount || 0,
+        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0, freeEnhance: p.freeEnhance || 0, gambleDiscount: p.gambleDiscount || 0, mapSeed: p.mapSeed,
       },
     };
     store.set(SAVE_KEY, JSON.stringify(data));
@@ -395,8 +402,8 @@ const Game = {
 };
 
 function makeWorld(floor, diff) {
-  const dungeon = new Dungeon(floor);
   diff = !floor ? 0 : diff != null ? diff : (player && player.difficulty) || 0;
+  const dungeon = new Dungeon(floor, diff);
   return {
     floor, dungeon, town: floor === 0, diff, mlvl: floor ? monsterLevelForFloor(floor, diff) : 1, monsters: [], ground: [], projectiles: [],
     chests: [], hazards: [], waves: [], flashes: [], pools: [], portal: null,

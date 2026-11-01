@@ -511,7 +511,7 @@ const Shop = {
         + (p.cleared && next && !diffUnlocked(p, diff + 1) ? hint(`${D.name} 난이도의 망자의 왕을 쓰러뜨리면 ${next.name} 난이도가 열립니다.`) : '')
         + hint('웨이포인트는 1층과, 보스를 쓰러뜨린 다음 층(6, 11, 16층 …)에서 열립니다.')
         + `<ul class="shop-list">${dw && dw.portal ? `<li><div class="sl-main"><div class="sl-name">차원문으로 돌아가기</div><div class="sl-desc">${dw.floor}층 · ${dw.dungeon.theme.name}</div></div><div class="sl-btns"><button class="btn-main" data-act="back">돌아가기</button></div></li>` : ''}
-          ${Town.waypointFloors().map(f => `<li><div class="sl-main"><div class="sl-name">${f}층 · ${themeForFloor(f).name}</div><div class="sl-desc">${diffTag(diff)}몬스터 레벨 ${monsterLevelForFloor(f, diff)}</div></div><div class="sl-btns"><button data-floor="${f}">이동</button></div></li>`).join('')}</ul>`
+          ${Town.waypointFloors().map(f => `<li><div class="sl-main"><div class="sl-name">${f}층 · ${themeForFloor(f, player.difficulty).name}</div><div class="sl-desc">${diffTag(diff)}몬스터 레벨 ${monsterLevelForFloor(f, diff)}</div></div><div class="sl-btns"><button data-floor="${f}">이동</button></div></li>`).join('')}</ul>`
         + hint(`가장 깊이 내려간 곳: ${player.deepest || 1}층`);
     }
     panel.querySelector('.panel-body').innerHTML = body;

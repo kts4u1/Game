@@ -121,16 +121,56 @@ TILESETS = {
         'outer': [73], 'inner': [77], 'black': [66, 67, 79],
         'decor': [176, 177, 178, 179, 180, 181, 182, 183],
         'props': {'chest': 288, 'chestOpen': 289, 'stairs': 286, 'brazier': 167},
+        # 홀로 선 기둥, 방 안 소품
+        'pillar': [110, 111],
+        'statues': [128, 129, 130, 131], 'thrones': [132, 133], 'altars': [134, 135], 'tables': [136, 137],
+        'barrels': [146, 162], 'crates': [147, 163], 'lecterns': [148, 149, 164, 165], 'tombs': [194, 197, 200],
+        'chains': [192, 193], 'firebowl': [151],
     },
     'cave': {
         'floor': list(range(16, 32)),
         'floorDecor': [52, 53, 54, 55],
-        'wallSE': [64, 68, 96],
-        'wallSW': [65, 69, 97],
+        'wallSE': [64, 68, 96, 100],
+        'wallSW': [65, 69, 97, 101],
         'torchSE': [], 'torchSW': [],
-        'outer': [72, 76, 98], 'inner': [74], 'black': [66, 67, 74],
+        'outer': [72, 76, 98, 102], 'inner': [74], 'black': [66, 67, 74],
         'decor': [],
         'props': {},
+        # 광산 벽(버팀목·사다리), 버섯 벽, 버팀목 기둥, 종유석 기둥
+        'mineSE': [104, 108], 'mineSW': [105, 109], 'supports': [110, 111],
+        'shroomSE': [112], 'shroomSW': [113], 'shroomOuter': [114],
+        'pillar': [148, 149],
+        'carts': [128, 129, 130, 131], 'mushrooms': [132, 133, 134, 135], 'stalagmites': [144, 145, 146, 147],
+        'rocks': [150, 151, 152, 153], 'barrels': [162, 178], 'crates': [163, 179],
+    },
+    # 이끼 낀 고대 유적 (empyrean_campaign)
+    'ruins': {
+        'mod': 'empyrean_campaign',
+        'floor': list(range(24, 32)) + [74, 75, 76, 38, 39, 40],
+        'floorDecor': [64, 65, 66, 67, 68, 69, 70, 71, 83, 84, 85],
+        'wallSE': [147, 204, 168, 170, 174, 176, 178, 195, 199, 208, 212, 213, 215, 238, 240],
+        'wallSW': [145, 202, 169, 171, 175, 177, 179, 196, 200, 206, 210, 214, 216, 237, 239],
+        'torchSE': [], 'torchSW': [],
+        'outer': [182, 201, 205, 209, 219], 'inner': [148], 'black': [146, 149, 150, 151],
+        'decor': [],
+        'props': {},
+        'pillar': [152, 223, 224, 225, 226, 227, 228],
+        'statues': [241, 242, 243, 244, 245, 246], 'urns': [268, 269], 'pedestals': [274, 275, 276, 277], 'crystal': [278],
+        'shelves': [279, 280], 'tables': [281, 282, 283, 284], 'crates': [285, 286], 'barrels': [287, 288],
+        'wells': [289, 290], 'shrines': [291, 292], 'orbs': [293, 294], 'plants': [312, 313, 314, 315, 316, 317],
+        'rubble': [186, 187, 189, 190, 192, 193, 194],
+    },
+    # 눈 덮인 바깥 지역 (snowplains): 마을·바깥 지역과 같은 이름으로 씀
+    'snow': {
+        'def': 'snowplains',
+        'floor': list(range(16, 32)), 'floorAlt': list(range(568, 584)), 'path': list(range(32, 40)),
+        'trees': [244, 245, 246, 247], 'bushes': list(range(112, 128)), 'rocks': [128, 129, 130, 131] + list(range(552, 568)),
+        'graves': [140, 141, 142, 143], 'fences': [104, 107], 'pillars': [132, 133, 134, 135],
+        'props': {
+            'tent': 72, 'tent2': 75, 'crate': 96, 'crateOpen': 97, 'crates': 98, 'crates2': 99, 'wood': 100, 'wood2': 101,
+            'campfire': 102, 'anvil': 103, 'stump': 136, 'stumpAxe': 137, 'sign': 138, 'sign2': 139, 'pillar': 132, 'pillar2': 133,
+            'snowman': 532, 'snowman2': 534, 'cart': 540, 'tower': 545, 'ring': 264, 'portal': 265,
+        },
     },
     # 마을: 풀밭, 돌길, 나무, 천막, 모루, 웨이포인트 고리
     'grassland': {
@@ -270,18 +310,28 @@ def build_sprite(base, anim_path, wanted, out_png, scale=None, one_dir=False):
 
 
 def parse_tileset(path):
-    tiles = {}
-    for m in re.finditer(r'^tile=(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+)', open(path, encoding='utf-8').read(), re.M):
-        tid, x, y, w, h, ox, oy = map(int, m.groups())
-        tiles[tid] = (x, y, w, h, ox, oy)
+    """tile id → (그림 파일, x, y, w, h, ox, oy). 정의 파일 하나에 [tileset] 묶음(그림)이 여럿일 수 있음"""
+    tiles, img = {}, None
+    for line in open(path, encoding='utf-8'):
+        line = line.strip()
+        if line.startswith('img='):
+            img = line[4:]
+        m = re.match(r'tile=(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+)', line)
+        if m:
+            tid, x, y, w, h, ox, oy = map(int, m.groups())
+            tiles[tid] = (img, x, y, w, h, ox, oy)
     return tiles
 
 
 def build_tileset(base, name, spec, out_png):
-    tiles = parse_tileset(os.path.join(base, 'tilesetdefs', f'tileset_{name}.txt'))
-    src = Image.open(os.path.join(base, 'images', 'tilesets', f'tileset_{name}.png')).convert('RGBA')
+    if spec.get('mod'):
+        base = os.path.join(os.path.dirname(os.path.abspath(base)), spec['mod'])
+    tiles = parse_tileset(os.path.join(base, 'tilesetdefs', f"tileset_{spec.get('def', name)}.txt"))
+    images = {}
     ids = set()
     for k, v in spec.items():
+        if k in ('mod', 'def'):
+            continue
         if k == 'props':
             ids.update(v.values())
         else:
@@ -289,8 +339,10 @@ def build_tileset(base, name, spec, out_png):
     packer = Packer()
     trims = {}
     for tid in sorted(ids):
-        x, y, w, h, ox, oy = tiles[tid]
-        im = src.crop((x, y, x + w, y + h))
+        img, x, y, w, h, ox, oy = tiles[tid]
+        if img not in images:
+            images[img] = Image.open(os.path.join(base, img)).convert('RGBA')
+        im = images[img].crop((x, y, x + w, y + h))
         bbox = im.getbbox() or (0, 0, 1, 1)
         trims[tid] = (bbox, ox, oy)
         packer.add(tid, scaled(im.crop(bbox)))
@@ -302,7 +354,7 @@ def build_tileset(base, name, spec, out_png):
         w, h = sizes[tid]
         rects[str(tid)] = [x, y, w, h, round((ox - bbox[0]) * SCALE), round((oy - bbox[1]) * SCALE)]
     atlas.save(out_png, 'WEBP', quality=QUALITY, method=6, alpha_quality=90)
-    out = {k: v for k, v in spec.items()}
+    out = {k: v for k, v in spec.items() if k not in ('mod', 'def')}
     out['rects'] = rects
     out['size'] = list(atlas.size)
     return out
@@ -327,8 +379,26 @@ def build_sounds(base, out_js):
     return sorted(data)
 
 
+def update_tiles_only(base, out, names):
+    """타일셋만 다시 만들어 기존 manifest.js의 tiles 항목만 바꿈 (캐릭터·몬스터·소리는 그대로)"""
+    path = os.path.join(out, 'manifest.js')
+    src = open(path, encoding='utf-8').read()
+    head, body = src.split('const FLARE = ', 1)
+    manifest = json.loads(body.rstrip().rstrip(';'))
+    for name in names:
+        manifest['tiles'][name] = build_tileset(base, name, TILESETS[name], os.path.join(out, 'tiles', f'{name}.webp'))
+        manifest['tiles'][name]['img'] = f'tiles/{name}.webp'
+        print('tiles', name, manifest['tiles'][name]['size'])
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(head + 'const FLARE = ' + json.dumps(manifest, separators=(',', ':')) + ';\n')
+
+
 def main():
     base, out = sys.argv[1], sys.argv[2]
+    if len(sys.argv) > 3 and sys.argv[3] == '--tiles':
+        # 예: python3 -I tools/build_flare_assets.py flare-game/mods/fantasycore assets/flare --tiles dungeon cave
+        update_tiles_only(base, out, sys.argv[4:] or list(TILESETS))
+        return
     for sub in ('hero', 'monsters', 'npcs', 'tiles', 'effects'):
         os.makedirs(os.path.join(out, sub), exist_ok=True)
     manifest = {'scale': SCALE, 'hero': {}, 'monsters': {}, 'tiles': {}, 'effects': {}}

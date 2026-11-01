@@ -6,6 +6,7 @@ function createPlayer() {
     x: 0, y: 0, r: 14, z: 0, facing: 0.8, level: 1, xp: 0, life: 100, fury: 50, gold: 0, potions: 3, bonusLife: 0,
     skills: {}, hotbar: [null, null, null, null, null, null], cds: {}, difficulty: 0, deepestBy: [1, 1, 1], bonusDmg: 0, bonusArmor: 0,
     frenzy: { n: 0, t: 0 }, rampage: { n: 0, t: 0 }, rush: null, quests: {}, bounty: null, bountyDone: 0, freeSockets: 0, potionCap: 0, freeEnhance: 0, gambleDiscount: 0,
+    mapSeed: randInt(1, 2000000000),
     equipment: { weapon: null, shield: null, helm: null, amulet: null, armor: null, ring1: null, ring2: null, gloves: null, belt: null, boots: null },
     inventory: new Array(40).fill(null), stash: new Array(STASH_SIZE).fill(null), charms: new Array(CHARM_SLOTS).fill(null), elixirs: {}, poisonT: 0, poisonDps: 0,
     walkPhase: 0, moving: false, attack: null, leap: null, whirl: null, pose: null, poseT: 0, poseDur: 0,

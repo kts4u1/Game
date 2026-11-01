@@ -845,48 +845,124 @@ function bossForFloor(f) {
 const FINAL_FLOOR = 50;
 
 // ── 층별 테마 ──
+// from: 처음 나올 수 있는 층. layouts: [맵 구조, 가중치] — 지하: rooms(방과 통로) · cavern(자연 동굴) · halls(기둥 늘어선 대전당)
+//   maze(미궁) · ring(가운데 성소를 두른 원형) · tunnels(광산 갱도) / 바깥: clearings(숲속 공터) · valley(굽은 협곡) · field(탁 트인 벌판)
+// props: [소품 묶음 이름, 방마다 개수] (타일셋에 있는 묶음). wallMix: 벽 일부를 다른 벽 그림으로. pillarKey: 홀로 선 기둥 그림
+// 층마다 어떤 테마가 나올지는 캐릭터마다 다르게 섞임 (floorPlan)
 const THEMES = [
-  { name: '어둠의 묘지', tiles: 'dungeon', tint: null, floor: ['#3b3a42', '#36353d', '#302f37'], grout: '#1b1a20', top: '#55535e', left: '#2a2930', right: '#3a3942', brick: '#1d1c22', moss: null },
-  { name: '망자의 동굴', tiles: 'cave', tint: null, floor: ['#4a3c2e', '#43362a', '#3c3125'], grout: '#1f1912', top: '#5f4e3b', left: '#30261b', right: '#41352a', brick: '#221a12', moss: null },
-  { name: '버려진 성채', tiles: 'dungeon', tint: '#9fb39a', floor: ['#323b35', '#2d3630', '#28302b'], grout: '#151a17', top: '#4b5650', left: '#262d29', right: '#343d38', brick: '#161b18', moss: '#3d5a2a' },
-  { name: '불타는 심연', tiles: 'cave', tint: '#ff8f6e', floor: ['#3b2522', '#341f1c', '#2d1a17'], grout: '#120807', top: '#4f2f2a', left: '#26130f', right: '#381c17', brick: '#140806', lava: true },
-  { name: '혼돈의 성역', tiles: 'dungeon', tint: '#b9a0e0', floor: ['#2f2639', '#2a2133', '#231b2c'], grout: '#100b15', top: '#463a55', left: '#1f1828', right: '#2d243a', brick: '#120d18', lava: true },
-  { name: '얼어붙은 지하묘지', tiles: 'dungeon', tint: '#a8c4ff', floor: ['#2c3442', '#28303d', '#232a36'], grout: '#10141b', top: '#46526a', left: '#1e2430', right: '#2b3342', brick: '#11151c', moss: null },
-  // 20층부터는 탁 트인 바깥 지역 (Flare grassland 타일에 색을 입힘)
-  { name: '역병의 늪지', tiles: 'grassland', outdoor: true, sound: 'cave', filter: 'sepia(0.35) hue-rotate(20deg) saturate(0.9) brightness(0.78)', tint: '#c8d890',
+  { name: '어둠의 묘지', tiles: 'dungeon', from: 1, layouts: [['rooms', 3], ['maze', 1], ['halls', 1]], props: [['tombs', 0.25], ['barrels', 0.35], ['crates', 0.3]],
+    tint: null, floor: ['#3b3a42', '#36353d', '#302f37'], grout: '#1b1a20', top: '#55535e', left: '#2a2930', right: '#3a3942', brick: '#1d1c22', moss: null },
+  { name: '망자의 동굴', tiles: 'cave', from: 2, layouts: [['cavern', 3], ['rooms', 1]], props: [['stalagmites', 0.6], ['rocks', 0.5]], pillars: true,
+    tint: null, floor: ['#4a3c2e', '#43362a', '#3c3125'], grout: '#1f1912', top: '#5f4e3b', left: '#30261b', right: '#41352a', brick: '#221a12', moss: null },
+  { name: '버려진 성채', tiles: 'dungeon', from: 4, layouts: [['rooms', 2], ['halls', 2], ['ring', 1]], props: [['statues', 0.3], ['tables', 0.3], ['barrels', 0.4], ['crates', 0.4]],
+    tint: '#9fb39a', floor: ['#323b35', '#2d3630', '#28302b'], grout: '#151a17', top: '#4b5650', left: '#262d29', right: '#343d38', brick: '#161b18', moss: '#3d5a2a' },
+  { name: '불타는 심연', tiles: 'cave', from: 9, layouts: [['cavern', 3], ['tunnels', 1]], props: [['rocks', 0.6], ['stalagmites', 0.4]], pillars: true,
+    tint: '#ff8f6e', floor: ['#3b2522', '#341f1c', '#2d1a17'], grout: '#120807', top: '#4f2f2a', left: '#26130f', right: '#381c17', brick: '#140806', lava: true },
+  { name: '혼돈의 성역', tiles: 'dungeon', from: 12, layouts: [['ring', 2], ['halls', 2], ['rooms', 1]], props: [['altars', 0.35], ['statues', 0.35], ['firebowl', 0.4], ['chains', 0.3]],
+    tint: '#b9a0e0', floor: ['#2f2639', '#2a2133', '#231b2c'], grout: '#100b15', top: '#463a55', left: '#1f1828', right: '#2d243a', brick: '#120d18', lava: true },
+  { name: '얼어붙은 지하묘지', tiles: 'dungeon', from: 15, layouts: [['maze', 2], ['rooms', 1], ['halls', 1]], props: [['tombs', 0.5], ['statues', 0.3]],
+    tint: '#a8c4ff', floor: ['#2c3442', '#28303d', '#232a36'], grout: '#10141b', top: '#46526a', left: '#1e2430', right: '#2b3342', brick: '#11151c', moss: null },
+  // 새 지하 테마
+  { name: '버려진 광산', tiles: 'cave', from: 3, layouts: [['tunnels', 3], ['cavern', 1]], wallMix: { wallSE: 'mineSE', wallSW: 'mineSW' }, mix: 0.4, pillarKey: 'supports', pillars: true,
+    props: [['carts', 0.5], ['crates', 0.5], ['barrels', 0.5], ['rocks', 0.3]],
+    tint: '#e8cfa8', floor: ['#4a3c2e', '#43362a', '#3c3125'], grout: '#1f1912', top: '#5f4e3b', left: '#30261b', right: '#41352a', brick: '#221a12', moss: null },
+  { name: '왕가의 납골당', tiles: 'dungeon', from: 6, layouts: [['halls', 3], ['ring', 1]], props: [['tombs', 0.8], ['statues', 0.5], ['firebowl', 0.35]],
+    tint: '#dcc7a4', floor: ['#3e3a33', '#38342e', '#322f29'], grout: '#1b1915', top: '#5a5448', left: '#2c2924', right: '#3c3830', brick: '#1d1b17', moss: null },
+  { name: '잊힌 서고', tiles: 'dungeon', from: 8, layouts: [['rooms', 2], ['maze', 2]], wallMix: { wallSE: [100], wallSW: [101] }, mix: 0.45,
+    props: [['lecterns', 1], ['tables', 0.7], ['firebowl', 0.25], ['crates', 0.3]],
+    tint: '#cdb690', floor: ['#3c3530', '#36302b', '#302a26'], grout: '#1a1612', top: '#574d44', left: '#2b2622', right: '#3b342e', brick: '#1c1814', moss: null },
+  { name: '이끼 낀 고대 유적', tiles: 'ruins', sound: 'dungeon', from: 7, layouts: [['rooms', 2], ['halls', 2], ['ring', 1]],
+    props: [['statues', 0.45], ['plants', 0.8], ['rubble', 0.6], ['urns', 0.4], ['shrines', 0.15], ['wells', 0.12], ['orbs', 0.15], ['crystal', 0.15], ['pedestals', 0.2]],
+    tint: null, floor: ['#3a4038', '#343a32', '#2f342d'], grout: '#171a15', top: '#555c50', left: '#2a2e27', right: '#3a3f36', brick: '#181b16', moss: '#4a6a2a' },
+  { name: '버섯 동굴', tiles: 'cave', from: 11, layouts: [['cavern', 1]], wallMix: { wallSE: 'shroomSE', wallSW: 'shroomSW', outer: 'shroomOuter' }, mix: 0.4, pillars: true,
+    props: [['mushrooms', 1.3], ['rocks', 0.3]], glow: [190, 120, 255],
+    tint: '#d2c2f2', floor: ['#3a3242', '#342d3c', '#2e2836'], grout: '#17121c', top: '#544a60', left: '#29232f', right: '#393140', brick: '#18131d', moss: null },
+  // 바깥 지역 (Flare 풀밭·설원 타일에 색을 입힘)
+  { name: '황혼의 숲', tiles: 'grassland', outdoor: true, sound: 'grassland', from: 2, layouts: [['clearings', 3], ['valley', 2]],
+    filter: 'sepia(0.55) hue-rotate(-28deg) saturate(1.7) brightness(0.92)', tint: '#e0a070',
+    amb: [36, 27, 20], sky: [255, 205, 150], flora: [7, 11, 12], camps: 1, bg: '#0d0805',
+    floor: ['#43361f', '#3d311c', '#362b19'], grout: '#18120a', top: '#5c4a2c', left: '#2c2214', right: '#3e301c', brick: '#1a140b', moss: null },
+  { name: '역병의 늪지', tiles: 'grassland', outdoor: true, sound: 'cave', from: 4, layouts: [['clearings', 3], ['valley', 1]],
+    filter: 'sepia(0.35) hue-rotate(20deg) saturate(0.9) brightness(0.78)', tint: '#c8d890',
     amb: [30, 34, 24], sky: [215, 235, 170], flora: [5, 10, 12], marsh: true, camps: 1, graves: 1, bg: '#0a0f07',
     floor: ['#33402a', '#2e3a26', '#283322'], grout: '#121a0e', top: '#4a5c3a', left: '#222c1a', right: '#304026', brick: '#141c10', moss: '#4a6a2a' },
-  { name: '핏빛 황야', tiles: 'grassland', outdoor: true, sound: 'cave', filter: 'sepia(0.6) hue-rotate(-60deg) saturate(2.6) brightness(0.62)', tint: '#d87070',
+  { name: '핏빛 황야', tiles: 'grassland', outdoor: true, sound: 'cave', from: 6, layouts: [['field', 2], ['clearings', 2], ['valley', 1]],
+    filter: 'sepia(0.6) hue-rotate(-60deg) saturate(2.6) brightness(0.62)', tint: '#d87070',
     amb: [36, 22, 20], sky: [255, 196, 170], flora: [3, 6, 12], camps: 2, graves: 2, bg: '#100605',
     floor: ['#3e2626', '#382222', '#311e1e'], grout: '#160b0b', top: '#5a3838', left: '#2a1818', right: '#3c2222', brick: '#180c0c', moss: null },
-  { name: '잿빛 황무지', tiles: 'grassland', outdoor: true, sound: 'cave', filter: 'grayscale(0.85) sepia(0.2) brightness(0.82)', tint: '#b0aca4',
+  { name: '잿빛 황무지', tiles: 'grassland', outdoor: true, sound: 'cave', from: 10, layouts: [['field', 3], ['valley', 1]],
+    filter: 'grayscale(0.85) sepia(0.2) brightness(0.82)', tint: '#b0aca4',
     amb: [30, 29, 28], sky: [235, 228, 215], flora: [2, 4, 12], ruins: 2, graves: 1, bg: '#0b0a09',
     floor: ['#38352f', '#33302b', '#2d2a26'], grout: '#141210', top: '#524e46', left: '#26231f', right: '#36322d', brick: '#161411', moss: null },
-  { name: '그림자 숲', tiles: 'grassland', outdoor: true, sound: 'cave', filter: 'hue-rotate(75deg) saturate(0.75) brightness(0.62)', tint: '#8590c8',
+  { name: '얼어붙은 설원', tiles: 'snow', outdoor: true, sound: 'cave', from: 12, layouts: [['field', 2], ['valley', 2], ['clearings', 1]],
+    amb: [30, 34, 46], sky: [215, 228, 255], flora: [3, 7, 12], ruins: 1, frozen: true, camps: 1, bg: '#080b12',
+    floor: ['#2c3442', '#28303d', '#232a36'], grout: '#10141b', top: '#46526a', left: '#1e2430', right: '#2b3342', brick: '#11151c', moss: null },
+  { name: '그림자 숲', tiles: 'grassland', outdoor: true, sound: 'cave', from: 14, layouts: [['clearings', 2], ['valley', 2]],
+    filter: 'hue-rotate(75deg) saturate(0.75) brightness(0.62)', tint: '#8590c8',
     amb: [22, 24, 38], sky: [175, 190, 255], flora: [8, 11, 12], dense: true, ruins: 1, bg: '#05060d',
     floor: ['#26283a', '#222434', '#1d1f2d'], grout: '#0c0d14', top: '#3c3f58', left: '#191a26', right: '#252738', brick: '#0e0f16', moss: null },
-  { name: '불타는 평원', tiles: 'grassland', outdoor: true, sound: 'cave', filter: 'sepia(1) hue-rotate(-12deg) saturate(2.6) brightness(0.72)', tint: '#ffb070',
+  { name: '불타는 평원', tiles: 'grassland', outdoor: true, sound: 'cave', from: 18, layouts: [['field', 3], ['clearings', 1]],
+    filter: 'sepia(1) hue-rotate(-12deg) saturate(2.6) brightness(0.72)', tint: '#ffb070',
     amb: [42, 22, 14], sky: [255, 170, 110], flora: [2, 5, 12], burning: true, camps: 1, lava: true, bg: '#120603',
     floor: ['#3e2018', '#381c15', '#311812'], grout: '#160806', top: '#58302a', left: '#2a120d', right: '#3c1a14', brick: '#180806' },
-  { name: '얼어붙은 설원', tiles: 'grassland', outdoor: true, sound: 'cave', filter: 'grayscale(1) brightness(1.45) contrast(0.8)', tint: '#c8dcff', tintAfter: '#d6e4ff',
-    amb: [30, 34, 46], sky: [215, 228, 255], flora: [4, 7, 12], ruins: 1, frozen: true, bg: '#080b12',
-    floor: ['#2c3442', '#28303d', '#232a36'], grout: '#10141b', top: '#46526a', left: '#1e2430', right: '#2b3342', brick: '#11151c', moss: null },
+  { name: '서리 묘원', tiles: 'snow', outdoor: true, sound: 'cave', from: 22, layouts: [['clearings', 2], ['valley', 1], ['field', 1]],
+    filter: 'brightness(0.62) saturate(0.7) hue-rotate(12deg)', tint: '#9fb4e0',
+    amb: [24, 28, 42], sky: [190, 205, 255], flora: [3, 8, 12], graves: 3, ruins: 1, frozen: true, bg: '#05070d',
+    floor: ['#262c3a', '#222836', '#1d2230'], grout: '#0c0f16', top: '#3e465c', left: '#191d28', right: '#262c3a', brick: '#0e1118', moss: null },
 ];
 // 마지막 층: 망자의 왕좌
 const FINAL_THEME = { name: '망자의 왕좌', tiles: 'grassland', outdoor: true, sound: 'cave', filter: 'sepia(0.8) saturate(1.3) hue-rotate(-10deg) brightness(0.6)', tint: '#e8c27a',
   amb: [34, 28, 20], sky: [255, 222, 160], flora: [2, 5, 12], ruins: 3, graves: 2, throne: true, lava: true, bg: '#0c0904',
   floor: ['#3a3020', '#342b1c', '#2e2619'], grout: '#14100a', top: '#57492e', left: '#2a2216', right: '#3c3120', brick: '#16120b' };
-// 테마가 바뀌는 층 (위 THEMES 순서대로)
-const THEME_STARTS = [1, 4, 7, 10, 13, 16, 20, 25, 30, 35, 40, 45];
-// 이 층부터는 바깥 지역 (넓은 들판·숲)
+// 바깥 지역 비율: 20층 전에는 열에 셋, 20층부터는 열에 여섯 정도
 const OUTDOOR_FLOOR = 20;
 const TOWN_THEME = { name: '국경 야영지', tiles: 'grassland', tint: null, town: true, floor: ['#3d4a2a', '#38452a', '#334026'], grout: '#1d2414', top: '#4a5a32', left: '#2a3320', right: '#36412a', brick: '#1d2414', moss: null };
-function themeForFloor(f) {
+
+// 시드가 같으면 늘 같은 수열 (층 계획을 캐릭터마다 고정하려고)
+function seededRandom(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// 1~49층에 어떤 테마가 나올지: 바로 앞 층과 같은 테마는 피하고, 최근에 나온 테마와 오래된 테마는 덜 나오게
+const FLOOR_PLANS = {};
+function floorPlan(seed, diff) {
+  const key = seed + ':' + diff;
+  if (FLOOR_PLANS[key]) return FLOOR_PLANS[key];
+  const rnd = seededRandom(Math.imul(seed, 31) + diff * 7919 + 17);
+  const plan = [0, 0];  // 1층은 늘 '어둠의 묘지'
+  for (let f = 2; f < FINAL_FLOOR; f++) {
+    const cands = THEMES.map((th, i) => i).filter(i => THEMES[i].from <= f && i !== plan[f - 1]);
+    const wantOut = rnd() < (f < OUTDOOR_FLOOR ? 0.3 : 0.6);
+    let pool = cands.filter(i => !!THEMES[i].outdoor === wantOut);
+    if (!pool.length) pool = cands;
+    const recent = plan.slice(-4);
+    const w = i => (recent.includes(i) ? 0.15 : 1) * (THEMES[i].from >= f - 6 ? 1.8 : 1);
+    let r = rnd() * pool.reduce((sum, i) => sum + w(i), 0), pickI = pool[pool.length - 1];
+    for (const i of pool) { r -= w(i); if (r <= 0) { pickI = i; break; } }
+    plan.push(pickI);
+  }
+  return (FLOOR_PLANS[key] = plan);
+}
+function themeForFloor(f, diff, seed) {
   if (f === 0) return TOWN_THEME;
   if (f >= FINAL_FLOOR) return FINAL_THEME;
-  let i = 0;
-  while (i + 1 < THEME_STARTS.length && THEME_STARTS[i + 1] <= f) i++;
-  return THEMES[i];
+  const pl = typeof player !== 'undefined' ? player : null;
+  if (seed == null) seed = (pl && pl.mapSeed) || 1;
+  if (diff == null) diff = (pl && pl.difficulty) || 0;
+  return THEMES[floorPlan(seed, diff)[f]];
+}
+// 이 테마로 만들 맵 구조 (보스 층은 보스와 싸울 넓은 방이 있는 구조만)
+function pickLayout(th, f) {
+  let L = th.layouts || [[th.outdoor ? 'clearings' : 'rooms', 1]];
+  if (isBossFloor(f)) L = L.filter(l => l[0] !== 'maze' && l[0] !== 'tunnels');
+  if (!L.length) L = [[th.tiles === 'cave' ? 'cavern' : 'rooms', 1]];
+  return weightedPick(L, l => l[1])[0];
 }
 // ── 난이도 ── 한 난이도의 망자의 왕을 쓰러뜨리면 다음 난이도가 열림 (일반 → 악몽 → 지옥)
 // key: 정복 기록 이름, lv0·step: 1층 몬스터 레벨과 층마다 오르는 양, res: 원소 저항 감소,

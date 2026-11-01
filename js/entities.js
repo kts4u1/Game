@@ -104,7 +104,7 @@ function pickRoster(f) {
     const T = MONSTERS[t];
     return T.weight > 0 && T.minFloor <= f && (!T.maxFloor || f <= T.maxFloor);
   });
-  const lava = themeForFloor(f).lava;
+  const lava = world && world.floor === f ? world.dungeon.theme.lava : themeForFloor(f).lava;
   const w = t => MONSTERS[t].weight * (lava && t === 'fireAnt' ? 2.5 : 1) * (MONSTERS[t].minFloor >= f - 2 ? 1.6 : 1);
   const n = Math.min(eligible.length, f <= 2 ? 4 : randInt(4, 6));
   const pool = eligible.slice(), out = [];

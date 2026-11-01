@@ -81,7 +81,7 @@ const QUESTS = [
     thanks: '이제 마을 사람들도 나을 거예요. 약속한 물약 주머니예요. 물약을 4개 더 들 수 있어요.',
     goal: { kind: 'boss', floor: 15, text: '15층 보스 처치' }, reward: { gold: 1000, potionCap: 4, potions: 4 } },
   { id: 'herbs', giver: 'healer', after: 'plague', minDeepest: 20, name: '늪지 약초',
-    intro: '20층 아래 바깥 지역에만 자라는 약초가 있어요. 그곳의 괴물들 몸에 붙어 다니죠. 12묶음만 모아 주면 물약 주머니를 더 늘려 줄게요.',
+    intro: '20층 아래 깊은 곳에만 자라는 약초가 있어요. 그곳의 괴물들 몸에 붙어 다니죠. 12묶음만 모아 주면 물약 주머니를 더 늘려 줄게요.',
     thanks: '이 향기! 좋은 물약이 나오겠어요. 물약 주머니를 조금 더 늘렸어요.',
     goal: { kind: 'collect', minFloor: 20, chance: 0.2, n: 12, token: '늪지 약초', icon: 80, text: '늪지 약초 모으기 (20층 아래)' }, reward: { gold: 1500, potionCap: 2, potions: 6 } },
   { id: 'bandits', giver: 'captain', after: 'plague', minDeepest: 16, name: '숲의 도적단',

@@ -62,22 +62,32 @@ function prepareFloorArt(d) {
   const torchAt = new Map();
   for (const tc of d.torches) torchAt.set(d.idx(tc.tx, tc.ty), tc);
   const variant = (list, h) => (h % 6 === 0 && list.length > 2) ? list[2 + (h >>> 4) % (list.length - 2)] : list[(h >>> 3) % Math.min(2, list.length)];
+  // 테마가 벽 일부를 다른 그림(광산 버팀목, 버섯, 책장 …)으로 섞음
+  const th = d.theme, mix = th.wallMix || {}, mixRate = Math.round((th.mix || 0.3) * 100);
+  const mixed = (key, h, base) => {
+    const m = typeof mix[key] === 'string' ? set[mix[key]] : mix[key];
+    return m && m.length && (h >>> 11) % 100 < mixRate ? m[(h >>> 5) % m.length] : base;
+  };
+  const pillar = set[th.pillarKey || 'pillar'];
   for (let y = 0; y < d.h; y++) for (let x = 0; x < d.w; x++) {
     const i = d.idx(x, y), t = d.tiles[i];
     if (!t) continue;
     const h = tileHash(x, y);
     floor[i] = (t === 1 && set.floorDecor.length && h % 37 === 0) ? set.floorDecor[(h >>> 5) % set.floorDecor.length] : set.floor[(h >>> 2) % set.floor.length];
     if (t !== 2) continue;
-    const se = d.walkable(x + 1, y), sw = d.walkable(x, y + 1), dg = d.walkable(x + 1, y + 1);
+    // 소품이 놓인 칸(3)도 열린 칸으로 봄 — 소품 뒤의 벽도 앞면이 보이게
+    const se = d.open(x + 1, y), sw = d.open(x, y + 1), dg = d.open(x + 1, y + 1);
     const tc = torchAt.get(i);
-    if (se && sw) wall[i] = set.outer[h % set.outer.length];
-    else if (se) wall[i] = tc && set.torchSE.length ? set.torchSE[0] : variant(set.wallSE, h);
-    else if (sw) wall[i] = tc && set.torchSW.length ? set.torchSW[0] : variant(set.wallSW, h);
+    if (pillar && se && sw && d.open(x - 1, y) && d.open(x, y - 1)) wall[i] = pillar[(h >>> 7) % pillar.length];
+    else if (se && sw) wall[i] = mixed('outer', h, set.outer[h % set.outer.length]);
+    else if (se) wall[i] = tc && set.torchSE.length ? set.torchSE[0] : mixed('wallSE', h, variant(set.wallSE, h));
+    else if (sw) wall[i] = tc && set.torchSW.length ? set.torchSW[0] : mixed('wallSW', h, variant(set.wallSW, h));
     else if (dg) wall[i] = set.inner[h % set.inner.length];
     else { wall[i] = set.black[h % set.black.length]; low[i] = 1; }
   }
   // 횃불: 던전은 벽걸이 횃불 타일, 동굴은 바닥에 세운 화로
   for (const tc of d.torches) {
+    if (tc.free) continue;  // 방 한가운데 세운 화로는 자리가 이미 정해짐
     const i = d.idx(tc.tx, tc.ty);
     const cx = (tc.tx - tc.ty) * TILE, cy = (tc.tx + tc.ty) * TILE / 2 + TILE / 2;
     if (set.torchSE.includes(wall[i])) { tc.kind = 'sconce'; tc.fx = cx + 3; tc.fy = cy - 105; }
@@ -95,7 +105,9 @@ function prepareFloorArt(d) {
 
 // 마을·바깥 지역: 풀밭·길 바닥, 숲 가장자리에 나무·덤불·바위 (테마의 flora = [나무, 덤불, 바위] 비율)
 function prepareTownArt(d) {
-  const set = FLARE.tiles.grassland;
+  // 바깥 지역 타일셋 (풀밭 또는 설원). 나무·덤불·바위 묶음이 있는 타일셋만
+  const ts = d.theme && FLARE.tiles[d.theme.tiles];
+  const set = ts && ts.trees ? ts : FLARE.tiles.grassland;
   const N = d.w * d.h;
   const floor = new Int16Array(N), wall = new Int16Array(N), low = new Uint8Array(N), tall = new Uint8Array(N);
   // 걸을 수 있는 칸에서의 거리 (숲 깊이)
@@ -117,7 +129,8 @@ function prepareTownArt(d) {
   const tree = (i, h) => { wall[i] = set.trees[(h >>> 9) % set.trees.length]; tall[i] = 1; };
   for (let y = 0; y < d.h; y++) for (let x = 0; x < d.w; x++) {
     const i = y * d.w + x, h = tileHash(x, y);
-    floor[i] = d.path[i] ? set.path[(h >>> 3) % set.path.length] : set.floor[(h >>> 2) % set.floor.length];
+    floor[i] = d.path[i] ? set.path[(h >>> 3) % set.path.length]
+      : set.floorAlt && h % 5 === 0 ? set.floorAlt[(h >>> 4) % set.floorAlt.length] : set.floor[(h >>> 2) % set.floor.length];
     if (d.tiles[i] !== 2) continue;
     // 숲 깊은 곳은 어둠에 묻히므로 나무를 덜 그림
     const dp = depth[i], r = (h >>> 5) % 12;
@@ -134,11 +147,15 @@ function prepareTownArt(d) {
   d.art = { set, floor, wall, low, tall, depth };
 }
 
-// 마을 소품 (천막, 모루, 상자 …) 그리기
+// 맵 소품 그리기: 마을·바깥(천막, 모닥불, 무덤 …)과 지하(석상, 석관, 통, 광차 …)
+// 소품의 타일셋이 지금 층의 타일셋이면 층과 같은 색을 입힌 그림을 씀
 function drawTownProp(ctx, pr) {
-  const img = (world && world.dungeon.art && world.dungeon.art.set === FLARE.tiles.grassland && tileAtlas(world.dungeon)) || Assets.get(FLARE.tiles.grassland.img);
+  const d = world && world.dungeon;
+  const own = d && d.art && d.art.set;
+  const set = pr.set ? FLARE.tiles[pr.set] : own && own.trees ? own : FLARE.tiles.grassland;
+  if (!set) return;
+  const img = (own === set && tileAtlas(d)) || Assets.get(set.img);
   if (!img) return;
-  const set = FLARE.tiles.grassland;
   const id = set.props[pr.name] != null ? set.props[pr.name] : set[pr.name] ? set[pr.name][(pr.pick || 0) % set[pr.name].length] : null;
   if (id == null) return;
   drawTile(ctx, img, set, id, isoX(pr.x, pr.y), isoY(pr.x, pr.y));
@@ -1015,6 +1032,7 @@ function drawAutomap(ctx, cx, cy, s, alpha, big) {
   if (!p) return;
   const ptx = p.x / TILE, pty = p.y / TILE;
   const ox = cx - (ptx - pty) * s, oy = cy - (ptx + pty) * s / 2;
+  const snow = d.theme.tiles === 'snow';
   ctx.save();
   ctx.globalAlpha = alpha;
   for (let ty = 0; ty < d.h; ty++) for (let tx = 0; tx < d.w; tx++) {
@@ -1025,7 +1043,8 @@ function drawAutomap(ctx, cx, cy, s, alpha, big) {
     const mx = ox + (tx - ty) * s, my = oy + (tx + ty) * s / 2;
     if (!big && (mx < -s * 2 || my < -s || mx > cx * 2 + s * 2 || my > cy * 2 + s)) continue;
     if (d.outdoor && !d.town && t === 2 && d.art && d.art.depth[i] > 1) continue;  // 깊은 숲은 지도에서 생략
-    ctx.fillStyle = d.outdoor ? (t === 2 ? 'rgba(40,70,35,.7)' : d.path[i] ? 'rgba(170,160,140,.8)' : 'rgba(110,140,80,.75)') : t === 2 ? '#b8a684' : 'rgba(90,80,70,.55)';
+    ctx.fillStyle = d.outdoor ? (snow ? (t === 2 ? 'rgba(70,80,100,.7)' : d.path[i] ? 'rgba(150,160,180,.85)' : 'rgba(205,215,230,.75)')
+      : t === 2 ? 'rgba(40,70,35,.7)' : d.path[i] ? 'rgba(170,160,140,.8)' : 'rgba(110,140,80,.75)') : t === 2 ? '#b8a684' : 'rgba(90,80,70,.55)';
     ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx + s, my + s / 2); ctx.lineTo(mx, my + s); ctx.lineTo(mx - s, my + s / 2); ctx.closePath(); ctx.fill();
   }
   ctx.globalAlpha = 1;

@@ -46,8 +46,10 @@
 | 홉고블린, 홉고블린 궁수, 어둠의 망자, 갑각 개미귀신 | `empyrean_campaign/enemies/hobgoblin`, `hobgoblin_archer`, `zombie_dark`, `antlion_armored` |
 | 해골 기사, 해골 대마법사, 해골왕 (보스) | `empyrean_campaign/enemies/skeleton_knight_boss`, `skeleton_mage_boss`, `skeleton_mage_high_boss` |
 | 마을 사람, 오벨리스크 | `npcs/guild_man`, `knight`, `peasant_man1`, `peasant_man2`, `peasant_woman1`, `peasant_woman2`, `wandering_trader`, `return_obelisk1`, `empyrean_campaign/npcs/peddler_goblin` |
-| 던전·동굴 바닥과 벽, 화로, 상자, 계단, 뼈 | `tilesets/tileset_dungeon`, `tileset_cave` |
+| 던전·동굴 바닥과 벽, 화로, 상자, 계단, 뼈, 기둥, 석상, 석관, 제단, 탁자, 독서대, 통, 쇠사슬, 광산 버팀목, 광차, 버섯, 종유석, 바위 | `tilesets/tileset_dungeon`, `tileset_cave` |
 | 마을 풀밭·돌길·나무·덤불·바위·천막·모루·모닥불·상자·묘비·돌 원 | `tilesets/tileset_grassland` |
+| 설원 바닥·눈길·마른 나무·덤불·눈 덮인 바위·돌기둥·묘비·천막·모닥불 | `tilesets/tileset_snowplains` |
+| 이끼 낀 고대 유적의 바닥·벽·기둥·석상·항아리·제단·우물·성소·식물·무너진 돌 | `empyrean_campaign/tilesets/tileset_ruins` |
 | 아이템·스킬 아이콘 (보석·부적 아이콘 포함) | `icons/icons.png` |
 | 칼날 궤적, 지진, 화염 폭발, 가시, 주황 보호막, 낙뢰, 번개, 타격 불꽃, 치유, 반짝임, 냉기, 땅 갈라짐 | `powers/cleave`, `quake`, `blast`, `spikes`, `shield_orange`, `thunderstrike`, `lightning`, `spark_*`, `heal`, `sparkle`, `freeze`, `rupture` |
 | 투척 도끼, 화살, 화염구, 얼음창, 독침, 마력구, 돌, 투척 단검, 창 | `powers/throw_axe`, `arrows`, `fireball`, `icicle`, `spit`, `plasmaball`, `stone`, `throw_knife`, `spear` |
