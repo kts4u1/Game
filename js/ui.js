@@ -79,7 +79,7 @@ const UI = {
     shop.addEventListener('mouseout', e => { if (e.target.closest('[data-stock],[data-bb],[data-stash]')) this.hideTooltip(); });
     this.el.levelup.addEventListener('click', e => {
       const c = e.target.closest('.card');
-      if (c) Game.chooseCard(c.dataset.id);
+      if (c && this.cardsReady()) Game.chooseCard(c.dataset.id);
     });
   },
 
@@ -506,7 +506,14 @@ const UI = {
       return `<button class="card ${sk.type}${lv ? '' : ' new'}" data-id="${id}"><span class="card-n">${i + 1}</span><div class="card-type">${type} · ${tag}</div><span class="card-icon">${skillIconHtml(id)}</span><div class="card-name">${sk.name}</div><div class="card-key">${key}</div><p class="card-desc">${sk.desc(nv)}</p></button>`;
     }).join('');
     lu.hidden = false;
+    // 공격하려고 누르던 클릭·숫자 키가 카드를 잘못 고르지 않게, 창이 뜬 직후 잠깐은 카드를 잠금
+    const box = lu.querySelector('.lu-cards'), wait = first ? 600 : 900;
+    box.classList.add('locked');
+    this.cardsReadyAt = performance.now() + wait;
+    clearTimeout(this.cardsTimer);
+    this.cardsTimer = setTimeout(() => box.classList.remove('locked'), wait);
   },
+  cardsReady() { return performance.now() >= (this.cardsReadyAt || 0); },
   hideLevelUp() { this.el.levelup.hidden = true; this.cards = null; },
 
   // 엔딩 화면: 이번 모험의 기록

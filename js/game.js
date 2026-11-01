@@ -393,7 +393,7 @@ function bindInput() {
     Input.keys.add(k);
     if (Game.state === 'levelup') {
       const n = ['Digit1', 'Digit2', 'Digit3'].indexOf(k);
-      if (n >= 0 && UI.cards) Game.chooseCard(UI.cards[n]);
+      if (n >= 0 && UI.cards && UI.cardsReady()) Game.chooseCard(UI.cards[n]);
       return;
     }
     if (Game.state !== 'playing') return;
