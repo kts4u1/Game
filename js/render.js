@@ -377,6 +377,8 @@ function renderFrame(t, focus) {
   if (d.town) for (const n of d.npcs) if (n.sprite) sorted.push({ d: n.x + n.y, k: 6, n });
   if (d.props) for (const pr of d.props) if (explored(pr.x, pr.y)) sorted.push({ d: pr.x + pr.y, k: 7, pr });
   if (p && Game.state !== 'title') sorted.push({ d: p.x + p.y, k: 2 });
+  const merc = p && Game.state !== 'title' && Merc.active();
+  if (merc) sorted.push({ d: merc.x + merc.y, k: 8, mc: merc });
   sorted.sort((a, b) => a.d - b.d);
   const pIsoX = p ? isoX(p.x, p.y) : 0, pIsoY = p ? isoY(p.x, p.y) : 0, pDepth = p ? p.x + p.y : 0;
   const playing = p && Game.state !== 'title';
@@ -412,6 +414,7 @@ function renderFrame(t, focus) {
     else if (s.k === 5) drawProp(ctx, 'brazier', isoX(s.tc.bx, s.tc.by), isoY(s.tc.bx, s.tc.by));
     else if (s.k === 6) drawNpc(ctx, s.n, t);
     else if (s.k === 7) drawTownProp(ctx, s.pr);
+    else if (s.k === 8) Merc.draw(ctx, s.mc, t);
   }
   ctx.globalAlpha = 1;
   ctx.filter = 'none';

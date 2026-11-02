@@ -223,11 +223,19 @@ function aggroPack(m) {
 function updateMonsters(dt) {
   const p = player, d = world.dungeon;
   d.updateFlow(p.x, p.y);
+  const mc = Merc.active();
   const active = [];
   for (const m of world.monsters) {
     if (m.dead) { m.deadT += dt; continue; }
-    const dp = dist(m.x, m.y, p.x, p.y);
-    if (dp > 1100 && !m.aggro) continue;
+    const dpl = dist(m.x, m.y, p.x, p.y);
+    if (dpl > 1100 && !m.aggro) continue;
+    // 노릴 상대: 주인과 용병 중 가까운 쪽 (자주 바꾸지 않게 여유를 둠)
+    let tg = p, dp = dpl;
+    if (mc) {
+      const dm = dist(m.x, m.y, mc.x, mc.y);
+      if (m.tgt === mc ? dm < dpl * 1.4 : dm < dpl * 0.7) { tg = mc; dp = dm; }
+    }
+    if (m.tgt !== tg) { m.tgt = tg; m.losT = 0; }
     active.push(m);
     m.hitFlash = Math.max(0, m.hitFlash - dt);
     m.strikeT = Math.max(0, m.strikeT - dt);
@@ -244,11 +252,11 @@ function updateMonsters(dt) {
     if (m.stun > 0) { m.stun -= dt; m.windup = 0; m.pending = null; m.windupDur = m.baseWindup; continue; }
     if (p.dead) continue;
     m.losT -= dt;
-    if (m.losT <= 0) { m.losT = 0.25 + Math.random() * 0.1; m.hasLos = dp < 750 && d.los(m.x, m.y, p.x, p.y); }
-    // 땅속에 숨어 기다리는 몬스터
+    if (m.losT <= 0) { m.losT = 0.25 + Math.random() * 0.1; m.hasLos = dp < 750 && d.los(m.x, m.y, tg.x, tg.y); }
+    // 땅속에 숨어 기다리는 몬스터 (주인이 다가와야 솟아오름)
     if (m.ambushWait) {
-      if (!m.aggro && dp < 230) aggroPack(m);
-      if (m.aggro && dp < 520) { m.ambushWait = false; startEmerge(m); }
+      if (!m.aggro && dpl < 230) aggroPack(m);
+      if (m.aggro && dpl < 520) { m.ambushWait = false; startEmerge(m); }
       continue;
     }
     if (!m.aggro) {
@@ -257,7 +265,7 @@ function updateMonsters(dt) {
     }
     if (m.windup > 0) {
       m.windup -= dt;
-      m.facing = angleTo(m.x, m.y, p.x, p.y);
+      m.facing = angleTo(m.x, m.y, tg.x, tg.y);
       if (m.windup <= 0) {
         const fn = m.pending;
         m.pending = null;
@@ -266,26 +274,27 @@ function updateMonsters(dt) {
       }
       continue;
     }
-    if (tryMonsterAbility(m, dp)) continue;
+    // 특수 행동은 주인을 노릴 때만 (돌진·순간이동 등은 주인 기준)
+    if (tg === p && tryMonsterAbility(m, dp)) continue;
     if (m.stationary) continue;
     let tx = null, ty = null, away = false;
     if (m.ranged) {
       if (dp <= m.ranged.range && m.hasLos) {
-        m.facing = angleTo(m.x, m.y, p.x, p.y);
+        m.facing = angleTo(m.x, m.y, tg.x, tg.y);
         if (m.atkTimer <= 0) { m.windup = m.windupDur; continue; }
-        if (dp < m.ranged.keep) { tx = p.x; ty = p.y; away = true; }
-      } else { tx = p.x; ty = p.y; }
+        if (dp < m.ranged.keep) { tx = tg.x; ty = tg.y; away = true; }
+      } else { tx = tg.x; ty = tg.y; }
     } else {
-      const reach = m.atkRange + p.r;
+      const reach = m.atkRange + tg.r;
       if (dp <= reach) {
-        m.facing = angleTo(m.x, m.y, p.x, p.y);
+        m.facing = angleTo(m.x, m.y, tg.x, tg.y);
         if (m.atkTimer <= 0) m.windup = m.windupDur;
         continue;
       }
-      tx = p.x; ty = p.y;
+      tx = tg.x; ty = tg.y;
     }
     if (tx === null) continue;
-    // 시야가 있으면 직진, 없거나 끼었으면 흐름장을 따라감
+    // 시야가 있으면 직진, 없거나 끼었으면 흐름장(주인 쪽)을 따라감
     m.flowT -= dt;
     if (!away && (!m.hasLos || m.flowT > 0)) {
       const s = d.flowStep(m.x, m.y);
@@ -312,6 +321,16 @@ function updateMonsters(dt) {
         const nx = dx / dd, ny = dy / dd;
         if (!a.stationary) d.moveCircle(a, -nx * push, -ny * push);
         if (!b.stationary) d.moveCircle(b, nx * push, ny * push);
+      }
+    }
+    // 용병과도 겹치지 않게
+    if (mc) {
+      const dx = a.x - mc.x, dy = a.y - mc.y;
+      const dd = Math.hypot(dx, dy) || 0.01, rr = a.r + mc.r;
+      if (dd < rr) {
+        const push = rr - dd;
+        if (!a.stationary) d.moveCircle(a, dx / dd * push * 0.7, dy / dd * push * 0.7);
+        d.moveCircle(mc, -dx / dd * push * (a.stationary ? 1 : 0.3), -dy / dd * push * (a.stationary ? 1 : 0.3));
       }
     }
     if (!p.dead && !p.leap) {
@@ -341,7 +360,8 @@ function monsterStep(m, a, sp, dt) {
 }
 
 function resolveMonsterAttack(m) {
-  const p = player;
+  const mc = Merc.active();
+  const p = mc && m.tgt === mc ? mc : player;  // 노리던 상대 (용병일 수 있음)
   m.atkTimer = m.atkCD * rand(0.9, 1.15);
   m.strikeT = 0.25;
   const dmg = rand(m.dmg[0], m.dmg[1]);
@@ -361,6 +381,7 @@ function resolveMonsterAttack(m) {
     SFX.monster(m, 'phys');
     if (dist(m.x, m.y, p.x, p.y) <= m.atkRange + p.r + 16) {
       const T = MONSTERS[m.type];
+      if (p !== player) { Merc.damage(dmg, m, { melee: true }); return; }
       const venom = T.poison || m.mods.includes('venom');
       const hit = damagePlayer(dmg, m, { melee: true, poison: venom ? dmg * 0.6 : 0, fireTouch: T.fireBurn, cold: T.coldHit });
       if (hit && m.abil.includes('steal')) stealGold(m);
@@ -667,7 +688,11 @@ function dropLoot(x, y, mlvl, tier, extraGold = 0) {
   // 보석과 부적
   const gemC = [0.008, 0.06, 0.15, 1, 0.12][tier], charmC = [0.004, 0.03, 0.08, 0.4, 0.06][tier];
   if (chance(gemC)) spawnGround('item', x, y, { item: generateGem(ilvl) });
-  if (chance(charmC)) spawnGround('item', x, y, { item: generateItem(ilvl, rollRarity(mlvl, tier, s.mf) >= 2 ? 2 : 1, { slot: 'charm' }) });
+  // 부적은 레어·유니크만 떨어짐. 유니크 확률은 보스·정예일수록, 마법 아이템 발견이 높을수록 높음
+  if (chance(charmC)) {
+    const uq = Math.min(0.45, [0.07, 0.09, 0.12, 0.2, 0.09][tier] * (1 + (s.mf + DIFFICULTIES[world.diff || 0].mf) / 250));
+    spawnGround('item', x, y, { item: generateItem(ilvl, chance(uq) ? 3 : 2, { slot: 'charm' }) });
+  }
 }
 
 function spawnGround(kind, x, y, data) {
@@ -795,14 +820,33 @@ function updateProjectiles(dt) {
           if (pr.pierce < 0) { dead = true; break; }
         }
       }
-    } else if (!dead && !p.dead && dist(p.x, p.y, pr.x, pr.y) < p.r + pr.r) {
-      dead = true;
-      const t = pr.type;
-      damagePlayer(pr.dmg, pr.src, {
+    } else if (!dead && pr.owner === 'merc') {
+      // 용병의 단검
+      for (const m of world.monsters) {
+        if (!hittable(m) || pr.hit.has(m.id)) continue;
+        if (Math.abs(m.x - pr.x) > 50 || Math.abs(m.y - pr.y) > 50) continue;
+        if (dist(m.x, m.y, pr.x, pr.y) < m.r + pr.r) {
+          pr.hit.add(m.id);
+          if (player.merc && !player.merc.dead) Merc.strike(m, pr.mult || 1);
+          dead = true;
+          break;
+        }
+      }
+    } else if (!dead) {
+      const t = pr.type, mc = Merc.active();
+      const opts = {
         proj: true, fire: t === 'fireball', cold: t === 'icicle', magic: t === 'plasma' || t === 'bolt',
         poisonHit: t === 'spit', poison: t === 'spit' ? pr.dmg * 0.8 : 0,
-      });
-      projectileImpact(pr);
+      };
+      if (mc && dist(mc.x, mc.y, pr.x, pr.y) < mc.r + pr.r) {
+        dead = true;
+        Merc.damage(pr.dmg, pr.src, opts);
+        projectileImpact(pr);
+      } else if (!p.dead && dist(p.x, p.y, pr.x, pr.y) < p.r + pr.r) {
+        dead = true;
+        damagePlayer(pr.dmg, pr.src, opts);
+        projectileImpact(pr);
+      }
     }
     if (dead) world.projectiles.splice(i, 1);
   }
@@ -897,6 +941,7 @@ function gainXp(n) {
   const p = player;
   n = Math.round(n * (1 + p.stats.xp / 100));
   p.xp += n;
+  Merc.gainXp(n);
   while (p.xp >= xpToNext(p.level)) {
     p.xp -= xpToNext(p.level);
     p.level++;

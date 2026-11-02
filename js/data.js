@@ -673,6 +673,23 @@ const UNIQUES = [
     stats: { edmg: [280, 340], lifeSteal: [8, 8], killLife: [40, 60], dmgElite: [40, 50] }, flavor: '아무리 베어도 배가 부르지 않는다.' },
   { id: 'godslayerU', name: '신을 죽인 검', base: 'godslayer', lvl: 100,
     stats: { edmg: [300, 380], dmgFlat: [60, 80], allSkills: [2, 2], dmgElite: [50, 60] }, flavor: '이 검에 베인 신은 이름조차 남지 않았다.' },
+  // 유니크 부적: 부적 주머니에 넣으면 효과 (부적은 레어·유니크로만 떨어짐)
+  { id: 'charmWanderer', name: '떠돌이의 행운', base: 'smallcharm', lvl: 3,
+    stats: { mf: [8, 12], gf: [12, 18], life: [5, 8] }, flavor: '길에서 주운 행운은 길에서 다시 잃는다.' },
+  { id: 'charmWarrior', name: '전사의 징표', base: 'smallcharm', lvl: 8,
+    stats: { dmgPct: [5, 7], dmgFlat: [2, 4], life: [8, 12] }, flavor: '첫 사냥을 마친 소년에게 주는 뼈 조각.' },
+  { id: 'charmGuardian', name: '수호자의 토템', base: 'largecharm', lvl: 18,
+    stats: { resAll: [5, 7], armor: [20, 30], life: [14, 20] }, flavor: '부족의 경계에 세우던 작은 토템.' },
+  { id: 'charmBloodpact', name: '피의 계약', base: 'largecharm', lvl: 25,
+    stats: { lifeSteal: [2, 3], dmgPct: [6, 9], critDmg: [10, 15] }, flavor: '서명은 잉크가 아니라 피로 한다.' },
+  { id: 'charmFeather', name: '폭풍 독수리의 깃털', base: 'largecharm', lvl: 32,
+    stats: { moveSpeed: [5, 7], ias: [6, 9], dmgFlat: [4, 7] }, flavor: '폭풍을 타고 나는 새는 땅에 내려앉지 않는다.' },
+  { id: 'charmTorch', name: '고대 부족의 횃불', base: 'grandcharm', lvl: 45,
+    stats: { allSkills: [1, 1], life: [20, 28], resAll: [6, 9] }, flavor: '꺼지지 않는 불은 부족의 혼이 지핀다.' },
+  { id: 'charmTears', name: '망자의 눈물', base: 'grandcharm', lvl: 55,
+    stats: { xp: [5, 8], mf: [14, 20], killLife: [3, 5], life: [15, 20] }, flavor: '얼어붙은 눈물 속에 이름 모를 얼굴이 비친다.' },
+  { id: 'charmOrcus', name: '오르쿠스의 파편', base: 'ancientcharm', lvl: 75,
+    stats: { allSkills: [1, 1], dmgPct: [10, 14], life: [28, 36], resAll: [8, 11], xp: [5, 10] }, flavor: '부서진 왕관의 조각은 아직도 따뜻하다.' },
 ];
 
 // ── 세트 아이템: 같은 세트를 여러 개 입으면 추가 능력이 생긴다 ──

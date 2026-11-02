@@ -73,7 +73,7 @@ const Game = {
     for (const t of types.slice()) { const T = MONSTERS[t]; if (T.escort && !types.includes(T.escort)) types.push(T.escort); }
     for (const m of world.monsters) if (m.summonType && !types.includes(m.summonType)) types.push(m.summonType);
     for (const t of types) { const sp = MONSTERS[t].sprite; if (sp && sp !== 'human' && !sprites.includes(sp)) sprites.push(sp); }
-    const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player), ...humanAssetPaths(types)];
+    const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player), ...humanAssetPaths(types), ...Merc.assetPaths()];
     // 소품이 다른 타일셋 그림을 쓰면 그것도
     for (const pr of world.dungeon.props || []) if (pr.set && FLARE.tiles[pr.set] && !paths.includes(FLARE.tiles[pr.set].img)) paths.push(FLARE.tiles[pr.set].img);
     if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) paths.push(FLARE.npcs[n.sprite].img);
@@ -180,6 +180,7 @@ const Game = {
     p.freeEnhance = d.freeEnhance || 0; p.gambleDiscount = d.gambleDiscount || 0;
     // 층마다 나오는 테마 순서 (예전 저장에는 없으므로 새로 정함)
     if (d.mapSeed) p.mapSeed = d.mapSeed;
+    Merc.load(d.merc);
     this.levelUpDelay = 1.5;
     this.dungeonWorld = null;
     Shop.buyback = [];
@@ -204,6 +205,7 @@ const Game = {
     p.x = spot.x; p.y = spot.y; p.z = 0;
     p.order = p.path = p.attack = p.leap = p.whirl = p.tp = p.rush = p.quake = null;
     p.dead = false;
+    Merc.place();  // 용병도 옆에
     if (R.themeName !== d.theme.name) buildThemeSprites(d.theme);
     if (!d.art) prepareFloorArt(d);
     this.preloadFloor();
@@ -378,7 +380,7 @@ const Game = {
         equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, charms: p.charms, elixirs: p.elixirs,
         playTime: Math.round(p.playTime || 0), deaths: p.deaths || 0, cleared: p.cleared || null,
         clearedNM: p.clearedNM || null, clearedHell: p.clearedHell || null, difficulty: p.difficulty || 0, deepestBy: this.deepestBy(),
-        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0, freeEnhance: p.freeEnhance || 0, gambleDiscount: p.gambleDiscount || 0, mapSeed: p.mapSeed,
+        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0, freeEnhance: p.freeEnhance || 0, gambleDiscount: p.gambleDiscount || 0, mapSeed: p.mapSeed, merc: Merc.save(),
       },
     };
     store.set(SAVE_KEY, JSON.stringify(data));
@@ -623,6 +625,7 @@ function update(dt) {
     player.playTime = (player.playTime || 0) + dt;
     handleHeldInput(dt);
     updatePlayer(dt);
+    Merc.update(dt);
     // 발소리와 심장 박동
     const pl = player;
     if (pl.moving && !pl.whirl && !pl.leap && !pl.dead) {

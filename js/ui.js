@@ -116,6 +116,16 @@ const UI = {
         $('quest-track').innerHTML = lines.map(l => `<li class="${l.ready ? 'ready' : ''}">${escapeHtml(l.text)}</li>`).join('');
       });
     }
+    // 용병 생명력
+    const mc = p.merc;
+    set('merc', mc ? `${mc.name}|${mc.level}|${mc.dead}|${mc.stats ? Math.ceil(mc.life / mc.stats.maxLife * 50) : 0}` : '', () => {
+      const h = $('merc-hud');
+      h.hidden = !mc;
+      if (!mc) return;
+      h.classList.toggle('dead', !!mc.dead);
+      h.querySelector('.mh-name').textContent = `${MERC_TYPES[mc.type].name} ${mc.name} · 레벨 ${mc.level}${mc.dead ? ' (쓰러짐)' : ''}`;
+      h.querySelector('.mh-bar i').style.width = mc.dead || !mc.stats ? '0%' : `${clamp(mc.life / mc.stats.maxLife, 0, 1) * 100}%`;
+    });
     // 스킬 슬롯
     p.hotbar.forEach((id, i) => {
       const b = this.el.slotBtns[i];

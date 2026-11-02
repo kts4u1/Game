@@ -27,6 +27,7 @@ const TOWN_NPCS = [
       '얼음은 발을 묶고, 독은 서서히 목숨을 갉아먹는다. 원소 저항이 붙은 장비를 챙겨라.',
       '붉은 옷의 광신도를 보면 그놈부터 베어라. 동료들의 상처를 아물게 한다.',
       '사형집행인이 칼을 높이 들면 붉게 표시된 곳에서 당장 벗어나라. 한 번이면 끝이다.',
+      '혼자 내려가기 버겁다면 말해라. 경비대의 쓸 만한 놈을 용병으로 붙여 주지.',
     ] },
   { id: 'farmer', role: 'talk', name: '농부 한스', sprite: 'peasant_man1', at: [-2, 6], voice: ['npc_m3'],
     lines: ['밭에 해골 손이 튀어나온 뒤로 아무것도 안 자라요.', '밤마다 땅 밑에서 긁는 소리가 들려요…', '용사님, 제발 저 구덩이를 막아 주세요.'] },
@@ -147,6 +148,8 @@ const Town = {
     if (n.voice) SFX.voice(pick(n.voice));
     // 새 퀘스트·보고할 퀘스트가 있으면 퀘스트 창부터
     if (Quests.mark(n)) { Shop.open(n, 'quest'); return; }
+    // 경비대장: 퀘스트·현상금이 있으면 퀘스트 탭, 아니면 용병 탭
+    if (n.id === 'captain') { Shop.open(n, Quests.forNpc(n).active || Quests.bountyOpen() ? 'quest' : 'merc'); return; }
     const qa = Quests.forNpc(n).active;
     if (n.role === 'talk' && qa) { n.say = { text: `${qa.name} — ${Quests.progressText(qa)}`, t: 5 }; if (n.id !== 'captain') return; }
     switch (n.role) {
@@ -189,7 +192,7 @@ const Shop = {
   level() { return player ? player.level : 1; },
   buyPrice(it) { return Math.round(it.value * 4); },
   restockPrice() { return 40 + this.level() * 8; },
-  gamblePrice(slot) { return Math.round((90 + this.level() * 28) * (slot === 'ring' || slot === 'amulet' ? 1.6 : slot === 'weapon' ? 1.2 : 1) * (1 - Math.min(40, player.gambleDiscount || 0) / 100)); },
+  gamblePrice(slot) { return Math.round((90 + this.level() * 28) * (slot === 'ring' || slot === 'amulet' ? 1.6 : slot === 'charm' ? 2.4 : slot === 'weapon' ? 1.2 : 1) * (1 - Math.min(40, player.gambleDiscount || 0) / 100)); },
   canEnhance(it) { return !!it && (it.dmg || it.def !== undefined) && (it.plus || 0) < 10; },
   enhanceCost(it) { return player.freeEnhance > 0 ? 0 : Math.round((40 + it.ilvl * 12) * Math.pow((it.plus || 0) + 1, 1.5)); },
   canAddSocket(it) { return !!it && !!SOCKET_MAX[it.slot] && (it.sockets || 0) < SOCKET_MAX[it.slot]; },
@@ -387,7 +390,11 @@ const Shop = {
       refiner: [['reroll', '재련'], ['upgrade', '승급']],
     }[n.role] || [];
     // 퀘스트를 주는 사람은 '퀘스트' 탭 (말만 하는 사람은 퀘스트 탭만)
-    if (Quests.hasContent(n) && n.role !== 'talk') {
+    // 경비대장: 퀘스트와 용병
+    if (n.id === 'captain') {
+      tabs.push(['quest', `퀘스트${Quests.mark(n) ? ' ' + Quests.mark(n) : ''}`], ['merc', '용병']);
+      if (this.tab !== 'merc') this.tab = 'quest';
+    } else if (Quests.hasContent(n) && n.role !== 'talk') {
       // 탭이 없던 상인은 원래 화면으로 돌아갈 탭을 하나 만들어 줌
       if (!tabs.length) tabs.push([n.role, { healer: '치료 · 물약', gambler: '도박' }[n.role] || '거래']);
       tabs.push(['quest', `퀘스트${Quests.mark(n) ? ' ' + Quests.mark(n) : ''}`]);
@@ -411,6 +418,12 @@ const Shop = {
       panel.querySelector('.shop-tabs').hidden = false;
     }
     let body = '', foot = '';
+    if (this.tab === 'merc') {
+      const q = Merc.panelHtml();
+      panel.querySelector('.panel-body').innerHTML = q.body;
+      panel.querySelector('.panel-foot').innerHTML = q.foot;
+      return;
+    }
     if (this.tab === 'quest') {
       const q = Quests.panelHtml(n);
       panel.querySelector('.panel-body').innerHTML = q.body;
@@ -523,6 +536,8 @@ const Shop = {
     const t = e.target;
     const qa = t.closest('[data-qact]');
     if (qa) { Quests.onClick(qa.dataset.qact); return this.refresh(); }
+    const ma = t.closest('[data-mact]');
+    if (ma) { if (!ma.disabled) Merc.onClick(ma.dataset.mact); UI.refreshPanels(); return this.refresh(); }
     const sp = t.closest('[data-spage]');
     if (sp) { this.stashPage = +sp.dataset.spage; this.sel = null; return this.refresh(); }
     const cb = t.closest('[data-combine]');

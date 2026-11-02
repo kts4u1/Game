@@ -187,7 +187,8 @@ function generateItem(ilvl, rarity, opts = {}) {
   ilvl = Math.max(1, Math.round(ilvl));
   let slot = opts.slot || pickSlot();
   if (slot === 'gem') return generateGem(ilvl);
-  if (slot === 'charm' && rarity > 2) rarity = 2;
+  // 부적은 레어·유니크만 (세트 부적은 없음)
+  if (slot === 'charm') rarity = rarity >= 3 ? 3 : 2;
   if (rarity === 4) {
     const s = generateSet(ilvl, opts.slot);
     if (s) return s;
