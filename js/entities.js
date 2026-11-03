@@ -179,6 +179,8 @@ function populateFloor() {
       const k = clamp(dps(R0) / dps(T0), 0.6, 2.5);
       boss.dmg = boss.dmg.map(x => x * k);
     }
+    // 5층 보스는 처음 만나는 보스라 체력을 3분의 1로
+    if (f === 5) boss.maxLife = boss.life = Math.round(boss.life / 3);
     world.monsters.push(boss);
     d.stairs.open = false;
     // 마지막 층에는 더 내려가는 계단이 없음

@@ -726,11 +726,13 @@ function canEquip(item) { return player.level >= item.req; }
 // ── 아이템 위치: { c: 'inv' | 'eq' | 'stash', i: 칸 번호, k: 장비 칸 이름 } ──
 function itemAt(loc) {
   const p = player;
+  if (loc.c === 'merc') return (p.merc && p.merc.equipment[loc.k]) || null;  // 용병 장비 칸
   return loc.c === 'eq' ? p.equipment[loc.k] : loc.c === 'inv' ? p.inventory[loc.i] : loc.c === 'charm' ? p.charms[loc.i] : p.stash[loc.i];
 }
 function putAt(loc, it) {
   const p = player;
   if (loc.c === 'eq') p.equipment[loc.k] = it || null;
+  else if (loc.c === 'merc') { if (p.merc) p.merc.equipment[loc.k] = it || null; }
   else if (loc.c === 'inv') p.inventory[loc.i] = it || null;
   else if (loc.c === 'charm') p.charms[loc.i] = it || null;
   else p.stash[loc.i] = it || null;
@@ -755,7 +757,7 @@ function charmFromPouch(i) {
   recalcStats(p); SFX.equip(it); Game.dirty = true;
   return true;
 }
-function sameLoc(a, b) { return a.c === b.c && (a.c === 'eq' ? a.k === b.k : a.i === b.i); }
+function sameLoc(a, b) { return a.c === b.c && (a.c === 'eq' || a.c === 'merc' ? a.k === b.k : a.i === b.i); }
 // 이동 목표가 벽 안이면 가까운 빈자리로 (벽에 붙어 계속 미끄러지지 않게)
 function moveTarget(x, y) {
   const d = world.dungeon, r = player.r * 0.8;
@@ -825,6 +827,8 @@ function moveItem(from, to) {
   if (sameLoc(from, to)) return false;
   const a = itemAt(from), b = itemAt(to);
   if (!a) return false;
+  // 용병 장비 칸이 끼면 용병 쪽 규칙으로
+  if (from.c === 'merc' || to.c === 'merc') return Merc.move(from, to);
   // 부적 주머니에는 부적만
   if (to.c === 'charm' && a.slot !== 'charm') { UI.message('부적 주머니에는 부적만 넣을 수 있습니다', '#ff7a6a'); SFX.play('nope'); return false; }
   if (from.c === 'charm' && b && b.slot !== 'charm') {
@@ -876,6 +880,7 @@ function insertGem(gemLoc, targetLoc) {
   putAt(gemLoc, null);
   finalizeItem(it);
   if (targetLoc.c === 'eq') recalcStats(player);
+  if (targetLoc.c === 'merc') Merc.recalc();
   SFX.play('anvil');
   const [st, v] = gemStat(gem, it.slot);
   UI.message(`${gem.name}을(를) 박았습니다: ${statLine(st, v)}`, GEM_TYPES[gem.gem].color);

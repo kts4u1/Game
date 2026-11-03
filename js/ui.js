@@ -68,12 +68,12 @@ const UI = {
     const inv = this.el['inv-panel'];
     inv.addEventListener('click', e => this.onInvClick(e));
     inv.addEventListener('mouseover', e => this.onInvHover(e));
-    inv.addEventListener('mouseout', e => { if (e.target.closest('[data-inv],[data-eq],[data-charm]')) this.hideTooltip(); });
+    inv.addEventListener('mouseout', e => { if (e.target.closest('[data-inv],[data-eq],[data-charm],[data-merc]')) this.hideTooltip(); });
     // 오른쪽 클릭: 바로 착용·해제 (터치 길게 누르기로 생기는 메뉴는 무시)
     inv.addEventListener('contextmenu', e => {
       e.preventDefault();
       if (Drag.lastType !== 'mouse') return;
-      const cell = e.target.closest('[data-inv],[data-eq],[data-charm]');
+      const cell = e.target.closest('[data-inv],[data-eq],[data-charm],[data-merc]');
       if (cell) this.quickAction(cellLoc(cell));
     });
     initDrag();
@@ -244,7 +244,8 @@ const UI = {
     this.selected = null;
     Shop.render();
     // 웨이포인트 창 말고는 소지품도 함께 엶
-    if (Shop.npc.role !== 'gate' && Shop.npc.role !== 'talk') { this.el['inv-panel'].hidden = false; this.renderInventory(); }
+    // 상인·보관함, 그리고 경비대장(용병에게 장비를 끌어다 맡길 수 있게)은 소지품 창도 함께
+    if ((Shop.npc.role !== 'gate' && Shop.npc.role !== 'talk') || Shop.npc.id === 'captain') { this.el['inv-panel'].hidden = false; this.renderInventory(); }
   },
   closePanels() {
     this.moveFrom = null;
@@ -266,11 +267,11 @@ const UI = {
     $('btn-gfx').textContent = `그래픽: ${GFX.label()}`;
   },
 
-  cellHtml(item, attrs, label) {
+  cellHtml(item, attrs, label, wearable) {
     const mv = this.moveFrom ? ' move-target' : '';
     if (!item) return `<div class="cell${mv}" ${attrs}>${label ? `<span class="cell-label">${label}</span>` : ''}</div>`;
     const sel = (this.selected && this.selected.item === item) || (Shop.target === item && Shop.isOpen()) ? ' selected' : '';
-    const bad = !canEquip(item) ? ' cant' : '';
+    const bad = !(wearable != null ? wearable : canEquip(item)) ? ' cant' : '';
     return `<div class="cell r${item.rarity}${sel}${bad}" ${attrs}>${itemIconHtml(item)}${item.plus ? `<span class="plus">+${item.plus}</span>` : ''}</div>`;
   },
 
@@ -301,11 +302,17 @@ const UI = {
           + (sellOk ? `<button data-act="sell">판매 <small>+${it.value}</small></button>`
             : stashOk ? '<button data-act="stash">보관함에 넣기</button>'
             : '<button data-act="drop">버리기</button>')
+          + (Merc.slotFor(it) && !p.merc.dead ? `<button data-act="tomerc" ${Merc.canWear(it) ? '' : 'disabled'}>${Merc.canWear(it) ? '용병에게' : `용병 Lv ${it.req} 필요`}</button>` : '')
           + '<button data-act="move">옮기기</button>';
         const cmpKey = it.slot === 'ring' ? (p.equipment.ring1 ? 'ring1' : null) : it.slot;
         const cur = cmpKey ? p.equipment[cmpKey] : null;
         detail = `<div class="tt">${itemTooltipHtml(it)}</div>`;
         if (cur) detail += `<div class="tt tt-compare">${itemTooltipHtml(cur, { header: '착용 중', noValue: true })}</div>`;
+        const mcur = Merc.slotFor(it) && p.merc.equipment[it.slot];
+        if (mcur) detail += `<div class="tt tt-compare">${itemTooltipHtml(mcur, { header: '용병이 쓰는 중', noValue: true })}</div>`;
+      } else if (sel.kind === 'merc') {
+        btns = '<button class="btn-main" data-act="mercoff">용병에게서 빼서 가방에 넣기</button><button data-act="move">옮기기</button>';
+        detail = `<div class="tt">${itemTooltipHtml(it, { noValue: true, header: '용병이 쓰는 중' })}</div>`;
       } else if (sel.kind === 'charm') {
         btns = '<button class="btn-main" data-act="uncharm">가방으로 꺼내기</button><button data-act="move">옮기기</button>';
         detail = `<div class="tt">${itemTooltipHtml(it, { noValue: true })}</div>`;
@@ -320,8 +327,19 @@ const UI = {
         </div>`;
     }
     const used = p.inventory.filter(Boolean).length;
+    // 용병 장비 칸: 끌어다 놓거나 아이템의 '용병에게' 버튼으로 맡기고, 두 번 누르면 가방으로
+    let mercHtml = '';
+    const mc = p.merc;
+    if (mc) {
+      const T = MERC_TYPES[mc.type];
+      const cells = T.slots.map(k => this.cellHtml(mc.equipment[k], `data-merc="${k}"`, MERC_SLOT_NAMES[k], mc.equipment[k] ? (mc.equipment[k].req || 1) <= mc.level : true)).join('');
+      mercHtml = `<div class="inv-meta merc-meta"><span>용병 · ${T.name} ${escapeHtml(mc.name)} · 레벨 ${mc.level}${mc.dead ? ' <em>(쓰러짐)</em>' : ''}</span>`
+        + `${mc.stats && !mc.dead ? `<span class="merc-mini">생명력 ${Math.round(mc.life)}/${mc.stats.maxLife} · 피해 ${mc.stats.minDmg}–${mc.stats.maxDmg} · 방어 ${mc.stats.armorTotal}</span>` : ''}</div>`
+        + `<div class="grid merc-gear">${cells}</div>`;
+    }
     this.el['inv-panel'].querySelector('.panel-body').innerHTML = `
       <div class="doll">${doll}</div>
+      ${mercHtml}
       <div class="inv-meta"><span title="여기에 넣은 부적만 효과가 있습니다">부적 주머니 ${p.charms.filter(Boolean).length} / ${CHARM_SLOTS}</span></div>
       <div class="grid charm-pouch">${pouch}</div>
       <div class="inv-meta"><span>가방 ${used} / ${p.inventory.length}</span><button class="mini-btn" data-act="sortinv">정리</button><span class="gold">${p.gold.toLocaleString()} 골드</span></div>
@@ -344,6 +362,8 @@ const UI = {
       else if (a === 'drop' && sel) { const i = p.inventory.indexOf(sel.item); if (i >= 0) dropInventory(i); this.selected = null; }
       else if (a === 'unequip' && sel) { if (unequip(sel.key)) this.selected = null; }
       else if (a === 'pouch' && selLoc) { charmToPouch(selLoc); this.selected = null; }
+      else if (a === 'tomerc' && selLoc) { Merc.move(selLoc, { c: 'merc', k: sel.item.slot }); this.selected = null; }
+      else if (a === 'mercoff' && sel) { if (Merc.unequip(sel.key)) this.selected = null; }
       else if (a === 'uncharm' && sel) { const i = p.charms.indexOf(sel.item); if (i >= 0) charmFromPouch(i); this.selected = null; }
       else if (a === 'move' && selLoc) { this.moveFrom = selLoc; this.selected = null; }
       else if (a === 'movecancel') this.moveFrom = null;
@@ -354,7 +374,7 @@ const UI = {
       this.refreshPanels();
       return;
     }
-    const cell = e.target.closest('[data-inv],[data-eq],[data-charm]');
+    const cell = e.target.closest('[data-inv],[data-eq],[data-charm],[data-merc]');
     if (!cell) return;
     if (e.shiftKey) { this.shiftClick(cellLoc(cell)); return; }
     this.tapCell(cellLoc(cell));
@@ -401,7 +421,7 @@ const UI = {
       return;
     }
     if (loc.c === 'stash') { Shop.sel = it ? { item: it, list: 'stash' } : null; this.refreshPanels(); return; }
-    this.selected = it ? (loc.c === 'eq' ? { kind: 'eq', item: it, key: loc.k } : loc.c === 'charm' ? { kind: 'charm', item: it } : { kind: 'inv', item: it }) : null;
+    this.selected = it ? (loc.c === 'eq' ? { kind: 'eq', item: it, key: loc.k } : loc.c === 'merc' ? { kind: 'merc', item: it, key: loc.k } : loc.c === 'charm' ? { kind: 'charm', item: it } : { kind: 'inv', item: it }) : null;
     if (this.selected) Shop.pickTarget(this.selected.item);
     this.renderInventory();
     // 터치 화면에서는 툴팁 대신 아래 상세 칸을 보여줌 (두 번 누를 시간을 준 뒤 스크롤)
@@ -418,6 +438,7 @@ const UI = {
     const it = itemAt(loc);
     if (!it) return;
     if (loc.c === 'charm') charmFromPouch(loc.i);
+    else if (loc.c === 'merc') Merc.unequip(loc.k);
     else if (loc.c === 'inv' && it.slot === 'charm') charmToPouch(loc);
     else if (loc.c === 'inv') equipInto(loc, defaultKey(it));
     else if (loc.c === 'eq') unequip(loc.k);
@@ -432,6 +453,7 @@ const UI = {
     const sel = this.selected;
     if (!sel) return null;
     if (sel.kind === 'eq') return { c: 'eq', k: sel.key };
+    if (sel.kind === 'merc') return { c: 'merc', k: sel.key };
     if (sel.kind === 'charm') { const c = player.charms.indexOf(sel.item); return c >= 0 ? { c: 'charm', i: c } : null; }
     const i = player.inventory.indexOf(sel.item);
     return i >= 0 ? { c: 'inv', i } : null;
@@ -453,6 +475,9 @@ const UI = {
     } else if (eq) {
       const it = p.equipment[eq.dataset.eq];
       if (it) html = `<div class="tt">${itemTooltipHtml(it, { noValue: true })}</div>`;
+    } else if (e.target.closest('[data-merc]')) {
+      const it = itemAt(cellLoc(e.target.closest('[data-merc]')));
+      if (it) html = `<div class="tt">${itemTooltipHtml(it, { noValue: true, header: '용병이 쓰는 중' })}</div>`;
     } else {
       const ch = e.target.closest('[data-charm]');
       const it = ch && p.charms[+ch.dataset.charm];
@@ -619,11 +644,12 @@ function cellLoc(el) {
   if (el.dataset.inv != null) return { c: 'inv', i: +el.dataset.inv };
   if (el.dataset.charm != null) return { c: 'charm', i: +el.dataset.charm };
   if (el.dataset.eq != null) return { c: 'eq', k: el.dataset.eq };
+  if (el.dataset.merc != null) return { c: 'merc', k: el.dataset.merc };
   return { c: 'stash', i: +el.dataset.stash };
 }
 
 function initDrag() {
-  const CELLS = '#inv-panel [data-inv], #inv-panel [data-eq], #inv-panel [data-charm], #shop-panel [data-stash]';
+  const CELLS = '#inv-panel [data-inv], #inv-panel [data-eq], #inv-panel [data-charm], #inv-panel [data-merc], #shop-panel [data-stash]';
   document.addEventListener('pointerdown', e => {
     Drag.lastType = e.pointerType || 'mouse';
     Drag.justDropped = 0;  // 놓은 직후의 클릭 한 번만 무시
@@ -679,17 +705,22 @@ function dragBegin(x, y) {
 function dragTarget(x, y) {
   const el = document.elementFromPoint(x, y);
   if (!el) return null;
-  const cell = el.closest('#inv-panel [data-inv], #inv-panel [data-eq], #inv-panel [data-charm], #shop-panel [data-stash]');
+  const cell = el.closest('#inv-panel [data-inv], #inv-panel [data-eq], #inv-panel [data-charm], #inv-panel [data-merc], #shop-panel [data-stash]');
   if (cell) {
     const loc = cellLoc(cell);
     const it = Drag.start.item, onto = itemAt(loc);
-    let ok = loc.c === 'charm' ? it.slot === 'charm' : loc.c !== 'eq' || fitsKey(it, loc.k);
+    let ok = loc.c === 'charm' ? it.slot === 'charm' : loc.c === 'merc' ? it.slot === loc.k && !player.merc.dead && Merc.canWear(it, loc.k) : loc.c !== 'eq' || fitsKey(it, loc.k);
     if (it.slot === 'gem' && onto && onto !== it && onto.slot !== 'gem' && onto.slot !== 'charm') ok = canSocket(onto);
     return { kind: 'cell', el: cell, loc, ok };
   }
   const shop = el.closest('#shop-panel');
   if (shop && Shop.isOpen()) {
     const role = Shop.npc.role, from = Drag.start.loc;
+    // 경비대장의 용병 탭 위에 놓으면 용병에게 맡김
+    if (Shop.npc.id === 'captain' && Shop.tab === 'merc' && player.merc) {
+      const it = Drag.start.item;
+      return { kind: 'givemerc', el: shop, ok: from.c !== 'merc' && !player.merc.dead && !!Merc.slotFor(it) && Merc.canWear(it) };
+    }
     if ((role === 'smith' && (Shop.tab === 'enhance' || Shop.tab === 'socket')) || role === 'refiner') return { kind: 'target', el: shop, ok: true };
     if (Shop.canSell()) return { kind: 'sell', el: shop, ok: from.c === 'inv' };
   }
@@ -719,6 +750,7 @@ function dragDrop(x, y) {
     if (s.loc.c === 'inv') sellInventory(s.loc.i);
     else UI.message('착용 중인 물건은 먼저 벗어야 팔 수 있습니다', '#ff7a6a');
   } else if (t.kind === 'target') { Shop.target = s.item; }
+  else if (t.kind === 'givemerc') { if (t.ok) Merc.move(s.loc, { c: 'merc', k: s.item.slot }); else { UI.message('용병이 쓸 수 없는 물건입니다', '#ff7a6a'); SFX.play('nope'); } }
   UI.selected = null;
   Shop.sel = null;
   UI.refreshPanels();

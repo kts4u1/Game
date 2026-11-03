@@ -10,24 +10,25 @@ const MERC_TYPES = {
     name: '검사', icon: 122, life: 100, dmg: [4, 7], armor: [18, 6], aps: 1.1, range: 52, ranged: false,
     desc: '방패를 든 근접 전사. 생명력과 방어력이 높아 앞에서 버텨 주고, 몇 초마다 방패로 쳐서 적을 기절시킵니다.',
     skill: '방패 강타: 6초마다 다음 공격이 피해 150%, 1.2초 기절',
-    slots: ['weapon', 'shield', 'armor', 'helm'],
+    slots: ['weapon', 'shield', 'armor', 'helm'], tint: [150, 182, 255],
     gear: { head: 'chain_coif', chest: 'chain_cuirass', legs: 'chain_greaves', hands: 'chain_gloves', feet: 'chain_boots', main: 'longsword', off: 'kite_shield' },
   },
   thrower: {
     name: '투척수', icon: 96, life: 65, dmg: [3, 6], armor: [8, 3], aps: 1.05, range: 330, ranged: true,
     desc: '멀리서 단검을 던지는 사냥꾼. 몸은 약하지만 뒤에서 꾸준히 피해를 주고, 몇 초마다 단검 세 자루를 한꺼번에 던집니다.',
     skill: '부채 던지기: 5초마다 단검 3자루를 부채꼴로',
-    slots: ['weapon', 'armor', 'helm'],
+    slots: ['weapon', 'armor', 'helm'], tint: [178, 240, 158],
     gear: { head: 'leather_hood', chest: 'leather_chest', legs: 'leather_pants', hands: 'leather_gloves', feet: 'leather_boots', main: 'dagger' },
   },
   priest: {
     name: '전투 사제', icon: 111, life: 80, dmg: [3, 6], armor: [12, 4.5], aps: 1.0, range: 52, ranged: false,
     desc: '철퇴를 든 사제. 곁에 있으면 주인과 자신의 생명력이 계속 회복되고, 주인이 위험하면 치유 기도를 올립니다.',
     skill: '회복의 기운: 주인과 사제의 초당 생명력 회복 / 치유 기도: 14초마다 위급할 때 생명력 25% 회복',
-    slots: ['weapon', 'shield', 'armor', 'helm'],
+    slots: ['weapon', 'shield', 'armor', 'helm'], tint: [255, 222, 150],
     gear: { head: 'plate_helm', chest: 'plate_cuirass', legs: 'plate_greaves', hands: 'plate_gauntlets', feet: 'plate_boots', main: 'mace', off: 'buckler' },
   },
 };
+const MERC_SCALE = 0.95;  // 주인보다 조금 작게
 const MERC_NAMES = ['로드릭', '가레스', '브란', '울릭', '하콘', '토르빈', '에이릭', '스벤', '라그나', '비고르', '알도', '케일', '군나르', '시그문드', '레아', '이델'];
 const MERC_SLOT_NAMES = { weapon: '무기', shield: '방패', armor: '갑옷', helm: '투구' };
 
@@ -154,31 +155,83 @@ const Merc = {
     return (it.req || 1) <= m.level;
   },
   equipFromInv(i) {
-    const p = player, m = p.merc, it = p.inventory[i];
-    if (!m || m.dead || !it || !this.canWear(it)) { SFX.play('nope'); return; }
-    const old = m.equipment[it.slot] || null;
-    m.equipment[it.slot] = it;
-    p.inventory[i] = old;
-    // 양손 무기를 들면 방패는 가방으로
-    if (it.slot === 'weapon' && isTwoHanded(it) && m.equipment.shield) {
-      const k = p.inventory.indexOf(null);
-      if (k >= 0) { p.inventory[k] = m.equipment.shield; m.equipment.shield = null; }
-      else { m.equipment.weapon = old; p.inventory[i] = it; UI.message('가방이 가득 차서 방패를 뺄 수 없습니다', '#ff7a6a'); return; }
+    const it = player.inventory[i];
+    if (it) this.move({ c: 'inv', i }, { c: 'merc', k: it.slot });
+  },
+  // 소지품 창의 용병 장비 칸과 가방·보관함·내 장비 칸 사이에서 물건을 옮김 (끌어다 놓기, 옮기기 버튼, 맡기기 버튼 공용)
+  move(from, to) {
+    const p = player, m = p.merc;
+    if (!m) return false;
+    const a = itemAt(from), b = itemAt(to);
+    if (!a) return false;
+    const T = MERC_TYPES[m.type];
+    const nope = msg => { if (msg) UI.message(msg, '#ff7a6a'); SFX.play('nope'); return false; };
+    const freeInv = () => p.inventory.indexOf(null);
+    if (to.c === 'merc') {
+      if (from.c === 'merc') return nope();
+      if (m.dead) return nope('쓰러진 용병에게는 장비를 맡길 수 없습니다. 마을의 경비대장에게서 되살리세요');
+      if (a.slot !== to.k || !T.slots.includes(to.k)) return nope(`용병의 ${MERC_SLOT_NAMES[to.k] || ''} 칸에는 ${MERC_SLOT_NAMES[to.k] || '맞는 물건'}만 넣을 수 있습니다`);
+      if ((a.req || 1) > m.level) return nope(`용병 레벨 ${a.req}부터 쓸 수 있습니다 (지금 ${m.level})`);
+      if (to.k === 'shield' && m.equipment.weapon && isTwoHanded(m.equipment.weapon)) return nope('양손 무기를 든 용병은 방패를 쓸 수 없습니다');
+      const bump = to.k === 'weapon' && isTwoHanded(a) && m.equipment.shield ? m.equipment.shield : null;
+      // 용병이 쓰던 물건이 돌아갈 자리: 원래 자리(내 장비 칸이면 착용할 수 있을 때만), 아니면 가방 빈칸
+      const backHere = !b || from.c !== 'eq' || (fitsKey(b, from.k) && canEquip(b));
+      const need = (bump ? 1 : 0) + (backHere ? 0 : 1);
+      if (need && p.inventory.filter(x => !x).length + (from.c === 'inv' && !backHere ? 1 : 0) < need) return nope('가방이 가득 찼습니다');
+      putAt(from, backHere ? b : null);
+      m.equipment[to.k] = a;
+      if (!backHere) p.inventory[freeInv()] = b;
+      if (bump) { m.equipment.shield = null; p.inventory[freeInv()] = bump; UI.message('양손 무기를 들어서 방패는 가방으로 옮겼습니다', '#c9c1b3'); }
+      if (from.c === 'eq') afterEquipChange(b); else SFX.equip(a);
+      this.recalc();
+      Game.dirty = true;
+      return true;
     }
-    SFX.equip(it);
-    this.recalc();
-    Game.dirty = true;
+    if (from.c === 'merc') {
+      if (to.c === 'charm') return nope('부적 주머니에는 부적만 넣을 수 있습니다');
+      if (to.c === 'eq') {
+        // 용병의 물건을 바로 내가 착용 (빈 칸일 때)
+        if (!fitsKey(a, to.k)) return nope(`${SLOT_NAMES[a.slot]}은(는) 그 칸에 착용할 수 없습니다`);
+        if (!canEquip(a)) { cantEquipMsg(a); return false; }
+        if (b) return nope('먼저 착용 중인 물건을 벗거나, 용병의 물건을 가방으로 옮긴 뒤 착용하세요');
+        if ((to.k === 'weapon' && isTwoHanded(a) && p.equipment.shield) || (to.k === 'shield' && p.equipment.weapon && isTwoHanded(p.equipment.weapon))) return nope('양손 무기와 방패는 함께 들 수 없습니다');
+        putAt(to, a); putAt(from, null);
+        afterEquipChange(a);
+        this.recalc();
+        return true;
+      }
+      // 가방·보관함으로: 그 칸의 물건을 용병이 쓸 수 있으면 맞바꾸고, 아니면 같은 곳의 빈칸으로
+      const swap = b && !m.dead && b.slot === from.k && (b.req || 1) <= m.level && !(from.k === 'shield' && m.equipment.weapon && isTwoHanded(m.equipment.weapon))
+        && !(from.k === 'weapon' && isTwoHanded(b) && m.equipment.shield);
+      if (!b || swap) { putAt(to, a); putAt(from, swap ? b : null); }
+      else {
+        const list = listOf(to.c), free = list.indexOf(null);
+        if (free < 0) return nope(to.c === 'inv' ? '가방이 가득 찼습니다' : '보관함이 가득 찼습니다');
+        list[free] = a; putAt(from, null);
+      }
+      SFX.equip(a);
+      this.recalc();
+      Game.dirty = true;
+      return true;
+    }
+    return false;
   },
   unequip(slot) {
     const p = player, m = p.merc;
-    if (!m || !m.equipment[slot]) return;
+    if (!m || !m.equipment[slot]) return false;
     const k = p.inventory.indexOf(null);
-    if (k < 0) { UI.message('가방이 가득 찼습니다', '#ff7a6a'); SFX.play('nope'); return; }
+    if (k < 0) { UI.message('가방이 가득 찼습니다', '#ff7a6a'); SFX.play('nope'); return false; }
     p.inventory[k] = m.equipment[slot];
     m.equipment[slot] = null;
-    SFX.play('click');
+    SFX.equip(p.inventory[k]);
     this.recalc();
     Game.dirty = true;
+    return true;
+  },
+  // 가방의 물건을 용병이 쓸 수 있는 칸 (없으면 null)
+  slotFor(it) {
+    const m = player.merc;
+    return m && it && MERC_TYPES[m.type].slots.includes(it.slot) ? it.slot : null;
   },
 
   // ── 층에 들어갈 때 주인 옆에 세움 ──
@@ -192,6 +245,7 @@ const Merc = {
       hurtT: 0, calmT: 0, pose: null, poseT: 0, slowT: 0, stuck: 0, think: 0 });
     if (!m.cd.skill) m.cd.skill = 3;
     if (!m.cd.prayer) m.cd.prayer = 4;
+    this.warm(m);
   },
 
   // ── 매 프레임 ──
@@ -422,23 +476,41 @@ const Merc = {
       const [anim, idx, dir] = this.pose(m, t);
       const cast = GFX.q.shadows ? shadowCast(m.x, m.y, false) : null;
       drawBlobShadow(ctx, sx, sy, 14, cast);
-      const L = this.layers(m);
+      // 갑옷·투구에 용병 종류의 색을 입혀(검사 푸른 강철, 투척수 숲빛, 사제 흰 금빛) 주인과 다르게 보이게
+      const L = this.layers(m), col = this.tintCss(m);
       for (const slot of HERO_LAYER_ORDER[dir]) {
         let name = L[slot];
         if (name && (!FLARE.hero[name] || !Assets.ready(FLARE.hero[name].img))) name = HERO_FALLBACK[slot];
         if (!name) continue;
-        drawSpriteFrame(ctx, FLARE.hero[name], anim, dir, idx, sx, sy);
+        const set = FLARE.hero[name], plain = slot === 'main' || slot === 'off';
+        drawSpriteFrame(ctx, set, anim, dir, idx, sx, sy, MERC_SCALE, plain ? null : Assets.tintedAtlas(set.img, col));
       }
     } else {
       drawShadow(ctx, sx, sy, 14, 6, 0.4);
       ctx.fillStyle = '#5a6a4a'; ctx.fillRect(sx - 8, sy - 50, 16, 46);
       circle(ctx, sx, sy - 58, 8, '#c78c5d');
     }
-    // 머리 위 생명력 막대
-    const w = 38, k = clamp(m.life / m.stats.maxLife, 0, 1), y = sy - 92;
+    // 머리 위 이름과 생명력 막대
+    const w = 38, k = clamp(m.life / m.stats.maxLife, 0, 1), y = sy - 90;
     ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(sx - w / 2 - 1, y - 1, w + 2, 6);
     ctx.fillStyle = k > 0.5 ? '#5fd06a' : k > 0.25 ? '#e0c050' : '#e0503a';
     ctx.fillRect(sx - w / 2, y, w * k, 4);
+    ctx.font = '600 11px ' + Game.fontUI;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.lineWidth = 3;
+    ctx.strokeText(m.name, sx, y - 4);
+    ctx.fillStyle = '#b8f0a8'; ctx.fillText(m.name, sx, y - 4);
+  },
+  tintCss(m) { const c = MERC_TYPES[m.type].tint; return `rgb(${c[0]},${c[1]},${c[2]})`; },
+  // 색을 입힌 그림은 처음 그릴 때 만들어지므로 층에 들어갈 때 미리 만들어 둠 (첫 화면에서 멈칫하지 않게)
+  warm(m) {
+    if (!HAS_FLARE) return;
+    const col = this.tintCss(m), L = this.layers(m);
+    for (const slot in L) {
+      const set = L[slot] && FLARE.hero[L[slot]];
+      if (!set || slot === 'main' || slot === 'off') continue;
+      if (Assets.ready(set.img)) warmCanvas(Assets.tintedAtlas(set.img, col));
+    }
   },
 
   // ── 저장 ──
@@ -493,7 +565,7 @@ const Merc = {
     if (!m.dead) {
       const cands = [];
       p.inventory.forEach((it, i) => { if (it && T.slots.includes(it.slot)) cands.push([it, i]); });
-      body += '<h3>가방에서 맡기기</h3>' + (cands.length ? '<ul class="shop-list">' + cands.map(([it, i]) => {
+      body += '<h3>가방에서 맡기기</h3>' + hint('소지품 창의 아이템을 이 창이나 소지품 창의 용병 칸으로 끌어다 놓아도 맡길 수 있습니다. 던전에서도 소지품 창(I)에서 바꿀 수 있습니다.') + (cands.length ? '<ul class="shop-list">' + cands.map(([it, i]) => {
         const ok = this.canWear(it);
         const why = ok ? '' : (it.req > m.level ? `용병 레벨 ${it.req} 필요` : '방패를 쓸 수 없음 (양손 무기)');
         return `<li><span class="sl-icon">${itemIconHtml(it)}</span><div class="sl-main"><div class="sl-name" style="color:${RARITY[it.rarity].color}">${escapeHtml(itemName(it))}</div>`
