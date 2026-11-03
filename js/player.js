@@ -478,6 +478,17 @@ function noFury() {
 }
 
 // ── 스킬 ──
+// 단축칸 두 곳의 스킬 자리를 맞바꿈 (캐릭터 창의 1~6 버튼, 창이 열려 있을 때 단축칸 끌기)
+function swapHotbar(i, j) {
+  const p = player;
+  if (i === j || i < 0 || j < 0 || i > 5 || j > 5) return false;
+  [p.hotbar[i], p.hotbar[j]] = [p.hotbar[j], p.hotbar[i]];
+  p.whirl = null;
+  Input.slotDown[i] = Input.slotDown[j] = false;
+  SFX.play('click');
+  Game.dirty = true;
+  return true;
+}
 function useSkill(slot) {
   const p = player;
   if (!p || p.dead || p.leap || p.rush || Game.state !== 'playing') return;

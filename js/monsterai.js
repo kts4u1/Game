@@ -94,20 +94,23 @@ function tryMonsterAbility(m, dp) {
         break;
       case 'heal': {
         // 광신도·성기사: 가까운 다친 동료(자신 포함)를 치유
-        let best = null, low = 0.72;
+        // 보스는 자기 자신만 조금씩(체력 절반 아래에서), 다른 치유사는 보스를 치유하지 못함 — 끝없이 버티지 않게
+        const boss = m.tier === 3;
+        let best = null, low = boss ? 0.5 : 0.72;
         for (const o of world.monsters) {
           if (o.dead || o.hidden || o.type === 'grave' || dist(m.x, m.y, o.x, o.y) > 340) continue;
+          if (boss ? o !== m : o.tier === 3) continue;
           const k = o.life / o.maxLife;
           if (k < low) { low = k; best = o; }
         }
         if (!best) break;
-        m.cd.heal = rand(6, 8);
+        m.cd.heal = boss ? rand(15, 19) : rand(6, 8);
         m.castAnim = 'cast';
         fxText(m.x, m.y, '치유', '#7dffa0', 14, { z: monsterHeight(m) });
         castThen(m, 0.7, () => {
           m.castAnim = null;
           if (best.dead) return;
-          const amt = Math.round(best.maxLife * (m.type === 'paladin' ? 0.3 : 0.22));
+          const amt = Math.round(best.maxLife * (boss ? 0.05 : m.type === 'paladin' ? 0.3 : 0.22));
           best.life = Math.min(best.maxLife, best.life + amt);
           fxSprite('heal', best.x, best.y, { follow: best, scale: 0.9 * best.scale });
           fxText(best.x, best.y, `+${amt}`, '#7dffa0', 14, { z: monsterHeight(best) - 10 });

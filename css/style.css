@@ -221,6 +221,17 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .sk-lv { color: var(--gold); font-size: 12px; margin-left: 4px; }
 .sk-lv em { color: var(--magic); font-style: normal; }
 .skill-list p { margin: 2px 0 0; font-size: 12px; color: var(--ink-dim); line-height: 1.5; }
+/* 단축키 고르기 */
+.sk-hint { margin: -2px 0 8px; font-size: 12px; color: var(--ink-dim); line-height: 1.5; }
+.sk-keys { display: flex; align-items: center; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.sk-keys span { font-size: 11px; color: var(--ink-dim); margin-right: 2px; }
+.sk-keys button { min-width: 30px; height: 28px; padding: 0 6px; border-radius: 4px; border: 1px solid #5a4a34; background: linear-gradient(#2e241a, #1c160f); color: #d8ccb2; font-weight: 700; font-size: 13px; cursor: pointer; }
+.sk-keys button:hover { border-color: #a8885a; color: #fff1dc; }
+.sk-keys button.on { background: linear-gradient(#7a2e16, #451609); border-color: #c0643e; color: #fff4e2; }
+/* 단축칸 끌기 */
+.slot.dragging { opacity: .45; }
+.slot.drop-ok { outline: 2px solid #ffd36a; outline-offset: 1px; }
+.skill-ghost img, .skill-ghost .sk-ic { width: 44px; height: 44px; }
 
 /* ── 상점 · 보관함 · 웨이포인트 ── */
 .shop-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid #3a2f22; background: #15100c; }

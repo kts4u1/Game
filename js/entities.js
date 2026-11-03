@@ -116,6 +116,9 @@ function pickRoster(f) {
   return out;
 }
 
+// 일반 난이도 초반 보스의 체력 배율 (층에 올 즈음의 캐릭터가 잡을 수 있게 차츰 올라감)
+const BOSS_LIFE_EARLY = { 10: 0.35, 15: 0.45, 20: 0.6, 25: 0.7 };
+
 function populateFloor() {
   const d = world.dungeon, f = world.floor;
   world.chests = [];
@@ -179,8 +182,9 @@ function populateFloor() {
       const k = clamp(dps(R0) / dps(T0), 0.6, 2.5);
       boss.dmg = boss.dmg.map(x => x * k);
     }
-    // 5층 보스는 처음 만나는 보스라 체력을 3분의 1로
-    if (f === 5) boss.maxLife = boss.life = Math.round(boss.life / 3);
+    // 5층 보스는 처음 만나는 보스라 체력을 3분의 1로. 일반 난이도의 10~25층 보스도 체력을 낮췄다가 30층부터 원래대로
+    const lifeK = f === 5 ? 1 / 3 : !world.diff ? (BOSS_LIFE_EARLY[f] || 1) : 1;
+    if (lifeK !== 1) boss.maxLife = boss.life = Math.round(boss.life * lifeK);
     world.monsters.push(boss);
     d.stairs.open = false;
     // 마지막 층에는 더 내려가는 계단이 없음

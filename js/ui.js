@@ -30,6 +30,8 @@ const UI = {
       b.addEventListener('pointerdown', e => {
         e.preventDefault();
         SFX.init();
+        // 창이 열려 있으면(게임이 멈춤) 스킬을 쓰지 않고, 끌어서 다른 칸과 자리를 바꿈
+        if (this.anyPanel() && player && player.hotbar[i]) { this.slotDragStart(i, e); return; }
         // 터치 화면에서는 가장 가까운 적을 자동으로 조준
         if (e.pointerType !== 'mouse' && player && world) {
           const m = nearestMonsterNear(player.x, player.y, 480);
@@ -77,6 +79,17 @@ const UI = {
       if (cell) this.quickAction(cellLoc(cell));
     });
     initDrag();
+    // 캐릭터 창: 스킬 단축키 고르기
+    this.el['char-panel'].addEventListener('click', e => {
+      const b = e.target.closest('[data-hk]');
+      if (!b || !player) return;
+      const [id, k] = b.dataset.hk.split(':');
+      const j = player.hotbar.indexOf(id);
+      if (j === +k) return;
+      if (j >= 0) swapHotbar(j, +k); else { player.hotbar[+k] = id; SFX.play('click'); Game.dirty = true; }
+      this.message(`${SKILLS[id].name} → ${+k + 1}번 키`, '#e8d9a8');
+      this.renderCharacter();
+    });
     document.addEventListener('pointermove', e => { if (!this.el.tooltip.hidden) this.placeTooltip(e.clientX, e.clientY); });
     const shop = this.el['shop-panel'];
     shop.addEventListener('click', e => Shop.onClick(e));
@@ -134,7 +147,13 @@ const UI = {
         b.querySelector('.lv').textContent = id ? effLevel(p, id) : '';
         b.classList.toggle('filled', !!id);
       });
-      if (!id) return;
+      if (!id) {
+        // 스킬을 다른 칸으로 옮겨 비게 된 칸: 재사용 표시 지우기
+        set('cd' + i, -1, () => { b.querySelector('.cd').style.height = '0%'; });
+        set('nf' + i, false, () => b.classList.remove('nofury'));
+        set('act' + i, false, () => b.classList.remove('active'));
+        return;
+      }
       const v = SKILLS[id].vals(effLevel(p, id));
       const cd = p.cds[id] || 0;
       set('cd' + i, Math.round(cd * 10), () => { b.querySelector('.cd').style.height = (v.cd ? cd / v.cd * 100 : 0) + '%'; });
@@ -519,14 +538,60 @@ const UI = {
     const skills = ids.length ? ids.map(id => {
       const L = effLevel(p, id), base = p.skills[id];
       const sk = SKILLS[id];
-      return `<li><span class="sk-icon">${skillIconHtml(id)}</span><div><div class="sk-name">${sk.name} <span class="sk-lv">Lv ${L}${L > base ? ` <em>(+${L - base})</em>` : ''}</span></div><p>${sk.desc(sk.vals(L))}</p></div></li>`;
+      // 액티브 스킬: 단축칸 1~6 중 어디에 둘지 고르는 버튼 (고르면 그 칸의 스킬과 자리를 맞바꿈)
+      const keys = sk.type === 'active' ? `<div class="sk-keys"><span>단축키</span>${[0, 1, 2, 3, 4, 5].map(k => `<button data-hk="${id}:${k}" class="${p.hotbar[k] === id ? 'on' : ''}" aria-label="${k + 1}번 칸에 두기">${k + 1}</button>`).join('')}</div>` : '';
+      return `<li><span class="sk-icon">${skillIconHtml(id)}</span><div><div class="sk-name">${sk.name} <span class="sk-lv">Lv ${L}${L > base ? ` <em>(+${L - base})</em>` : ''}</span></div><p>${sk.desc(sk.vals(L))}</p>${keys}</div></li>`;
     }).join('') : '<li class="detail-empty">아직 배운 스킬이 없습니다.</li>';
     this.el['char-panel'].querySelector('.panel-body').innerHTML = `
       <dl class="stats">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>
       <h3>스킬</h3>
+      <p class="sk-hint">단축키 숫자를 누르면 그 칸으로 옮겨집니다(원래 있던 스킬과 자리를 맞바꿈). 창이 열려 있을 때 아래 스킬 칸을 다른 칸으로 끌어다 놓아도 됩니다.</p>
       <ul class="skill-list">${skills}</ul>
       <h3>퀘스트</h3>
       <ul class="quest-list">${Quests.logHtml()}</ul>`;
+  },
+
+  // 단축칸 끌어서 자리 바꾸기
+  slotDragStart(i, e) {
+    const b = this.el.slotBtns[i];
+    try { b.releasePointerCapture(e.pointerId); } catch (err) { /* 무시 */ }
+    this.hideTooltip();
+    const g = document.createElement('div');
+    g.className = 'drag-ghost skill-ghost';
+    g.innerHTML = skillIconHtml(player.hotbar[i]);
+    document.body.appendChild(g);
+    const sd = { from: i, id: e.pointerId, ghost: g, over: null, moved: false, x: e.clientX, y: e.clientY };
+    this.slotDrag = sd;
+    b.classList.add('dragging');
+    const under = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest('.slot[data-slot]'); };
+    const move = ev => {
+      if (ev.pointerId !== sd.id) return;
+      g.style.left = ev.clientX + 'px'; g.style.top = ev.clientY + 'px';
+      if (Math.hypot(ev.clientX - sd.x, ev.clientY - sd.y) > 6) sd.moved = true;
+      const t = under(ev.clientX, ev.clientY);
+      if (sd.over && sd.over !== t) sd.over.classList.remove('drop-ok');
+      if (t && t !== b) t.classList.add('drop-ok');
+      sd.over = t;
+    };
+    const end = ev => {
+      if (ev.pointerId !== sd.id) return;
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', end);
+      document.removeEventListener('pointercancel', end);
+      g.remove();
+      b.classList.remove('dragging');
+      if (sd.over) sd.over.classList.remove('drop-ok');
+      this.slotDrag = null;
+      const t = ev.type === 'pointerup' ? under(ev.clientX, ev.clientY) : null;
+      if (t && t !== b) {
+        if (swapHotbar(sd.from, +t.dataset.slot)) this.message(`${SKILLS[player.hotbar[+t.dataset.slot]].name}을(를) ${+t.dataset.slot + 1}번 칸으로 옮겼습니다`, '#e8d9a8');
+        if (!this.el['char-panel'].hidden) this.renderCharacter();
+      } else if (!sd.moved) this.message('창이 열려 있을 때는 스킬 칸을 다른 칸으로 끌어다 놓으면 자리를 바꿀 수 있습니다', '#c9c1b3');
+    };
+    move(e);
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
   },
 
   skillTooltip(i, b) {
