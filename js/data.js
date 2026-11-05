@@ -984,10 +984,12 @@ function pickLayout(th, f) {
 // ── 난이도 ── 한 난이도의 망자의 왕을 쓰러뜨리면 다음 난이도가 열림 (일반 → 악몽 → 지옥)
 // key: 정복 기록 이름, lv0·step: 1층 몬스터 레벨과 층마다 오르는 양, res: 원소 저항 감소,
 // mf: 마법 아이템 발견 보너스, gold: 골드 배율, champ: 정예 무리 추가, mods: 이름 있는 정예 특성 추가, speed: 몬스터 속도
+// life: 몬스터 체력 배율, xp: 몬스터 경험치 배율 (높은 레벨 장비의 피해가 몬스터 체력보다 훨씬 빨리 늘어서, 악몽·지옥은 체력을 더 줌)
+// 악몽·지옥은 낮은 층의 약한 몬스터 종류도 깊은 층 몬스터만큼 단단하게 맞춤 (entities.js rosterNorm)
 const DIFFICULTIES = [
-  { name: '일반', cls: '', key: 'cleared', lv0: 1, step: 1.5, res: 0, mf: 0, gold: 1, champ: 0, mods: 0, speed: 1 },
-  { name: '악몽', cls: 'nm', key: 'clearedNM', lv0: 48, step: 1, res: -20, mf: 60, gold: 1.5, champ: 1, mods: 1, speed: 1 },
-  { name: '지옥', cls: 'hell', key: 'clearedHell', lv0: 82, step: 0.75, res: -40, mf: 120, gold: 2, champ: 2, mods: 1, speed: 1.08 },
+  { name: '일반', cls: '', key: 'cleared', lv0: 1, step: 1.5, res: 0, mf: 0, gold: 1, champ: 0, mods: 0, speed: 1, life: 1, xp: 1 },
+  { name: '악몽', cls: 'nm', key: 'clearedNM', lv0: 48, step: 1, res: -20, mf: 60, gold: 1.5, champ: 1, mods: 1, speed: 1, life: 2, xp: 1.2 },
+  { name: '지옥', cls: 'hell', key: 'clearedHell', lv0: 82, step: 0.75, res: -40, mf: 120, gold: 2, champ: 2, mods: 1, speed: 1.08, life: 3.5, xp: 1.5 },
 ];
 // 몬스터 레벨: 일반 1층 1 → 50층 75, 악몽 1층 48 → 50층 97, 지옥 1층 82 → 50층 119
 function monsterLevelForFloor(f, diff = 0) { const D = DIFFICULTIES[diff] || DIFFICULTIES[0]; return D.lv0 + Math.round((f - 1) * D.step); }

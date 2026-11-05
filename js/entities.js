@@ -52,7 +52,15 @@ function spawnMonster(type, x, y, mlvl, tier = 0, opts = {}) {
     if (mod === 'blink' && !m.abil.includes('teleport')) m.abil.push('blink');
   }
   if (m.summoned) m.xp *= 0.5;
-  m.speed *= DIFFICULTIES[(world && world.diff) || 0].speed;  // 지옥은 몬스터가 조금 더 빠름
+  const diff = (world && world.diff) || 0, DF = DIFFICULTIES[diff];
+  m.speed *= DF.speed;  // 지옥은 몬스터가 조금 더 빠름
+  if (diff) {
+    // 악몽·지옥: 체력이 더 많고, 낮은 층의 약한 종류(좀비, 고블린 …)도 깊은 층 몬스터만큼 단단하고 조금 더 아프게 (보스 제외)
+    const rn = tier < 3 ? rosterNorm((world && world.floor) || 1) : { life: 1, dmg: 1 };
+    m.life *= DF.life * rn.life;
+    m.dmg = m.dmg.map(d => d * rn.dmg);
+    m.xp *= DF.xp * rn.life;
+  }
   // 특수 행동 첫 사용은 조금 늦게
   for (const a of m.abil) m.cd[a] = rand(1.5, 3.5);
   if (m.abil.includes('ambush')) { m.hidden = true; m.ambushWait = true; }
@@ -96,6 +104,25 @@ function spawnPack(room, type, tier, packId, at, count) {
   if (T.escort && MONSTERS[T.escort].minFloor <= world.floor) {
     for (let i = 0; i < randInt(1, 2); i++) { const pt = place(); world.monsters.push(spawnMonster(T.escort, pt.x, pt.y, world.mlvl, tier, { pack: packId })); }
   }
+}
+
+// 층에 나올 수 있는 몬스터 종류의 평균 체력·초당 피해를 깊은 층(45층) 기준으로 맞추는 배율 (악몽·지옥용)
+// 체력은 그대로 맞추고, 피해는 제곱근만큼만 (낮은 층이 갑자기 너무 아프지 않게)
+const ROSTER_NORM = {};
+function rosterNorm(f) {
+  f = Math.max(1, Math.min(49, f));
+  if (ROSTER_NORM[f]) return ROSTER_NORM[f];
+  const avg = fl => {
+    const el = Object.keys(MONSTERS).filter(t => { const T = MONSTERS[t]; return T.weight > 0 && T.minFloor <= fl && (!T.maxFloor || fl <= T.maxFloor); });
+    const w = t => MONSTERS[t].weight * (MONSTERS[t].minFloor >= fl - 2 ? 1.6 : 1);
+    const W = el.reduce((s, t) => s + w(t), 0) || 1;
+    return {
+      life: el.reduce((s, t) => s + w(t) * MONSTERS[t].life * (MONSTERS[t].armorK || 1), 0) / W,
+      dps: el.reduce((s, t) => s + w(t) * (MONSTERS[t].dmg[0] + MONSTERS[t].dmg[1]) / 2 / (MONSTERS[t].atkCD || 2), 0) / W,
+    };
+  };
+  const a = avg(f), z = avg(45);
+  return (ROSTER_NORM[f] = { life: Math.max(1, z.life / a.life), dmg: Math.max(1, Math.sqrt(z.dps / a.dps)) });
 }
 
 // 이 층에 나올 몬스터 종류를 몇 개 골라 층마다 분위기가 달라지게 함
