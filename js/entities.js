@@ -5,7 +5,8 @@
 let world = null;   // 현재 층 상태
 let player = null;  // 플레이어
 
-function xpToNext(L) { return Math.round(40 * Math.pow(L, 1.65) + 20); }
+// 레벨 100부터는 필요한 경험치가 점점 가파르게 늘어남 (끝없이 레벨이 올라 카드가 쌓이지 않게): 150레벨 2배, 170레벨 약 3배, 200레벨 5배
+function xpToNext(L) { return Math.round((40 * Math.pow(L, 1.65) + 20) * (L > 100 ? 1 + Math.pow((L - 100) / 50, 2) : 1)); }
 
 function effLevel(p, id) {
   const b = p.skills[id] || 0;
@@ -61,6 +62,12 @@ function spawnMonster(type, x, y, mlvl, tier = 0, opts = {}) {
     m.dmg = m.dmg.map(d => d * rn.dmg);
     m.xp *= DF.xp * rn.life;
   }
+  // 메뉴의 몬스터 강화 단계
+  const PW = monsterPower();
+  m.life *= PW.life;
+  m.dmg = m.dmg.map(d => d * PW.dmg);
+  m.xp *= 1 + PW.bonus / 100;
+  m.power = PW;
   // 특수 행동 첫 사용은 조금 늦게
   for (const a of m.abil) m.cd[a] = rand(1.5, 3.5);
   if (m.abil.includes('ambush')) { m.hidden = true; m.ambushWait = true; }
@@ -709,7 +716,7 @@ function dropLoot(x, y, mlvl, tier, extraGold = 0) {
   else if (tier === 4) { items = randInt(1, 2); gold = 1; potion = 0.5; }
   const ilvl = mlvl + (tier === 3 ? 2 : tier >= 1 ? 1 : 0);
   for (let i = 0; i < items; i++) {
-    let r = rollRarity(mlvl, tier, s.mf + DIFFICULTIES[world.diff || 0].mf);
+    let r = rollRarity(mlvl, tier, s.mf + DIFFICULTIES[world.diff || 0].mf + monsterPower().bonus);
     if (i === 0 && minRarity && r < minRarity) r = minRarity;
     spawnGround('item', x, y, { item: generateItem(ilvl, r) });
   }
@@ -723,7 +730,7 @@ function dropLoot(x, y, mlvl, tier, extraGold = 0) {
   if (chance(gemC)) spawnGround('item', x, y, { item: generateGem(ilvl) });
   // 부적은 레어·유니크만 떨어짐. 유니크 확률은 보스·정예일수록, 마법 아이템 발견이 높을수록 높음
   if (chance(charmC)) {
-    const uq = Math.min(0.45, [0.07, 0.09, 0.12, 0.2, 0.09][tier] * (1 + (s.mf + DIFFICULTIES[world.diff || 0].mf) / 250));
+    const uq = Math.min(0.45, [0.07, 0.09, 0.12, 0.2, 0.09][tier] * (1 + (s.mf + DIFFICULTIES[world.diff || 0].mf + monsterPower().bonus) / 250));
     spawnGround('item', x, y, { item: generateItem(ilvl, chance(uq) ? 3 : 2, { slot: 'charm' }) });
   }
 }

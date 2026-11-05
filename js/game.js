@@ -229,7 +229,8 @@ const Game = {
     if (n >= FINAL_FLOOR) UI.banner(`${nm}최종층 · ${d.theme.name}`, `망자의 왕이 기다립니다 · 몬스터 레벨 ${world.mlvl}`);
     else {
       const boss = isBossFloor(n) && world.monsters.find(m => m.tier === 3);
-      UI.banner(`${nm}${n}층 · ${d.theme.name}`, boss ? `${boss.name}이(가) 계단을 지키고 있습니다 · 몬스터 레벨 ${world.mlvl}` : `몬스터 레벨 ${world.mlvl}`);
+      const lvTxt = `몬스터 레벨 ${world.mlvl}${world.mlvlScaled ? ' (캐릭터 레벨에 맞춤)' : ''}`;
+      UI.banner(`${nm}${n}층 · ${d.theme.name}`, boss ? `${boss.name}이(가) 계단을 지키고 있습니다 · ${lvTxt}` : lvTxt);
     }
     if (n > prevDeep && n > 1 && (n - 1) % 5 === 0) UI.message(`${n}층 웨이포인트가 열렸습니다. 마을의 심연의 문에서 바로 올 수 있습니다.`, '#8fd0ff');
     this.save();
@@ -326,7 +327,7 @@ const Game = {
     UI.setFloor();
     SFX.play(diff ? 'levelup' : 'equip');
     const D = DIFFICULTIES[diff];
-    if (diff) UI.banner(`${D.name} 난이도`, `몬스터 레벨 ${monsterLevelForFloor(1, diff)}부터 · 마법 아이템 발견 +${D.mf}% · 골드 ${D.gold}배 · 원소 저항 ${D.res}%`);
+    if (diff) UI.banner(`${D.name} 난이도`, `몬스터 레벨 ${effectiveMonsterLevel(1, diff)}부터 · 마법 아이템 발견 +${D.mf}% · 골드 ${D.gold}배 · 원소 저항 ${D.res}%`);
     else UI.banner('일반 난이도', '처음 내려갔던 심연으로 돌아갑니다');
     this.save();
   },
@@ -334,6 +335,23 @@ const Game = {
   saveSettings() { store.set(SETTINGS_KEY, JSON.stringify(this.settings)); },
 
   // 바닥 아이템 표시: 전부 → 마법 이상 → 레어 이상
+  // 몬스터 강화 단계 (메뉴): 지금 층의 살아 있는 몬스터에도 바로 적용
+  cyclePower() {
+    const old = monsterPower();
+    this.settings.power = ((this.settings.power || 0) + 1) % MONSTER_POWER.length;
+    this.saveSettings();
+    const nw = monsterPower();
+    if (world && !world.town) for (const m of world.monsters) {
+      if (m.dead) continue;
+      const k = nw.life / old.life, kd = nw.dmg / old.dmg;
+      m.maxLife = Math.round(m.maxLife * k); m.life = Math.max(1, Math.round(m.life * k));
+      m.dmg = m.dmg.map(d => d * kd);
+      m.xp *= (1 + nw.bonus / 100) / (1 + old.bonus / 100);
+      m.power = nw;
+    }
+    UI.message(`몬스터 강화 ${this.settings.power + 1}단계: 체력 ×${nw.life} · 공격력 ×${nw.dmg} · 경험치·마법 아이템 발견 +${nw.bonus}%`, '#ffb070');
+    UI.syncMenu();
+  },
   cycleLootFilter() {
     this.settings.lootFilter = ((this.settings.lootFilter || 0) + 1) % 3;
     this.saveSettings();
@@ -406,8 +424,10 @@ const Game = {
 function makeWorld(floor, diff) {
   diff = !floor ? 0 : diff != null ? diff : (player && player.difficulty) || 0;
   const dungeon = new Dungeon(floor, diff);
+  // 악몽·지옥: 캐릭터 레벨이 몬스터보다 훨씬 높으면 몬스터 레벨이 따라 올라옴 (깊은 층일수록 조금 더)
+  const mlvl = floor ? effectiveMonsterLevel(floor, diff) : 1, scaled = !!floor && mlvl > monsterLevelForFloor(floor, diff);
   return {
-    floor, dungeon, town: floor === 0, diff, mlvl: floor ? monsterLevelForFloor(floor, diff) : 1, monsters: [], ground: [], projectiles: [],
+    floor, dungeon, town: floor === 0, diff, mlvl, mlvlScaled: scaled, monsters: [], ground: [], projectiles: [],
     chests: [], hazards: [], waves: [], flashes: [], pools: [], portal: null,
   };
 }

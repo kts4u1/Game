@@ -63,6 +63,7 @@ const UI = {
     $('btn-resume').addEventListener('click', () => this.toggleMenu(false));
     $('btn-sound').addEventListener('click', () => this.toggleSound());
     $('btn-loot').addEventListener('click', () => Game.cycleLootFilter());
+    $('btn-power').addEventListener('click', () => { Game.cyclePower(); if (world && !world.town) this.setFloor(); });
     $('btn-gfx').addEventListener('click', () => { Game.settings.gfx = GFX.cycle(); Game.saveSettings(); this.syncMenu(); this.message(`그래픽: ${GFX.label()}`, '#e8d9a8'); });
     $('btn-quit').addEventListener('click', () => { Game.save(); this.toggleMenu(false); Game.toTitle(); });
 
@@ -240,7 +241,8 @@ const UI = {
       this.el['floor-sub'].textContent = `마을 · ${diff ? DIFFICULTIES[diff].name + '에서 ' : ''}가장 깊이 내려간 곳 ${player.deepest || 1}층`;
     } else {
       this.el['floor-name'].textContent = `${diffTag(diff)}${world.floor}층 · ${world.dungeon.theme.name}`;
-      this.el['floor-sub'].textContent = `몬스터 레벨 ${world.mlvl}${isBossFloor(world.floor) ? ' · 보스 층' : ''}`;
+      const pw = (Game.settings.power || 0);
+      this.el['floor-sub'].textContent = `몬스터 레벨 ${world.mlvl}${world.mlvlScaled ? ' (캐릭터 레벨에 맞춤)' : ''}${pw ? ` · 강화 ${pw + 1}단계` : ''}${isBossFloor(world.floor) ? ' · 보스 층' : ''}`;
     }
     for (const D of DIFFICULTIES) if (D.cls) this.el['floor-name'].classList.toggle(D.cls, D === DIFFICULTIES[diff]);
     $('btn-tp').hidden = !!world.town;
@@ -284,6 +286,8 @@ const UI = {
     $('btn-sound').textContent = SFX.muted ? '소리 켜기 (M)' : '소리 끄기 (M)';
     $('btn-loot').textContent = `바닥 아이템: ${LOOT_FILTER_NAMES[Game.settings.lootFilter || 0]} (L)`;
     $('btn-gfx').textContent = `그래픽: ${GFX.label()}`;
+    const pw = monsterPower();
+    $('btn-power').textContent = `몬스터 강화: ${(Game.settings.power || 0) + 1}단계 (체력 ×${pw.life}${pw.bonus ? ` · 보상 +${pw.bonus}%` : ''})`;
   },
 
   cellHtml(item, attrs, label, wearable) {

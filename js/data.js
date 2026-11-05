@@ -986,13 +986,30 @@ function pickLayout(th, f) {
 // mf: 마법 아이템 발견 보너스, gold: 골드 배율, champ: 정예 무리 추가, mods: 이름 있는 정예 특성 추가, speed: 몬스터 속도
 // life: 몬스터 체력 배율, xp: 몬스터 경험치 배율 (높은 레벨 장비의 피해가 몬스터 체력보다 훨씬 빨리 늘어서, 악몽·지옥은 체력을 더 줌)
 // 악몽·지옥은 낮은 층의 약한 몬스터 종류도 깊은 층 몬스터만큼 단단하게 맞춤 (entities.js rosterNorm)
+// lag: 캐릭터 레벨이 높으면 몬스터 레벨이 (캐릭터 레벨 - lag)까지 따라 올라옴 (악몽·지옥만)
 const DIFFICULTIES = [
   { name: '일반', cls: '', key: 'cleared', lv0: 1, step: 1.5, res: 0, mf: 0, gold: 1, champ: 0, mods: 0, speed: 1, life: 1, xp: 1 },
-  { name: '악몽', cls: 'nm', key: 'clearedNM', lv0: 48, step: 1, res: -20, mf: 60, gold: 1.5, champ: 1, mods: 1, speed: 1, life: 2, xp: 1.2 },
-  { name: '지옥', cls: 'hell', key: 'clearedHell', lv0: 82, step: 0.75, res: -40, mf: 120, gold: 2, champ: 2, mods: 1, speed: 1.08, life: 3.5, xp: 1.5 },
+  { name: '악몽', cls: 'nm', key: 'clearedNM', lv0: 48, step: 1, res: -20, mf: 60, gold: 1.5, champ: 1, mods: 1, speed: 1, life: 2.5, xp: 1.2, lag: 10 },
+  { name: '지옥', cls: 'hell', key: 'clearedHell', lv0: 82, step: 0.75, res: -40, mf: 120, gold: 2, champ: 2, mods: 1, speed: 1.08, life: 4.5, xp: 1.5, lag: 3 },
 ];
+// 메뉴의 '몬스터 강화' (디아블로 2의 /players처럼): 몬스터 체력·공격력을 올리고 그만큼 경험치·마법 아이템 발견을 더 줌. 모든 난이도
+const MONSTER_POWER = [
+  { life: 1, dmg: 1, bonus: 0 },
+  { life: 2, dmg: 1.15, bonus: 25 },
+  { life: 3.5, dmg: 1.3, bonus: 50 },
+  { life: 6, dmg: 1.5, bonus: 80 },
+  { life: 10, dmg: 1.75, bonus: 120 },
+  { life: 16, dmg: 2, bonus: 160 },
+];
+function monsterPower() { return MONSTER_POWER[(typeof Game !== 'undefined' && Game.settings && Game.settings.power) || 0] || MONSTER_POWER[0]; }
 // 몬스터 레벨: 일반 1층 1 → 50층 75, 악몽 1층 48 → 50층 97, 지옥 1층 82 → 50층 119
 function monsterLevelForFloor(f, diff = 0) { const D = DIFFICULTIES[diff] || DIFFICULTIES[0]; return D.lv0 + Math.round((f - 1) * D.step); }
+// 실제 몬스터 레벨: 악몽·지옥에서 캐릭터 레벨이 훨씬 높으면 (캐릭터 레벨 - lag)까지 따라 올라옴 (깊은 층일수록 조금 더)
+function effectiveMonsterLevel(f, diff = 0) {
+  const base = monsterLevelForFloor(f, diff), pl = typeof player !== 'undefined' ? player : null;
+  if (!diff || !pl || !DIFFICULTIES[diff].lag) return base;
+  return Math.max(base, pl.level - DIFFICULTIES[diff].lag + Math.floor((f - 1) / 10));
+}
 // 이 난이도가 열렸는지 (바로 앞 난이도를 정복해야 열림)
 function diffUnlocked(p, diff) { return diff === 0 || !!(p && DIFFICULTIES[diff] && p[DIFFICULTIES[diff - 1].key]); }
 // 화면에 붙이는 난이도 머리말 ('악몽 · ')
