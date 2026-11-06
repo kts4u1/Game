@@ -960,7 +960,7 @@ function drawLabels(ctx, explored) {
     if (dist(pt.x, pt.y, p.x, p.y) > 800) continue;
     const sp = worldToScreen(pt.x, pt.y, 96);
     const hov = Input.hover && Input.hover.kind === 'portal';
-    const label = world.town ? `${Game.dungeonWorld.floor}층으로 가는 차원문` : '마을로 가는 차원문';
+    const label = world.town ? `${Game.dungeonWorld.floor}층으로 가는 차원문` : player.pendingEnding != null ? '마을로 돌아가 엔딩 보기' : '마을로 가는 차원문';
     ctx.font = '700 13px ' + Game.fontUI;
     ctx.strokeStyle = 'rgba(0,0,0,.9)'; ctx.lineWidth = 3;
     ctx.fillStyle = hov ? '#d8f0ff' : '#8fd0ff';

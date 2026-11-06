@@ -986,7 +986,7 @@ function gainXp(n) {
     p.xp -= xpToNext(p.level);
     p.level++;
     Game.pendingLevels++;
-    Game.levelUpDelay = 0.7;
+    Game.levelUpDelay = Math.max(Game.levelUpDelay || 0, 0.7);
     recalcStats(p);
     p.life = p.stats.maxLife;
     p.fury = p.stats.maxFury;

@@ -178,6 +178,7 @@ const Game = {
     p.quests = d.quests || {}; p.bounty = d.bounty || null; p.bountyDone = d.bountyDone || 0;
     p.freeSockets = d.freeSockets || 0; p.potionCap = d.potionCap || 0;
     p.freeEnhance = d.freeEnhance || 0; p.gambleDiscount = d.gambleDiscount || 0;
+    p.pendingEnding = d.pendingEnding != null ? d.pendingEnding : null;
     // 층마다 나오는 테마 순서 (예전 저장에는 없으므로 새로 정함)
     if (d.mapSeed) p.mapSeed = d.mapSeed;
     Merc.load(d.merc);
@@ -248,6 +249,7 @@ const Game = {
     UI.banner(d.theme.name, how === 'new' ? '심연의 문(가운데 빛나는 원)으로 들어가 던전으로 내려가세요' : '상인과 거래하고 장비를 정비하세요');
     if (how === 'new') UI.message('상인을 누르면 거래할 수 있습니다. 던전에서는 T 키로 마을에 돌아올 수 있습니다.', '#e8d9a8');
     this.save();
+    if (how !== 'new') this.showPendingEnding();
   },
 
   // 귀환 차원문을 통해 남겨 둔 던전으로 돌아감
@@ -302,8 +304,25 @@ const Game = {
     const spot = world.dungeon.freeSpot(m.x + 60, m.y, 26);
     world.portal = { x: spot.x, y: spot.y, kind: 'portal', t: 0 };
     this.dungeonWorld = world;
-    if (first) { this.endingT = 4.2; this.endingDiff = diff; }
-    else UI.message(`${diff ? D.name + ' 속 ' : ''}망자의 왕을 다시 쓰러뜨렸습니다`, '#ffd36a');
+    // 엔딩은 바로 띄우지 않음: 전리품을 다 챙긴 뒤 차원문(또는 T)으로 마을에 돌아가면 이어짐
+    if (first) {
+      p.pendingEnding = diff;
+      UI.message('전리품을 챙긴 뒤, 보스가 쓰러진 자리의 차원문(또는 T)으로 마을에 돌아가면 엔딩이 이어집니다', '#ffd36a');
+    } else UI.message(`${diff ? D.name + ' 속 ' : ''}망자의 왕을 다시 쓰러뜨렸습니다`, '#ffd36a');
+    // 레벨업 카드도 10초 뒤에 (쏟아진 전리품을 먼저 줍게)
+    if (this.pendingLevels > 0 || this.bonusCards > 0) this.levelUpDelay = Math.max(this.levelUpDelay || 0, 10);
+    this.save();
+  },
+  // 마을에 들어왔을 때 아직 보지 않은 엔딩이 있으면 보여 줌
+  showPendingEnding() {
+    const p = player;
+    if (p.pendingEnding == null) return;
+    const d = p.pendingEnding;
+    p.pendingEnding = null;
+    this.endingDiff = d;
+    this.state = 'ending';
+    UI.closePanels();
+    UI.showEnding(d);
     this.save();
   },
 
@@ -398,7 +417,7 @@ const Game = {
         equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, charms: p.charms, elixirs: p.elixirs,
         playTime: Math.round(p.playTime || 0), deaths: p.deaths || 0, cleared: p.cleared || null,
         clearedNM: p.clearedNM || null, clearedHell: p.clearedHell || null, difficulty: p.difficulty || 0, deepestBy: this.deepestBy(),
-        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0, freeEnhance: p.freeEnhance || 0, gambleDiscount: p.gambleDiscount || 0, mapSeed: p.mapSeed, merc: Merc.save(),
+        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0, freeEnhance: p.freeEnhance || 0, gambleDiscount: p.gambleDiscount || 0, mapSeed: p.mapSeed, merc: Merc.save(), pendingEnding: p.pendingEnding != null ? p.pendingEnding : null,
       },
     };
     store.set(SAVE_KEY, JSON.stringify(data));

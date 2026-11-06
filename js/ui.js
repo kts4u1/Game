@@ -57,8 +57,9 @@ const UI = {
     $('btn-new').addEventListener('click', () => { SFX.init(); Game.newGame(); });
     $('btn-continue').addEventListener('click', () => { SFX.init(); Game.continueGame(); });
     $('btn-respawn').addEventListener('click', () => { this.el.death.hidden = true; respawn(); });
-    $('btn-end-town').addEventListener('click', () => { $('ending').hidden = true; Game.state = 'playing'; Game.goTown('portal'); });
-    $('btn-end-next').addEventListener('click', () => { $('ending').hidden = true; Game.state = 'playing'; Game.goTown('portal'); Game.setDifficulty((Game.endingDiff || 0) + 1); });
+    // 엔딩은 마을에 돌아온 뒤에 나오므로, 이미 마을이면 창만 닫음 (최종층의 차원문으로 다시 가서 남은 전리품을 주울 수 있음)
+    $('btn-end-town').addEventListener('click', () => { $('ending').hidden = true; Game.state = 'playing'; if (!world.town) Game.goTown('portal'); });
+    $('btn-end-next').addEventListener('click', () => { $('ending').hidden = true; Game.state = 'playing'; if (!world.town) Game.goTown('portal'); Game.setDifficulty((Game.endingDiff || 0) + 1); });
     $('btn-end-title').addEventListener('click', () => { $('ending').hidden = true; Game.state = 'playing'; Game.save(); Game.toTitle(); });
     $('btn-resume').addEventListener('click', () => this.toggleMenu(false));
     $('btn-sound').addEventListener('click', () => this.toggleSound());
