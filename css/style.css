@@ -491,3 +491,28 @@ body.item-dragging, body.item-dragging * { cursor: grabbing !important; }
 .shop-tabs button.locked { opacity: .45; cursor: not-allowed; }
 #ending.hell { background: radial-gradient(ellipse at 50% 40%, rgba(80, 30, 4, .9), rgba(6, 2, 0, .97) 75%); }
 #ending.hell h2 { background: linear-gradient(#fff2c8, #ff9a30 50%, #8a2a06); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 3px 0 #000) drop-shadow(0 0 28px rgba(255, 120, 20, .6)); }
+
+/* ── 기술 창 ── */
+#skill-panel { width: min(470px, calc(100vw - 32px)); }
+.skill-tabs button { flex: 1; }
+.sk-top { position: sticky; top: -12px; z-index: 2; margin: -12px -14px 10px; padding: 10px 14px 8px; background: linear-gradient(#1c1610, #16110c); border-bottom: 1px solid #3a2f22; }
+.sk-points { font-size: 14px; color: #c9bc9e; }
+.sk-points b { font-size: 18px; color: #e8dcc0; margin-left: 4px; }
+.sk-points.has b { color: #ffd36a; text-shadow: 0 0 8px rgba(255, 200, 80, .6); }
+.sk-top .sk-hint { margin: 4px 0 8px; }
+.sk-hotbar { display: flex; gap: 6px; }
+.sk-hot { position: relative; width: 40px; height: 40px; border: 1px solid #4a3c2a; border-radius: 4px; background: rgba(0, 0, 0, .35); overflow: hidden; }
+.sk-hot .k { position: absolute; left: 2px; top: 0; font-size: 11px; font-weight: 700; color: #ffe8b0; text-shadow: 0 1px 2px #000; z-index: 1; }
+.sk-hot .ficon, .sk-hot img { width: 100%; height: 100%; }
+.sk-tree li { padding: 8px; border: 1px solid #2e261c; border-radius: 6px; background: rgba(24, 19, 14, .6); }
+.sk-tree li.learned { border-color: #5a4a30; background: rgba(40, 30, 18, .7); }
+.sk-tree li.locked { opacity: .55; }
+.sk-tree .sk-main { flex: 1; min-width: 0; }
+.sk-tree .sk-act { flex: none; display: flex; align-items: flex-start; }
+.sk-tree .sk-act .btn-main { min-width: 74px; min-height: 34px; padding: 0 10px; border-radius: 4px; background: linear-gradient(#7a2e16, #451609); border: 1px solid #c0643e; color: #fff4e2; font-weight: 800; font-size: 13px; cursor: pointer; }
+.sk-tree .sk-act .btn-main:disabled { background: linear-gradient(#2e261c, #1c160f); border-color: #4a3c2a; color: #8a7a62; cursor: default; font-weight: 600; }
+.sk-max { font-size: 12px; color: #c9a040; padding-top: 8px; }
+.sk-next { color: #9fd0a0 !important; }
+.tt-next { color: #9fd0a0; margin-top: 6px; }
+.sp-badge { margin-left: 4px; padding: 0 5px; border-radius: 8px; background: #c0341e; color: #fff; font-size: 11px; font-weight: 800; }
+#btn-skill.has-points { box-shadow: 0 0 10px rgba(255, 190, 80, .55); border-color: #c9a040; }

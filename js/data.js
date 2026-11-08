@@ -120,6 +120,49 @@ const SKILLS = {
     key: v => `회복 ${v.heal}%`,
     desc: v => `숨을 고르며 3초 동안 최대 생명력의 ${v.heal}%를 회복하고, 중독과 둔화를 떨쳐냅니다. 재사용 ${v.cd.toFixed(0)}초, 분노 ${v.cost}.`,
   },
+  // ── 새 기술 (req: 배울 수 있는 캐릭터 레벨) ──
+  boomerang: {
+    name: '회전 도끼', type: 'active', max: 5, req: 3,
+    vals: L => ({ mult: 1.0 + 0.2 * L, range: 360 + 30 * L, cost: 9, cd: Math.max(0.8, 1.8 - 0.2 * L) }),
+    key: v => `왕복 ${pct(v.mult)}`,
+    desc: v => `커다란 도끼를 던지면 ${v.range}까지 날아갔다가 되돌아옵니다. 가는 길과 오는 길에 닿는 모든 적에게 각각 ${pct(v.mult)} 피해. 재사용 ${v.cd.toFixed(1)}초, 분노 ${v.cost}.`,
+  },
+  snare: {
+    name: '사슬 올가미', type: 'active', max: 5, req: 9,
+    vals: L => ({ radius: 230 + 20 * L, mult: 0.8 + 0.2 * L, stun: 0.8 + 0.1 * L, cost: 16, cd: Math.max(5, 10 - L) }),
+    key: v => `반경 ${v.radius} 끌어오기`,
+    desc: v => `사슬을 사방으로 던져 반경 ${v.radius} 안의 적을 모두 앞으로 끌어오고, ${pct(v.mult)} 피해를 주며 ${v.stun.toFixed(1)}초 기절시킵니다 (보스는 끌려오지 않음). 소용돌이·지진과 함께 쓰기 좋습니다. 재사용 ${v.cd}초, 분노 ${v.cost}.`,
+  },
+  fear: {
+    name: '공포의 포효', type: 'active', max: 5, req: 12,
+    vals: L => ({ radius: 220 + 20 * L, dur: 2 + 0.4 * L, vuln: 15 + 5 * L, cost: 18, cd: Math.max(8, 14 - L) }),
+    key: v => `받는 피해 +${v.vuln}%`,
+    desc: v => `끔찍한 포효로 반경 ${v.radius} 안의 적을 ${v.dur.toFixed(1)}초 동안 겁에 질려 달아나게 하고, ${(v.dur + 2).toFixed(1)}초 동안 받는 피해 +${v.vuln}%. 보스는 달아나지 않고 받는 피해만 늘어납니다. 재사용 ${v.cd}초, 분노 ${v.cost}.`,
+  },
+  banner: {
+    name: '전쟁 깃발', type: 'active', def: true, max: 5, req: 15,
+    vals: L => ({ dmg: 15 + 5 * L, regen: 1 + 0.4 * L, radius: 260, dur: 12 + 2 * L, cost: 20, cd: Math.max(20, 32 - 2 * L) }),
+    key: v => `깃발 · 피해 +${v.dmg}%`,
+    desc: v => `발밑에 부족의 깃발을 꽂습니다. ${v.dur}초 동안 반경 ${v.radius} 안에서는 모든 피해 +${v.dmg}%, 초당 최대 생명력의 ${v.regen.toFixed(1)}% 회복(용병도 회복), 깃발 둘레의 적은 느려집니다. 재사용 ${v.cd}초, 분노 ${v.cost}.`,
+  },
+  ancestors: {
+    name: '조상의 부름', type: 'active', max: 5, req: 18,
+    vals: L => ({ count: L >= 4 ? 3 : 2, dur: 12 + 2 * L, mult: 0.45 + 0.1 * L, cost: 30, cd: Math.max(28, 48 - 4 * L) }),
+    key: v => `조상 ${v.count}명 · ${v.dur}초`,
+    desc: v => `전사한 조상의 혼 ${v.count}명을 불러냅니다. ${v.dur}초 동안 곁에서 싸우며 한 번 벨 때마다 무기 피해의 ${pct(v.mult)}를 줍니다. 혼은 공격받지 않습니다. 재사용 ${v.cd}초, 분노 ${v.cost}.`,
+  },
+  bloodrite: {
+    name: '선혈의 의식', type: 'active', max: 5, req: 21,
+    vals: L => ({ lifeCost: 15, splash: 30 + 8 * L, radius: 120, dur: 6 + L, cost: 10, cd: Math.max(12, 20 - 1.5 * L) }),
+    key: v => `튀는 피해 ${v.splash}%`,
+    desc: v => `지금 생명력의 ${v.lifeCost}%를 바치고, ${v.dur}초 동안 적을 때릴 때마다 맞은 적 반경 ${v.radius} 안의 다른 적에게 그 피해의 ${v.splash}%가 피로 튑니다. 재사용 ${v.cd.toFixed(0)}초, 분노 ${v.cost}.`,
+  },
+  thunder: {
+    name: '천둥 강림', type: 'active', max: 5, req: 24,
+    vals: L => ({ mult: 1.0 + 0.25 * L, bolts: 4 + L, radius: 240 + 10 * L, stun: 0.5, cost: 22, cd: Math.max(4, 9 - L) }),
+    key: v => `낙뢰 ${v.bolts}번 · ${pct(v.mult)}`,
+    desc: v => `도끼를 하늘로 치켜들어 커서 둘레 반경 ${v.radius}에 낙뢰 ${v.bolts}번을 떨어뜨립니다. 낙뢰마다 그 자리의 적에게 ${pct(v.mult)} 피해를 주고 ${v.stun}초 기절시킵니다. 재사용 ${v.cd}초, 분노 ${v.cost}.`,
+  },
   // 패시브
   mastery: {
     name: '무기 숙련', type: 'passive', max: 5,
@@ -228,6 +271,18 @@ const SKILLS = {
     vals: L => ({ potion: 15 * L, kill: L }),
     key: v => `물약 +${v.potion}%`,
     desc: v => `물약 회복량 +${v.potion}%. 적을 처치할 때마다 생명력을 (2 + 캐릭터 레벨×0.15)×${v.kill} 회복합니다.`,
+  },
+  bloodrage: {
+    name: '피의 분노', type: 'passive', max: 5, req: 6,
+    vals: L => ({ dmg: 8 * L, steal: L }),
+    key: v => `위기 때 피해 +${v.dmg}%`,
+    desc: v => `생명력이 절반 아래이면 모든 피해 +${v.dmg}%, 생명력 흡수 +${v.steal}%.`,
+  },
+  undying: {
+    name: '불굴', type: 'passive', max: 5, req: 20,
+    vals: L => ({ cd: 120 - 15 * L, heal: 10 + 5 * L, inv: 1.5 + 0.25 * L }),
+    key: v => `${v.cd}초마다 죽음을 버팀`,
+    desc: v => `쓰러질 만큼 맞으면 한 번 버텨 생명력 ${v.heal}%로 일어나고 ${v.inv.toFixed(2)}초 동안 무적이 됩니다. ${v.cd}초에 한 번.`,
   },
 };
 

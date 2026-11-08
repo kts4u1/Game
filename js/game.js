@@ -74,6 +74,9 @@ const Game = {
     for (const m of world.monsters) if (m.summonType && !types.includes(m.summonType)) types.push(m.summonType);
     for (const t of types) { const sp = MONSTERS[t].sprite; if (sp && sp !== 'human' && !sprites.includes(sp)) sprites.push(sp); }
     const paths = [world.dungeon.art.set.img, FLARE.tiles.dungeon.img, ...monsterAssetPaths(sprites), ...heroAssetPaths(player), ...humanAssetPaths(types), ...Merc.assetPaths()];
+    // 조상의 부름을 배웠으면 혼의 그림(야만용사 부위·무기)도
+    const ALLY_LAYERS = ['leather_pants', 'leather_boots', 'battle_axe', 'greatsword', 'war_hammer', 'infantry_axe'];
+    if (player && player.skills.ancestors) for (const n of ALLY_LAYERS) if (FLARE.hero[n]) paths.push(FLARE.hero[n].img);
     // 소품이 다른 타일셋 그림을 쓰면 그것도
     for (const pr of world.dungeon.props || []) if (pr.set && FLARE.tiles[pr.set] && !paths.includes(FLARE.tiles[pr.set].img)) paths.push(FLARE.tiles[pr.set].img);
     if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) paths.push(FLARE.npcs[n.sprite].img);
@@ -95,6 +98,11 @@ const Game = {
       }
       const ta = tileAtlas(world.dungeon);
       if (ta && ta.getContext) warmCanvas(ta);
+      // 조상의 혼: 푸른빛을 입힌 부위 그림을 미리 만들어 둠 (처음 불러낼 때 멈칫하지 않게)
+      if (player && player.skills.ancestors) for (const n of ['head_short', 'default_chest', 'default_hands', ...ALLY_LAYERS]) {
+        const set = FLARE.hero[n];
+        if (set && Assets.ready(set.img)) warmCanvas(Assets.tintedAtlas(set.img, 'rgb(150,205,255)'));
+      }
       if (GFX.q.shadows === 2) {
         const imgs = [...monsterAssetPaths(sprites), ...heroAssetPaths(player), ...humanAssetPaths(types)];
         if (world.town) for (const n of world.dungeon.npcs) if (n.sprite && FLARE.npcs[n.sprite]) imgs.push(FLARE.npcs[n.sprite].img);
@@ -145,7 +153,9 @@ const Game = {
     Shop.buyback = [];
     this.goTown('new');
     this.enterPlay();
-    this.openCards(true);
+    // 첫 기술: 기술 포인트 1점을 주고 기술 창을 엶
+    player.skillPoints = 1;
+    UI.openSkills(true);
   },
 
   continueGame() {
@@ -173,8 +183,10 @@ const Game = {
     if (okDiff) p.deepestBy[p.difficulty] = p.deepest; else p.deepest = p.deepestBy[0];
     recalcStats(p);
     p.life = p.stats.maxLife;
-    this.pendingLevels = s.pending || 0;
-    this.bonusCards = s.bonusCards || 0;
+    // 기술 포인트 (예전 저장의 고르지 않은 레벨업·기술 카드는 포인트로 바꿈)
+    p.skillPoints = (d.skillPoints || 0) + (s.pending || 0) + (s.bonusCards || 0);
+    this.pendingLevels = 0;
+    this.bonusCards = 0;
     p.quests = d.quests || {}; p.bounty = d.bounty || null; p.bountyDone = d.bountyDone || 0;
     p.freeSockets = d.freeSockets || 0; p.potionCap = d.potionCap || 0;
     p.freeEnhance = d.freeEnhance || 0; p.gambleDiscount = d.gambleDiscount || 0;
@@ -187,7 +199,7 @@ const Game = {
     Shop.buyback = [];
     if (s.floor && okDiff) this.startFloor(Math.min(FINAL_FLOOR, s.floor)); else this.goTown('start');
     this.enterPlay();
-    if (!Object.keys(p.skills).length) this.openCards(true);
+    if (!Object.keys(p.skills).length) { p.skillPoints = Math.max(1, p.skillPoints || 0); UI.openSkills(true); }
   },
 
   enterPlay() {
@@ -417,7 +429,7 @@ const Game = {
         equipment: p.equipment, inventory: p.inventory, kills: p.kills, deepest: p.deepest, stash: p.stash, charms: p.charms, elixirs: p.elixirs,
         playTime: Math.round(p.playTime || 0), deaths: p.deaths || 0, cleared: p.cleared || null,
         clearedNM: p.clearedNM || null, clearedHell: p.clearedHell || null, difficulty: p.difficulty || 0, deepestBy: this.deepestBy(),
-        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0, freeEnhance: p.freeEnhance || 0, gambleDiscount: p.gambleDiscount || 0, mapSeed: p.mapSeed, merc: Merc.save(), pendingEnding: p.pendingEnding != null ? p.pendingEnding : null,
+        quests: p.quests || {}, bounty: p.bounty || null, bountyDone: p.bountyDone || 0, freeSockets: p.freeSockets || 0, potionCap: p.potionCap || 0, freeEnhance: p.freeEnhance || 0, gambleDiscount: p.gambleDiscount || 0, mapSeed: p.mapSeed, merc: Merc.save(), skillPoints: p.skillPoints || 0, pendingEnding: p.pendingEnding != null ? p.pendingEnding : null,
       },
     };
     store.set(SAVE_KEY, JSON.stringify(data));
@@ -447,7 +459,7 @@ function makeWorld(floor, diff) {
   const mlvl = floor ? effectiveMonsterLevel(floor, diff) : 1, scaled = !!floor && mlvl > monsterLevelForFloor(floor, diff);
   return {
     floor, dungeon, town: floor === 0, diff, mlvl, mlvlScaled: scaled, monsters: [], ground: [], projectiles: [],
-    chests: [], hazards: [], waves: [], flashes: [], pools: [], portal: null,
+    chests: [], hazards: [], waves: [], flashes: [], pools: [], portal: null, skillFx: [], allies: [], banner: null,
   };
 }
 
@@ -497,6 +509,7 @@ function bindInput() {
       case 'KeyL': Game.cycleLootFilter(); break;
       case 'KeyI': UI.toggleMenu(false); UI.togglePanel('inv'); break;
       case 'KeyC': UI.toggleMenu(false); UI.togglePanel('char'); break;
+      case 'KeyK': UI.toggleMenu(false); UI.togglePanel('skill'); break;
       case 'Tab': R.showMap = !R.showMap; break;
       case 'KeyM': UI.toggleSound(); break;
       case 'Escape': if (UI.anyPanel()) UI.closePanels(); else UI.toggleMenu(); break;
@@ -678,6 +691,7 @@ function update(dt) {
     updateMonsters(dt);
     updateProjectiles(dt);
     updateWaves(dt);
+    updateSkillFx(dt);
     updateHazards(dt);
     updatePools(dt);
     updateGround(dt);
@@ -687,10 +701,7 @@ function update(dt) {
     if (world.monsters.some(m => m.dead && m.deadT > 9)) world.monsters = world.monsters.filter(m => !(m.dead && m.deadT > 9));
     Game.revealT -= dt;
     if (Game.revealT <= 0) { Game.revealT = 0.1; world.dungeon.reveal(player.x, player.y, world.dungeon.outdoor ? 12 : 9); }
-    if ((Game.pendingLevels > 0 || Game.bonusCards > 0) && !player.dead && !(Game.endingT > 0) && !UI.anyPanel()) {
-      Game.levelUpDelay -= dt;
-      if (Game.levelUpDelay <= 0) Game.openCards(false, Game.pendingLevels <= 0);
-    }
+    // (레벨업 카드 창 대신 기술 포인트 — 기술 창(K)에서 직접 고름)
     if (player.dead && !Game.deathShown) {
       Game.deathT -= dt;
       if (Game.deathT <= 0) { Game.deathShown = true; UI.el.death.hidden = false; }

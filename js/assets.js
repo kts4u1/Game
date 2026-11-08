@@ -265,6 +265,7 @@ const SKILL_ICON = {
   executioner: 12, regen: 17, thornskin: 15, treasure: 30, _life: 11, _gold: 88, _potion: 64, _might: 31, _guard: 4,
   frenzy: 40, execute: 33, quake: 21, rush: 23, harpoon: 43, ironskin: 29, battleorders: 20, rally: 42,
   shieldmaster: 13, resist: 24, ironwill: 6, laststand: 38, rampage: 32, retaliate: 22, heavyhand: 16, vitality: 64,
+  boomerang: 35, snare: 31, fear: 27, banner: 2, ancestors: 26, bloodrite: 45, thunder: 7, bloodrage: 34, undying: 41,
 };
 const ICON_POTION = 64;
 

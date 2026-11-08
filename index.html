@@ -49,6 +49,7 @@
     <div id="menu-row">
       <span id="lvl-text">레벨 1</span>
       <button data-open="char">캐릭터 <kbd>C</kbd></button>
+      <button data-open="skill" id="btn-skill">기술 <kbd>K</kbd><span class="sp-badge" hidden></span></button>
       <button data-open="inv">소지품 <kbd>I</kbd></button>
       <button data-open="tp" id="btn-tp">귀환 <kbd>T</kbd></button>
       <button data-open="menu">메뉴 <kbd>Esc</kbd></button>
@@ -70,6 +71,12 @@
   <nav class="shop-tabs"></nav>
   <div class="panel-body"></div>
   <footer class="panel-foot"></footer>
+</section>
+
+<section id="skill-panel" class="panel left" hidden>
+  <header class="panel-head"><h2>기술</h2><button class="x" data-close aria-label="닫기">×</button></header>
+  <nav class="shop-tabs skill-tabs"></nav>
+  <div class="panel-body"></div>
 </section>
 
 <section id="char-panel" class="panel left" hidden>

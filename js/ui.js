@@ -16,12 +16,12 @@ function itemIconHtml(item) {
 }
 
 const UI = {
-  el: {}, last: {}, selected: null, mapT: 0, hoverSlot: null, cards: null,
+  el: {}, last: {}, selected: null, mapT: 0, hoverSlot: null, cards: [],
   finePointer: window.matchMedia ? window.matchMedia('(pointer: fine)').matches : true,
 
   init() {
     const ids = ['orb-life', 'orb-fury', 'xp-fill', 'xp-text', 'lvl-text', 'potion-slot', 'minimap', 'floor-name', 'floor-sub',
-      'gold-text', 'target', 'messages', 'banner', 'hurt', 'inv-panel', 'char-panel', 'shop-panel', 'levelup', 'title', 'death', 'menu', 'tooltip', 'slots'];
+      'gold-text', 'target', 'messages', 'banner', 'hurt', 'inv-panel', 'char-panel', 'shop-panel', 'skill-panel', 'levelup', 'title', 'death', 'menu', 'tooltip', 'slots'];
     for (const id of ids) this.el[id] = $(id);
     this.el.slotBtns = [...document.querySelectorAll('.slot[data-slot]')];
 
@@ -81,6 +81,25 @@ const UI = {
       if (cell) this.quickAction(cellLoc(cell));
     });
     initDrag();
+    // 기술 창: 배우기·올리기, 탭, 단축키
+    this.el['skill-panel'].addEventListener('click', e => {
+      const tab = e.target.closest('[data-stab]');
+      if (tab) { this.skillTab = tab.dataset.stab; this.renderSkills(); return; }
+      const ln = e.target.closest('[data-learn]');
+      if (ln && !ln.disabled) { if (spendSkillPoint(ln.dataset.learn)) this.skillFirst = false; this.renderSkills(); return; }
+      const hb = e.target.closest('[data-hk]');
+      if (hb && player) {
+        const [id, k] = hb.dataset.hk.split(':');
+        const j = player.hotbar.indexOf(id);
+        if (j !== +k) { if (j >= 0) swapHotbar(j, +k); else { player.hotbar[+k] = id; SFX.play('click'); Game.dirty = true; } this.message(`${SKILLS[id].name} → ${+k + 1}번 키`, '#e8d9a8'); }
+        this.renderSkills();
+      }
+    });
+    this.el['skill-panel'].addEventListener('mouseover', e => {
+      const r = e.target.closest('[data-skinfo]');
+      if (r && this.finePointer) { const id = r.dataset.skinfo; this.showTooltip(this.skillInfoHtml(id), e.clientX, e.clientY); }
+    });
+    this.el['skill-panel'].addEventListener('mouseout', e => { if (e.target.closest('[data-skinfo]')) this.hideTooltip(); });
     // 캐릭터 창: 스킬 단축키 고르기
     this.el['char-panel'].addEventListener('click', e => {
       const b = e.target.closest('[data-hk]');
@@ -131,6 +150,13 @@ const UI = {
         $('quest-track').innerHTML = lines.map(l => `<li class="${l.ready ? 'ready' : ''}">${escapeHtml(l.text)}</li>`).join('');
       });
     }
+    // 기술 포인트 표시
+    set('sp', p.skillPoints || 0, v => {
+      const b = $('btn-skill').querySelector('.sp-badge');
+      b.hidden = !v; b.textContent = `+${v}`;
+      $('btn-skill').classList.toggle('has-points', v > 0);
+      if (!this.el['skill-panel'].hidden) this.renderSkills();
+    });
     // 용병 생명력
     const mc = p.merc;
     set('merc', mc ? `${mc.name}|${mc.level}|${mc.dead}|${mc.stats ? Math.ceil(mc.life / mc.stats.maxLife * 50) : 0}` : '', () => {
@@ -250,18 +276,23 @@ const UI = {
   },
 
   // ── 패널 ──
-  anyPanel() { return !this.el['inv-panel'].hidden || !this.el['char-panel'].hidden || !this.el['shop-panel'].hidden; },
+  anyPanel() { return !this.el['inv-panel'].hidden || !this.el['char-panel'].hidden || !this.el['shop-panel'].hidden || !this.el['skill-panel'].hidden; },
   togglePanel(name) {
     const el = this.el[name + '-panel'];
     const open = el.hidden;
     el.hidden = !open;
-    // 왼쪽 칸은 하나만: 캐릭터 창을 열면 상점 창은 닫음
-    if (open && name === 'char' && !this.el['shop-panel'].hidden) { this.el['shop-panel'].hidden = true; Shop.close(); }
-    if (open) { if (name === 'inv') this.renderInventory(); else this.renderCharacter(); }
+    // 왼쪽 칸은 하나만: 캐릭터·기술 창을 열면 상점 창과 다른 왼쪽 창은 닫음
+    if (open && (name === 'char' || name === 'skill')) {
+      if (!this.el['shop-panel'].hidden) { this.el['shop-panel'].hidden = true; Shop.close(); }
+      this.el[(name === 'char' ? 'skill' : 'char') + '-panel'].hidden = true;
+    }
+    if (open && name === 'skill') this.skillFirst = !Object.keys(player.skills).length;
+    if (open) { if (name === 'inv') this.renderInventory(); else if (name === 'skill') this.renderSkills(); else this.renderCharacter(); }
     if (name === 'inv' && !open) { this.selected = null; this.moveFrom = null; this.hideTooltip(); }
   },
   openShop() {
     this.el['char-panel'].hidden = true;
+    this.el['skill-panel'].hidden = true;
     this.el['shop-panel'].hidden = false;
     this.selected = null;
     Shop.render();
@@ -273,6 +304,7 @@ const UI = {
     this.moveFrom = null;
     this.el['inv-panel'].hidden = true;
     this.el['char-panel'].hidden = true;
+    this.el['skill-panel'].hidden = true;
     this.el['shop-panel'].hidden = true;
     Shop.close();
     this.selected = null;
@@ -550,10 +582,65 @@ const UI = {
     this.el['char-panel'].querySelector('.panel-body').innerHTML = `
       <dl class="stats">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>
       <h3>스킬</h3>
-      <p class="sk-hint">단축키 숫자를 누르면 그 칸으로 옮겨집니다(원래 있던 스킬과 자리를 맞바꿈). 창이 열려 있을 때 아래 스킬 칸을 다른 칸으로 끌어다 놓아도 됩니다.</p>
+      <p class="sk-hint">기술을 배우거나 올리는 것은 기술 창(K)에서 합니다. 단축키 숫자를 누르면 그 칸으로 옮겨집니다(원래 있던 스킬과 자리를 맞바꿈). 창이 열려 있을 때 아래 스킬 칸을 다른 칸으로 끌어다 놓아도 됩니다.</p>
       <ul class="skill-list">${skills}</ul>
       <h3>퀘스트</h3>
       <ul class="quest-list">${Quests.logHtml()}</ul>`;
+  },
+
+  // ── 기술 창 ──
+  openSkills(first) {
+    this.skillFirst = !!first;
+    if (first) this.skillTab = 'attack';
+    this.closePanels();
+    this.el['skill-panel'].hidden = false;
+    this.renderSkills();
+  },
+  skillInfoHtml(id) {
+    const p = player, sk = SKILLS[id], L = effLevel(p, id), base = p.skills[id] || 0;
+    const cur = Math.max(1, L);
+    let h = `<div class="tt"><div class="tt-name" style="color:#f4d6a8">${sk.name}</div><div class="tt-type">${sk.type === 'active' ? (sk.def ? '방어·강화 기술' : '공격 기술') : '패시브'} · ${base ? `레벨 ${L}${L > base ? ` (장비 +${L - base})` : ''} / ${sk.max}` : '아직 배우지 않음'}${sk.req > 1 ? ` · 캐릭터 레벨 ${sk.req}부터` : ''}</div>`;
+    h += `<div class="tt-desc">${sk.desc(sk.vals(cur))}</div>`;
+    if (base && base < sk.max) h += `<div class="tt-desc tt-next">다음 레벨: ${sk.desc(sk.vals(L + 1))}</div>`;
+    return h + '</div>';
+  },
+  renderSkills() {
+    const p = player;
+    if (!p) return;
+    const panel = this.el['skill-panel'];
+    const tab = this.skillTab || 'attack';
+    const tabs = [['attack', '공격 기술'], ['def', '방어·강화'], ['passive', '패시브'], ['bonus', '능력치']];
+    panel.querySelector('.skill-tabs').innerHTML = tabs.map(([id, label]) => `<button data-stab="${id}" class="${tab === id ? 'on' : ''}">${label}</button>`).join('');
+    const pts = p.skillPoints || 0;
+    const hot = p.hotbar.map((id, i) => `<div class="sk-hot${id ? ' filled' : ''}" title="${id ? SKILLS[id].name : '비어 있음'}"><span class="k">${i + 1}</span>${id ? skillIconHtml(id) : ''}</div>`).join('');
+    let body = `<div class="sk-top"><div class="sk-points${pts ? ' has' : ''}">기술 포인트 <b>${pts}</b></div>`
+      + `<p class="sk-hint">${this.skillFirst ? '첫 기술을 골라 배우세요. 공격 기술 하나를 먼저 배우면 좋습니다.' : '레벨이 오를 때마다 1점이 생깁니다. 원하는 기술을 골라 배우거나 올리고, 공격·방어 기술은 아래 1~6 버튼으로 단축칸에 넣습니다.'}</p>`
+      + `<div class="sk-hotbar">${hot}</div></div>`;
+    if (tab === 'bonus') {
+      body += `<p class="sk-hint">기술 대신 능력치를 영구히 올릴 수도 있습니다 (포인트 1점씩).</p><ul class="skill-list sk-tree">` + BONUS_CARDS.map(b => {
+        const val = b.id === '_life' ? `최대 생명력 +${bonusLifeAmount(p.level)}` : b.id === '_gold' ? `골드 +${bonusGoldAmount(p.level).toLocaleString()}` : b.key;
+        return `<li><span class="sk-icon">${skillIconHtml(b.id)}</span><div class="sk-main"><div class="sk-name">${b.name} <span class="sk-lv">${val}</span></div><p>${b.desc}</p></div>`
+          + `<div class="sk-act"><button class="btn-main" data-learn="${b.id}" ${pts ? '' : 'disabled'}>올리기</button></div></li>`;
+      }).join('') + '</ul>';
+    } else {
+      const ids = Object.keys(SKILLS).filter(id => {
+        const sk = SKILLS[id];
+        return tab === 'passive' ? sk.type === 'passive' : sk.type === 'active' && (tab === 'def' ? !!sk.def : !sk.def);
+      }).sort((a, b) => (SKILLS[a].req || 1) - (SKILLS[b].req || 1));
+      body += '<ul class="skill-list sk-tree">' + ids.map(id => {
+        const sk = SKILLS[id], base = p.skills[id] || 0, L = effLevel(p, id), req = sk.req || 1;
+        const locked = req > p.level, maxed = base >= sk.max;
+        const v = sk.vals(Math.max(1, L));
+        const btn = maxed ? '<span class="sk-max">최고 레벨</span>'
+          : `<button class="btn-main" data-learn="${id}" ${!pts || locked ? 'disabled' : ''}>${locked ? `레벨 ${req} 필요` : base ? '올리기' : '배우기'}</button>`;
+        const keys = sk.type === 'active' && base ? `<div class="sk-keys"><span>단축키</span>${[0, 1, 2, 3, 4, 5].map(k => `<button data-hk="${id}:${k}" class="${p.hotbar[k] === id ? 'on' : ''}">${k + 1}</button>`).join('')}</div>` : '';
+        const next = base && !maxed ? `<p class="sk-next">다음 레벨: ${sk.key(sk.vals(L + 1))}</p>` : '';
+        return `<li class="${base ? 'learned' : ''}${locked ? ' locked' : ''}" data-skinfo="${id}"><span class="sk-icon">${skillIconHtml(id)}</span><div class="sk-main">`
+          + `<div class="sk-name">${sk.name} <span class="sk-lv">${base ? `Lv ${L}${L > base ? ` <em>(+${L - base})</em>` : ''} / ${sk.max}` : req > 1 ? `레벨 ${req}부터` : '새 기술'}</span></div>`
+          + `<p>${sk.desc(v)}</p>${next}${keys}</div><div class="sk-act">${btn}</div></li>`;
+      }).join('') + '</ul>';
+    }
+    panel.querySelector('.panel-body').innerHTML = body;
   },
 
   // 단축칸 끌어서 자리 바꾸기

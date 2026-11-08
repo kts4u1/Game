@@ -281,6 +281,7 @@ function updateMonsters(dt) {
     m.strikeT = Math.max(0, m.strikeT - dt);
     m.atkTimer -= dt;
     m.slow = Math.max(0, m.slow - dt);
+    if (m.vulnT > 0) m.vulnT -= dt;
     for (const k in m.cd) m.cd[k] -= dt / (m.cdScale || 1);
     if (Math.abs(m.kvx) + Math.abs(m.kvy) > 2) {
       d.moveCircle(m, m.kvx * dt, m.kvy * dt);
@@ -458,6 +459,9 @@ function rollPlayerDamage(mult, m) {
   let d = (rand(s.minDmg, s.maxDmg) + elem) * (1 + s.dmgPct / 100) * mult;
   if (m && m.undead && s.dmgUndead) d *= 1 + s.dmgUndead / 100;
   if (m && m.tier > 0 && s.dmgElite) d *= 1 + s.dmgElite / 100;
+  // 피의 분노: 생명력이 절반 아래일 때
+  const br = effLevel(player, 'bloodrage');
+  if (br && player.life < s.maxLife * 0.5) d *= 1 + SKILLS.bloodrage.vals(br).dmg / 100;
   const crit = Math.random() * 100 < s.crit;
   if (crit) d *= 1 + s.critDmg / 100;
   return { d: Math.max(1, Math.round(d)), crit };
@@ -482,7 +486,20 @@ function playerStrike(m, mult, opts = {}) {
   }
   const { d, crit } = rollPlayerDamage(mult, m);
   damageMonster(m, d, crit, opts);
-  if (s.lifeSteal > 0) healPlayer(Math.min(d * s.lifeSteal / 100, s.maxLife * 0.06));
+  const br = effLevel(player, 'bloodrage');
+  const steal = s.lifeSteal + (br && player.life < s.maxLife * 0.5 ? SKILLS.bloodrage.vals(br).steal : 0);
+  if (steal > 0) healPlayer(Math.min(d * steal / 100, s.maxLife * 0.06));
+  // 선혈의 의식: 맞은 적 둘레의 다른 적에게 피가 튐
+  if (player.buffs.bloodrite > 0 && player.bloodriteV) {
+    const bv = player.bloodriteV;
+    let n = 0;
+    for (const o of world.monsters) {
+      if (o === m || !hittable(o) || dist(m.x, m.y, o.x, o.y) > bv.radius + o.r) continue;
+      damageMonster(o, d * bv.splash / 100, false, { color: '#ff7a7a' });
+      if (++n >= 12) break;
+    }
+    if (n) fxBlood(m.x, m.y, 30, 6, '#b0101a');
+  }
   if (opts.fury) player.fury = Math.min(s.maxFury, player.fury + opts.fury);
   if (!m.dead && opts.knock && m.tier < 3 && !m.stationary) {
     const a = angleTo(player.x, player.y, m.x, m.y);
@@ -511,6 +528,7 @@ function playerStrike(m, mult, opts = {}) {
 
 function damageMonster(m, amount, crit, opts = {}) {
   if (m.dead) return;
+  if (m.vulnT > 0) amount *= 1 + (m.vulnPct || 0) / 100;  // 공포의 포효: 받는 피해 증가
   amount = Math.max(1, Math.round(amount * m.armorK));
   m.overkill = crit && amount > m.maxLife * 0.5;
   m.life -= amount;
@@ -582,7 +600,7 @@ function killMonster(m) {
 // 플레이어 피해. 막았거나 무시되면 false
 function damagePlayer(amount, src, opts = {}) {
   const p = player;
-  if (p.dead || p.leap || p.rush || Game.godMode || world.town) return false;
+  if (p.dead || p.leap || p.rush || Game.godMode || world.town || p.invulnT > 0) return false;
   const s = p.stats;
   // 방패 막기: 근접 공격과 투사체
   if ((opts.melee || opts.proj) && s.block > 0 && chance(s.block / 100)) {
@@ -843,10 +861,19 @@ function updateProjectiles(dt) {
     pr.t = (pr.t || 0) + dt;
     // 번개 구슬은 이리저리 흔들리며 날아감
     if (pr.type === 'bolt') { const a = Math.atan2(pr.vy, pr.vx) + rand(-0.5, 0.5); pr.vx = Math.cos(a) * 220; pr.vy = Math.sin(a) * 220; }
+    // 회전 도끼: 정해진 거리만큼 날아간 뒤(또는 벽에 부딪히면) 주인에게 되돌아옴
+    const bm = pr.boomerang;
+    if (bm) {
+      if (!bm.back) { bm.gone += Math.hypot(pr.vx, pr.vy) * dt; if (bm.gone >= bm.range) { bm.back = true; pr.hit = new Set(); } }
+      else { const a = angleTo(pr.x, pr.y, p.x, p.y); pr.vx = Math.cos(a) * 700; pr.vy = Math.sin(a) * 700; }
+    }
     pr.x += pr.vx * dt; pr.y += pr.vy * dt;
     pr.spin += dt * 22;
     let dead = pr.life <= 0;
-    if (!dead && d.solidAt(pr.x, pr.y)) { dead = true; projectileImpact(pr); }
+    if (bm) {
+      if (!bm.back && d.solidAt(pr.x, pr.y)) { bm.back = true; pr.hit = new Set(); fxSparks(pr.x, pr.y, 25, 5, '#d8c9a0', 90); }
+      if (bm.back && dist(pr.x, pr.y, p.x, p.y) < 28) dead = true;
+    } else if (!dead && d.solidAt(pr.x, pr.y)) { dead = true; projectileImpact(pr); }
     if (pr.type === 'fireball' && chance(0.6)) fxEmbers(pr.x, pr.y, 1, '#ff7a22', 4);
     if (!dead && pr.owner === 'player') {
       for (const m of world.monsters) {
@@ -854,7 +881,7 @@ function updateProjectiles(dt) {
         if (Math.abs(m.x - pr.x) > 50 || Math.abs(m.y - pr.y) > 50) continue;
         if (dist(m.x, m.y, pr.x, pr.y) < m.r + pr.r) {
           pr.hit.add(m.id);
-          playerStrike(m, pr.mult, { knock: pr.pull ? 0 : 70 });
+          playerStrike(m, pr.mult, { knock: pr.pull ? 0 : pr.knock != null ? pr.knock : 70 });
           if (pr.pull) harpoonPull(m, pr.pull);
           pr.pierce--;
           if (pr.pierce < 0) { dead = true; break; }
@@ -985,8 +1012,7 @@ function gainXp(n) {
   while (p.xp >= xpToNext(p.level)) {
     p.xp -= xpToNext(p.level);
     p.level++;
-    Game.pendingLevels++;
-    Game.levelUpDelay = Math.max(Game.levelUpDelay || 0, 0.7);
+    p.skillPoints = (p.skillPoints || 0) + 1;  // 기술 창(K)에서 원하는 기술에 씀
     recalcStats(p);
     p.life = p.stats.maxLife;
     p.fury = p.stats.maxFury;
@@ -995,6 +1021,6 @@ function gainXp(n) {
     fxSprite('heal', p.x, p.y, { follow: p, scale: 1.1 });
     fxRing(p.x, p.y, 10, 160, 0.9, '#ffd36a', 6);
     fxSparks(p.x, p.y, 40, 40, '#ffd36a', 200);
-    UI.message(`레벨 ${p.level} 달성!`, '#ffd36a');
+    UI.message(`레벨 ${p.level} 달성! 기술 포인트 +1 (K: 기술 창)`, '#ffd36a');
   }
 }

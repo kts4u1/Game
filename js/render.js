@@ -363,6 +363,7 @@ function renderFrame(t, focus) {
   safeDraw(ctx, () => drawPools(ctx, t));
   for (const pt of portalsOf(world)) safeDraw(ctx, () => drawPortalBase(ctx, pt, t));
   safeDraw(ctx, () => drawHazards(ctx, t));
+  safeDraw(ctx, () => drawSkillGround(ctx, t));
   for (const g of world.ground) if (explored(g.x, g.y) && groundVisible(g)) safeDraw(ctx, () => drawGroundObject(ctx, g, t));
 
   // 2) 벽 + 엔티티 깊이 정렬
@@ -379,6 +380,8 @@ function renderFrame(t, focus) {
   if (p && Game.state !== 'title') sorted.push({ d: p.x + p.y, k: 2 });
   const merc = p && Game.state !== 'title' && Merc.active();
   if (merc) sorted.push({ d: merc.x + merc.y, k: 8, mc: merc });
+  if (world.banner) sorted.push({ d: world.banner.x + world.banner.y, k: 9 });
+  for (const a of world.allies || []) sorted.push({ d: a.x + a.y, k: 10, al: a });
   sorted.sort((a, b) => a.d - b.d);
   const pIsoX = p ? isoX(p.x, p.y) : 0, pIsoY = p ? isoY(p.x, p.y) : 0, pDepth = p ? p.x + p.y : 0;
   const playing = p && Game.state !== 'title';
@@ -415,6 +418,8 @@ function renderFrame(t, focus) {
     else if (s.k === 6) drawNpc(ctx, s.n, t);
     else if (s.k === 7) drawTownProp(ctx, s.pr);
     else if (s.k === 8) Merc.draw(ctx, s.mc, t);
+    else if (s.k === 9) drawBanner(ctx, world.banner, t);
+    else if (s.k === 10) drawAlly(ctx, s.al, t);
   }
   ctx.globalAlpha = 1;
   ctx.filter = 'none';
@@ -422,6 +427,7 @@ function renderFrame(t, focus) {
   safeDraw(ctx, () => drawFlyingBoulders(ctx, t));
   safeDraw(ctx, () => drawFXParticles(ctx));
   safeDraw(ctx, () => drawFXSprites(ctx, 'top'));
+  safeDraw(ctx, () => drawSkillTop(ctx, t));
   safeDraw(ctx, () => Atmo.draw(ctx, false));
   safeDraw(ctx, () => drawFog(ctx, t));
 
@@ -838,7 +844,7 @@ function drawProjectile(ctx, pr, t) {
   const fs = PROJ_SPRITE[pr.type] && spriteSet('effects', PROJ_SPRITE[pr.type]);
   if (fs && Assets.ready(fs.img)) {
     const a = fs.anims.power;
-    drawSpriteFrame(ctx, fs, 'power', flareDir(Math.atan2(pr.vy, pr.vx)), animIndex(a, (pr.t || 0) * 1000), sx, sy, PROJ_SCALE[pr.type] || 1);
+    drawSpriteFrame(ctx, fs, 'power', flareDir(Math.atan2(pr.vy, pr.vx)), animIndex(a, (pr.t || 0) * 1000), sx, sy, (PROJ_SCALE[pr.type] || 1) * (pr.scale || 1));
     return;
   }
   drawShadow(ctx, sx, sy, 6, 2.5, 0.3);
@@ -1239,4 +1245,95 @@ function wrapText(ctx, text, maxW) {
   }
   if (cur) lines.push(cur);
   return lines;
+}
+
+
+// ───────── 새 기술 그림 ─────────
+// 땅에 깔리는 것: 전쟁 깃발의 범위
+function drawSkillGround(ctx, t) {
+  const b = world.banner;
+  if (!b) return;
+  const sx = isoX(b.x, b.y), sy = isoY(b.x, b.y), r = b.v.radius;
+  const fade = Math.min(1, (b.dur - b.t) / 1.5);
+  ctx.save();
+  ctx.globalAlpha = 0.18 * fade;
+  ctx.fillStyle = '#ffb84a';
+  ctx.beginPath(); ctx.ellipse(sx, sy, r, r / 2, 0, 0, TAU); ctx.fill();
+  ctx.globalAlpha = (0.45 + 0.15 * Math.sin(t * 4)) * fade;
+  ctx.strokeStyle = '#ffcc6a'; ctx.lineWidth = 2;
+  ctx.setLineDash([10, 8]); ctx.lineDashOffset = -t * 20;
+  ctx.beginPath(); ctx.ellipse(sx, sy, r, r / 2, 0, 0, TAU); ctx.stroke();
+  ctx.restore();
+}
+// 전쟁 깃발: 장대와 펄럭이는 깃발
+function drawBanner(ctx, b, t) {
+  if (!b) return;
+  const sx = isoX(b.x, b.y), sy = isoY(b.x, b.y);
+  drawShadow(ctx, sx, sy, 10, 4, 0.4);
+  ctx.save();
+  ctx.fillStyle = '#4a3220'; ctx.fillRect(sx - 2, sy - 118, 4, 118);
+  ctx.fillStyle = '#c9a040'; ctx.beginPath(); ctx.arc(sx, sy - 120, 4, 0, TAU); ctx.fill();
+  // 깃발 천: 사인파로 흔들림
+  ctx.beginPath();
+  const w = 44, h = 34;
+  ctx.moveTo(sx + 2, sy - 114);
+  for (let i = 0; i <= 8; i++) { const x = sx + 2 + w * i / 8; ctx.lineTo(x, sy - 114 + Math.sin(t * 6 + i * 0.8) * 3 * i / 8); }
+  for (let i = 8; i >= 0; i--) { const x = sx + 2 + w * i / 8; ctx.lineTo(x - (i === 8 ? 6 : 0), sy - 114 + h + Math.sin(t * 6 + i * 0.8) * 3 * i / 8); }
+  ctx.closePath();
+  const g = ctx.createLinearGradient(sx, sy - 114, sx + w, sy - 80);
+  g.addColorStop(0, '#8a1a14'); g.addColorStop(1, '#c0341e');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = '#2a0a06'; ctx.lineWidth = 1.2; ctx.stroke();
+  // 도끼 문양
+  ctx.fillStyle = '#ffd27a';
+  ctx.beginPath(); ctx.arc(sx + 20, sy - 97, 6, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#8a1a14'; ctx.fillRect(sx + 19, sy - 104, 2, 14);
+  ctx.restore();
+}
+// 조상의 혼: 야만용사 모습에 푸른빛, 반투명. 나타날 때와 사라질 때 흐려짐
+function drawAlly(ctx, a, t) {
+  const sx = isoX(a.x, a.y), sy = isoY(a.x, a.y);
+  const fade = Math.min(1, a.t / 0.4, (a.dur - a.t) / 1);
+  const ok = HAS_FLARE && Assets.ready(FLARE.hero.default_chest.img);
+  ctx.save();
+  ctx.globalAlpha = 0.25 * fade;
+  ctx.fillStyle = '#8fd0ff'; ctx.beginPath(); ctx.ellipse(sx, sy, 22, 11, 0, 0, TAU); ctx.fill();
+  ctx.globalAlpha = (0.62 + 0.1 * Math.sin(t * 5 + a.seed)) * fade;
+  if (ok) {
+    const anims = FLARE.hero.default_chest.anims, dir = flareDir(a.facing || 0);
+    let anim, idx;
+    if (a.atk) { anim = 'swing'; idx = Math.min(anims.swing.n - 1, Math.floor(clamp(a.atk.t / a.atk.dur, 0, 0.999) * anims.swing.n)); }
+    else if (a.moving) { anim = 'run'; idx = Math.floor(a.walkPhase * 0.9) % anims.run.n; }
+    else { anim = 'stance'; idx = animIndex(anims.stance, t * 1000 + a.seed * 300); }
+    const L = { head: 'head_short', chest: 'default_chest', legs: 'leather_pants', hands: 'default_hands', feet: 'leather_boots', main: a.look, off: null };
+    for (const slot of HERO_LAYER_ORDER[dir]) {
+      let name = L[slot];
+      if (name && (!FLARE.hero[name] || !Assets.ready(FLARE.hero[name].img))) name = HERO_FALLBACK[slot];
+      if (!name) continue;
+      const set = FLARE.hero[name];
+      drawSpriteFrame(ctx, set, anim, dir, idx, sx, sy, 1.05, Assets.tintedAtlas(set.img, 'rgb(150,205,255)'));
+    }
+  } else {
+    ctx.fillStyle = '#8fd0ff'; ctx.fillRect(sx - 8, sy - 50, 16, 46);
+  }
+  ctx.restore();
+  if (chance(0.15)) fxSparks(a.x, a.y, 40, 1, '#a8d8ff', 30);
+}
+// 위에 그리는 것: 사슬 올가미의 사슬
+function drawSkillTop(ctx, t) {
+  const p = player;
+  for (const f of world.skillFx) {
+    if (f.kind !== 'chains') continue;
+    const k = 1 - f.t / f.dur;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, k);
+    ctx.strokeStyle = '#b8bcc8'; ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 4]);
+    const px = isoX(p.x, p.y), py = isoY(p.x, p.y) - 40;
+    for (const m of f.targets) {
+      if (m.dead) continue;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(isoX(m.x, m.y), isoY(m.x, m.y) - monsterHeight(m) * 0.5); ctx.stroke();
+    }
+    ctx.restore();
+  }
 }

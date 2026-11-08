@@ -83,6 +83,7 @@ function recalcStats(p) {
   if ((v = pv('vitality'))) { s.potionBoost += v.potion; s.killLife += Math.round((2 + p.level * 0.15) * v.kill); }
   // 영구 보너스 카드, 광란·학살 중첩, 전투 명령
   s.dmgPct += p.bonusDmg || 0;
+  if (p.bannerIn && typeof world !== 'undefined' && world && world.banner) s.dmgPct += world.banner.v.dmg;  // 전쟁 깃발 안
   s.armorPct += p.bonusArmor || 0;
   if (p.frenzy && p.frenzy.n > 0) { const f = SKILLS.frenzy.vals(Math.max(1, effLevel(p, 'frenzy'))); s.ias += f.ias * p.frenzy.n; s.moveSpeed += f.move * p.frenzy.n; }
   if (p.rampage && p.rampage.n > 0) { const r = SKILLS.rampage.vals(Math.max(1, effLevel(p, 'rampage'))); s.dmgPct += r.dmg * p.rampage.n; s.ias += r.ias * p.rampage.n; }
@@ -190,6 +191,8 @@ function updatePlayer(dt) {
   }
   // 지속 효과: 강철 피부, 전투 명령, 광란·학살 중첩
   if (p.buffs.ironskin > 0) { p.buffs.ironskin -= dt; if (chance(dt * 10)) fxSparks(p.x, p.y, 50, 1, '#d8dde8', 40); }
+  if (p.buffs.bloodrite > 0) { p.buffs.bloodrite -= dt; if (chance(dt * 8)) fxBlood(p.x, p.y, 40, 1); }
+  if (p.invulnT > 0) p.invulnT -= dt;
   if (p.buffs.orders > 0) {
     p.buffs.orders -= dt;
     if (p.buffs.orders <= 0) { p.buffs.orders = 0; recalcStats(p); UI.message('전투 명령의 효과가 끝났습니다', '#c9c1b3'); }
@@ -524,6 +527,13 @@ function useSkill(slot) {
     case 'quake': quake(v); break;
     case 'rush': startRush(aim, v); break;
     case 'harpoon': throwHarpoon(aim, v); break;
+    case 'boomerang': throwBoomerang(aim, v); break;
+    case 'snare': chainSnare(v); break;
+    case 'fear': fearHowl(v); break;
+    case 'banner': plantBanner(v); break;
+    case 'ancestors': callAncestors(v); break;
+    case 'bloodrite': bloodRite(v); break;
+    case 'thunder': thunderCall(aim, v); break;
     case 'ironskin':
       p.buffs.ironskin = v.dur;
       p.slowT = 0;
@@ -964,6 +974,31 @@ function buyPotion() {
 // ── 레벨업 카드 ──
 // 단축키 칸 수 = 배울 수 있는 공격·방어 기술 수
 const MAX_ACTIVES = 6;
+// 기술 포인트로 기술 하나를 배우거나 한 단계 올림 (기술 창). 보너스(_life 등)도 1점
+function spendSkillPoint(id) {
+  const p = player, sk = SKILLS[id], bonus = id.startsWith('_');
+  if ((p.skillPoints || 0) <= 0) { UI.message('기술 포인트가 없습니다. 레벨이 오르면 1점씩 생깁니다', '#ff7a6a'); SFX.play('nope'); return false; }
+  if (!bonus) {
+    if (!sk) return false;
+    const lv = p.skills[id] || 0;
+    if (lv >= sk.max) { UI.message('이미 최고 레벨입니다', '#c9c1b3'); return false; }
+    if ((sk.req || 1) > p.level) { UI.message(`캐릭터 레벨 ${sk.req}부터 배울 수 있습니다`, '#ff7a6a'); SFX.play('nope'); return false; }
+  }
+  const lv = bonus ? 0 : p.skills[id] || 0;
+  learnSkill(id);
+  p.skillPoints--;
+  SFX.play('equip');
+  if (bonus) {
+    const b = BONUS_CARDS.find(c => c.id === id);
+    UI.message(`${b ? b.name : ''}: ${id === '_life' ? `최대 생명력 +${bonusLifeAmount(p.level)}` : b ? b.key : ''}`, '#ffd36a');
+  } else {
+    const slot = p.hotbar.indexOf(id);
+    UI.message(lv ? `${sk.name} 레벨 ${lv + 1}` : `${sk.name} 습득${sk.type === 'active' ? (slot >= 0 ? ` · ${slot + 1}번 키` : ' · 단축칸이 가득 차서 기술 창에서 1~6을 골라 넣으세요') : ''}`, '#ffd36a');
+  }
+  Game.save();
+  return true;
+}
+
 function rollCards(first) {
   const p = player;
   const ids = Object.keys(SKILLS);
@@ -1019,6 +1054,20 @@ function learnSkill(id) {
 // ── 죽음 ──
 function playerDie() {
   const p = player;
+  // 불굴: 쓰러질 만큼 맞아도 한 번 버팀
+  const u = effLevel(p, 'undying');
+  if (u && !(p.cds.undying > 0) && !world.town) {
+    const v = SKILLS.undying.vals(u);
+    p.life = Math.max(1, p.stats.maxLife * v.heal / 100);
+    p.invulnT = v.inv;
+    p.cds.undying = v.cd;
+    fxSprite('shield_orange', p.x, p.y, { follow: p, life: v.inv, scale: 0.8, alpha: 0.5, fade: 0.4 });
+    fxRing(p.x, p.y, 10, 160, 0.7, '#ffd36a', 7);
+    fxText(p.x, p.y, '불굴!', '#ffd36a', 20, { z: 90 });
+    SFX.play('berserk');
+    UI.message(`불굴! 죽음을 버텨냈습니다 (${v.cd}초 뒤 다시)`, '#ffd36a');
+    return;
+  }
   p.deaths = (p.deaths || 0) + 1;
   p.dead = true;
   p.life = 0;
@@ -1055,4 +1104,196 @@ function respawn() {
     Game.goTown('death');
   }
   UI.message(lost ? `마을에서 깨어났습니다. 골드 ${lost}을 잃었습니다.` : '마을에서 깨어났습니다.', '#c9c1b3');
+}
+
+
+// ───────── 새 기술 ─────────
+// 회전 도끼: 날아갔다가 되돌아오며 오가는 길의 적을 모두 벰
+function throwBoomerang(aim, v) {
+  const p = player, a = angleTo(p.x, p.y, aim.x, aim.y);
+  p.facing = a;
+  p.pose = 'throw'; p.poseT = 0; p.poseDur = 0.28;
+  spawnProjectile({
+    owner: 'player', type: 'axe', x: p.x + Math.cos(a) * 14, y: p.y + Math.sin(a) * 14, vx: Math.cos(a) * 620, vy: Math.sin(a) * 620,
+    r: 18, mult: v.mult, pierce: 999, life: 4, angle: a, knock: 30, scale: 1.4, boomerang: { range: v.range, gone: 0, back: false },
+  });
+  SFX.play('throw');
+}
+
+// 사슬 올가미: 반경 안의 적을 모두 끌어와 기절
+function chainSnare(v) {
+  const p = player, pulled = [];
+  p.pose = 'throw'; p.poseT = 0; p.poseDur = 0.3;
+  for (const m of world.monsters) {
+    if (!hittable(m) || m.stationary) continue;
+    const d = dist(p.x, p.y, m.x, m.y);
+    if (d > v.radius + m.r) continue;
+    if (m.tier < 3) {
+      const stop = p.r + m.r + 16;
+      if (d > stop) { const a = angleTo(m.x, m.y, p.x, p.y), k = (d - stop) * 5.5; m.kvx = Math.cos(a) * k; m.kvy = Math.sin(a) * k; }
+    }
+    pulled.push(m);
+    playerStrike(m, v.mult, { stun: v.stun });
+  }
+  world.skillFx.push({ kind: 'chains', t: 0, dur: 0.4, targets: pulled.slice(0, 14) });
+  fxRing(p.x, p.y, v.radius, 24, 0.4, '#c8c8d8', 4);
+  SFX.play('throw'); SFX.play('swing', 0.6);
+  if (!pulled.length) UI.message('끌어올 적이 없습니다', '#c9c1b3');
+}
+
+// 공포의 포효: 적이 달아나고 받는 피해가 늘어남
+function fearHowl(v) {
+  const p = player;
+  p.pose = 'roar'; p.poseT = 0; p.poseDur = 0.5;
+  SFX.play('warcry'); fxShake(5);
+  fxRing(p.x, p.y, 20, v.radius, 0.7, '#9a6aff', 7);
+  fxSprite('dark_mist', p.x, p.y, { layer: 'top', scale: 0.9, alpha: 0.6 });
+  for (const m of world.monsters) {
+    if (!hittable(m) || dist(p.x, p.y, m.x, m.y) > v.radius + m.r) continue;
+    m.vulnT = v.dur + 2; m.vulnPct = v.vuln;
+    if (!m.aggro) aggroPack(m);
+    if (m.tier < 3 && !m.stationary && !(m.act && m.act.kind === 'dive')) {
+      m.act = { kind: 'flee', t: 0, dur: v.dur };
+      m.windup = 0; m.pending = null; m.windupDur = m.baseWindup;
+    }
+    fxSprite('dark_mist', m.x, m.y, { layer: 'top', scale: 0.35, alpha: 0.7 });
+  }
+  fxText(p.x, p.y, '공포!', '#c9a8ff', 18, { z: 90 });
+}
+
+// 전쟁 깃발: 둘레에서 피해·회복이 오르고 적은 느려짐 (한 번에 하나)
+function plantBanner(v) {
+  const p = player;
+  p.pose = 'slam'; p.poseT = 0; p.poseDur = 0.35;
+  world.banner = { x: p.x, y: p.y, t: 0, dur: v.dur, v };
+  SFX.play('warcry', 0.6); SFX.play('boom', 0.4);
+  fxRing(p.x, p.y, 20, v.radius, 0.6, '#ffb84a', 6);
+  fxDust(p.x, p.y, 8);
+}
+
+// 조상의 부름: 공격받지 않는 조상의 혼이 함께 싸움
+function callAncestors(v) {
+  const p = player, d = world.dungeon;
+  p.pose = 'roar'; p.poseT = 0; p.poseDur = 0.5;
+  for (const a of world.allies) fxSprite('dark_mist', a.x, a.y, { layer: 'top', scale: 0.5 });
+  world.allies = [];
+  const looks = ['battle_axe', 'greatsword', 'war_hammer', 'infantry_axe'];
+  for (let i = 0; i < v.count; i++) {
+    const ang = p.facing + Math.PI + (i - (v.count - 1) / 2) * 1.1;
+    const s = d.freeSpot(p.x + Math.cos(ang) * 64, p.y + Math.sin(ang) * 64, 14) || { x: p.x, y: p.y };
+    world.allies.push({ x: s.x, y: s.y, t: 0, dur: v.dur, mult: v.mult, facing: p.facing, atkCD: 0.3 + i * 0.25, atk: null, moving: false, walkPhase: 0,
+      r: 14, stats: { speed: 245 }, path: null, slowT: 0, target: null, think: 0, seed: i, look: looks[i % looks.length] });
+    fxSprite('dark_mist', s.x, s.y, { layer: 'top', scale: 0.6 });
+    fxSprite('sparkle', s.x, s.y, { life: 1.2, fade: 0.5 });
+  }
+  SFX.play('revive'); SFX.play('warcry', 0.5);
+  UI.message('조상들이 응답합니다!', '#a8d8ff');
+}
+
+// 선혈의 의식: 생명력을 바치고, 때릴 때마다 둘레의 적에게 피가 튐
+function bloodRite(v) {
+  const p = player;
+  const cost = Math.round(p.life * v.lifeCost / 100);
+  p.life = Math.max(1, p.life - cost);
+  p.buffs.bloodrite = v.dur;
+  p.bloodriteV = v;
+  p.pose = 'roar'; p.poseT = 0; p.poseDur = 0.4;
+  fxBlood(p.x, p.y, 40, 24);
+  fxRing(p.x, p.y, 10, 130, 0.6, '#d0202a', 7);
+  fxText(p.x, p.y, `-${cost}`, '#ff5a4a', 15, { z: 60 });
+  SFX.play('berserk');
+  UI.message('선혈의 의식!', '#ff5a4a');
+}
+
+// 천둥 강림: 커서 둘레에 낙뢰를 차례로
+function thunderCall(aim, v) {
+  const p = player;
+  p.pose = 'roar'; p.poseT = 0; p.poseDur = 0.5;
+  world.skillFx.push({ kind: 'thunder', t: 0, next: 0.15, left: v.bolts, x: aim.x, y: aim.y, v, hit: new Set() });
+  fxRing(aim.x, aim.y, 20, v.radius, 0.5, '#a8c8ff', 4);
+  SFX.play('zap', 0.6);
+}
+
+// 새 기술의 지속 효과: 낙뢰, 사슬, 깃발, 조상의 혼
+function updateSkillFx(dt) {
+  const p = player, d = world.dungeon;
+  for (let i = world.skillFx.length - 1; i >= 0; i--) {
+    const f = world.skillFx[i];
+    f.t += dt;
+    if (f.kind === 'thunder') {
+      while (f.left > 0 && f.t >= f.next) {
+        f.next += 0.16; f.left--;
+        const cands = world.monsters.filter(m => hittable(m) && dist(f.x, f.y, m.x, m.y) < f.v.radius + m.r);
+        const fresh = cands.filter(m => !f.hit.has(m.id));
+        const m = pick(fresh.length ? fresh : cands);
+        let bx, by;
+        if (m) { bx = m.x; by = m.y; f.hit.add(m.id); playerStrike(m, f.v.mult, { stun: f.v.stun, proc: true, color: '#cfe8ff' }); }
+        else { const a = Math.random() * TAU, r = Math.random() * f.v.radius; bx = f.x + Math.cos(a) * r; by = f.y + Math.sin(a) * r; }
+        if (!fxSprite('thunderstrike', bx, by, { layer: 'top', scale: 0.9 })) fxSparks(bx, by, 60, 12, '#cfe8ff', 200);
+        world.flashes.push({ x: bx, y: by, r: 260, life: 0.25, color: [170, 200, 255] });
+        fxDecal('scorch', bx, by, 0.4);
+        SFX.play('zap', 0.5);
+        if (chance(0.4)) fxShake(3);
+      }
+      if (f.left <= 0 && f.t > f.next) world.skillFx.splice(i, 1);
+    } else if (f.t >= f.dur) world.skillFx.splice(i, 1);
+  }
+  // 전쟁 깃발
+  const b = world.banner;
+  let inside = false;
+  if (b) {
+    b.t += dt;
+    if (b.t >= b.dur) { world.banner = null; fxDust(b.x, b.y, 6); }
+    else {
+      inside = !p.dead && dist(p.x, p.y, b.x, b.y) < b.v.radius;
+      if (inside) healPlayer(p.stats.maxLife * b.v.regen / 100 * dt);
+      const mc = typeof Merc !== 'undefined' && Merc.active();
+      if (mc && dist(mc.x, mc.y, b.x, b.y) < b.v.radius) mc.life = Math.min(mc.stats.maxLife, mc.life + mc.stats.maxLife * b.v.regen / 100 * dt);
+      for (const m of world.monsters) if (!m.dead && dist(m.x, m.y, b.x, b.y) < b.v.radius + m.r) m.slow = Math.max(m.slow, 0.25);
+    }
+  }
+  if (!!p.bannerIn !== inside) { p.bannerIn = inside; recalcStats(p); }
+  // 조상의 혼
+  for (let i = world.allies.length - 1; i >= 0; i--) {
+    const a = world.allies[i];
+    a.t += dt; a.atkCD -= dt; a.think -= dt;
+    if (a.t >= a.dur || world.town) { fxSprite('dark_mist', a.x, a.y, { layer: 'top', scale: 0.5 }); world.allies.splice(i, 1); continue; }
+    if (a.atk) {
+      a.atk.t += dt; a.moving = false;
+      const tg = a.atk.target;
+      if (tg && !tg.dead) a.facing = angleTo(a.x, a.y, tg.x, tg.y);
+      if (!a.atk.hit && a.atk.t >= a.atk.dur * 0.55) {
+        a.atk.hit = true;
+        if (tg && hittable(tg) && dist(a.x, a.y, tg.x, tg.y) < 70 + tg.r) {
+          const { d: dmg, crit } = rollPlayerDamage(a.mult, tg);
+          damageMonster(tg, dmg, crit, { color: '#a8d8ff' });
+          fxSprite('cleave', tg.x, tg.y, { dir: flareDir(a.facing), scale: 0.7, alpha: 0.6 });
+          SFX.play('hit', 0.35);
+        }
+      }
+      if (a.atk.t >= a.atk.dur) { a.atk = null; a.atkCD = 0.5; }
+      continue;
+    }
+    if (dist(a.x, a.y, p.x, p.y) > 1100) { const s = d.freeSpot(p.x - 50, p.y + 40, 14); a.x = s.x; a.y = s.y; a.path = null; }
+    if (a.think <= 0) {
+      a.think = 0.3;
+      let best = null, bd = Infinity;
+      for (const m of world.monsters) {
+        if (!hittable(m) || m.ambushWait) continue;
+        const dm = dist(a.x, a.y, m.x, m.y);
+        if (dm > 430 || dist(p.x, p.y, m.x, m.y) > 600) continue;
+        if (dm < bd) { bd = dm; best = m; }
+      }
+      a.target = best;
+    }
+    const tg = a.target;
+    if (tg && hittable(tg)) {
+      const dd = dist(a.x, a.y, tg.x, tg.y);
+      if (dd <= 48 + tg.r) { a.moving = false; a.facing = angleTo(a.x, a.y, tg.x, tg.y); if (a.atkCD <= 0) a.atk = { t: 0, dur: 0.42, target: tg, hit: false }; }
+      else navigate(a, tg.x, tg.y, dt, 42 + tg.r);
+    } else if (dist(a.x, a.y, p.x, p.y) > 120) {
+      const ang = (p.facing || 0) + Math.PI + (a.seed - 1) * 0.9;
+      navigate(a, p.x + Math.cos(ang) * 70, p.y + Math.sin(ang) * 70, dt, 30);
+    } else a.moving = false;
+  }
 }

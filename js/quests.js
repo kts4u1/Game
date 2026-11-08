@@ -251,7 +251,7 @@ const Quests = {
       got.push(itemName(it));
       if (it.rarity >= 2) SFX.synth(it.rarity >= 3 ? 'unique' : 'rare');
     }
-    if (r.skill) { Game.bonusCards = (Game.bonusCards || 0) + r.skill; Game.levelUpDelay = Math.min(Game.levelUpDelay || 0.6, 0.6); got.push(`기술 카드 ${r.skill}장`); }
+    if (r.skill) { p.skillPoints = (p.skillPoints || 0) + r.skill; got.push(`기술 포인트 ${r.skill}점`); }
     fxSprite('sparkle', p.x, p.y, { life: 1.4, fade: 0.5, scale: 1.2 });
     UI.message(`${title} 보상: ${got.join(', ')}`, '#ffd36a');
     recalcStats(p);
@@ -263,7 +263,7 @@ const Quests = {
     for (const spec of (r.items || []).concat(r.item ? [r.item] : [])) t.push(spec.rarity >= 3 ? `유니크 ${spec.slot ? SLOT_NAMES[spec.slot] : '아이템'}` : `레어 ${SLOT_NAMES[spec.slot] || '아이템'}`);
     if (r.freeEnhance) t.push(`무료 강화 ${r.freeEnhance}회`);
     if (r.gambleDiscount) t.push(`떠돌이 상인 물건 영원히 ${r.gambleDiscount}% 할인`);
-    if (r.skill) t.push(`기술 카드 ${r.skill}장`);
+    if (r.skill) t.push(`기술 포인트 ${r.skill}점`);
     if (r.freeSocket) t.push(`무료 소켓 ${r.freeSocket}회`);
     if (r.potionCap) t.push(`물약 최대 개수 +${r.potionCap}`);
     if (r.potions) t.push(`물약 ${r.potions}개`);
@@ -423,7 +423,7 @@ const Quests = {
       if (!b) body += `<p class="quest-text">현상금 일을 맡겠나? 해치울 때마다 골드와 장비를 주지. 열 번째마다 기술도 하나 가르쳐 주마.</p><button class="btn-main" data-qact="bounty:new">현상금 받기</button>`;
       else {
         body += `<div class="quest-name">${this.bountyGoal(b)}</div><div class="quest-goal">진행: ${Math.min(b.have, b.n)} / ${b.n}</div>`
-          + `<div class="quest-reward">보상: ${b.gold.toLocaleString()} 골드 · 경험치 · ${b.rarity === 2 ? '레어' : '마법'} 아이템${(player.bountyDone || 0) % 10 === 9 ? ' · 기술 카드' : ''}</div>`;
+          + `<div class="quest-reward">보상: ${b.gold.toLocaleString()} 골드 · 경험치 · ${b.rarity === 2 ? '레어' : '마법'} 아이템${(player.bountyDone || 0) % 10 === 9 ? ' · 기술 포인트' : ''}</div>`;
         body += b.s === 'ready' ? `<button class="btn-main" data-qact="bounty:turnin">보상 받기</button>` : `<button data-qact="bounty:drop">포기하기</button>`;
       }
       body += `<div class="quest-sub">완료한 현상금 ${player.bountyDone || 0}건</div></div>`;
