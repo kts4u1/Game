@@ -1,0 +1,94 @@
+# 게임 파일이 바뀌어 푸시되면 윈도우 · 리눅스 앱과 브라우저용 zip을 만들어
+# GitHub 릴리스에 올린다. 최신 파일은 항상
+# https://github.com/kts4u1/Game/releases/latest 에서 받을 수 있다.
+name: Desktop build
+
+on:
+  push:
+    branches: [claude/fervent-noether-lavzau, main]
+    paths:
+      - 'index.html'
+      - 'js/**'
+      - 'css/**'
+      - 'assets/**'
+      - 'desktop/**'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERSION: 1.0.${{ github.run_number }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run dist:win -- -c.extraMetadata.version=${{ env.VERSION }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            desktop/dist/CrownOfTheDead-Setup.exe
+            desktop/dist/CrownOfTheDead-Portable.exe
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run dist:linux -- -c.extraMetadata.version=${{ env.VERSION }}
+      - name: Browser zip
+        run: |
+          npm run dist:web
+          (cd dist/web && zip -qr ../CrownOfTheDead-Web.zip .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            desktop/dist/CrownOfTheDead-x86_64.AppImage
+            desktop/dist/CrownOfTheDead-Web.zip
+          if-no-files-found: error
+
+  release:
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: 망자의 왕관 v${{ env.VERSION }}
+          body_path: desktop/RELEASE.md
+          files: out/*
+          make_latest: true

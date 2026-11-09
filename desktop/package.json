@@ -1,0 +1,74 @@
+{
+  "name": "crown-of-the-dead",
+  "productName": "Crown of the Dead",
+  "version": "1.0.0",
+  "description": "망자의 왕관 - 야만용사 핵앤슬래시",
+  "author": "kts4u1",
+  "homepage": "https://github.com/kts4u1/Game",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "prepare-game": "node scripts/copy-game.js",
+    "start": "npm run prepare-game && electron .",
+    "dist:win": "npm run prepare-game && electron-builder --win --x64 --publish never",
+    "dist:linux": "npm run prepare-game && electron-builder --linux --x64 --publish never",
+    "dist:web": "node scripts/copy-game.js --web dist/web"
+  },
+  "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "io.github.kts4u1.crownofthedead",
+    "productName": "Crown of the Dead",
+    "copyright": "Art: Flare project (CC-BY-SA 3.0)",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "build/icon.png",
+      "game/**/*"
+    ],
+    "electronLanguages": [
+      "ko",
+      "en-US"
+    ],
+    "publish": null,
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "망자의 왕관",
+      "uninstallDisplayName": "망자의 왕관",
+      "deleteAppDataOnUninstall": false,
+      "installerLanguages": [
+        "ko_KR"
+      ],
+      "language": "1042",
+      "artifactName": "CrownOfTheDead-Setup.exe"
+    },
+    "portable": {
+      "artifactName": "CrownOfTheDead-Portable.exe"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game",
+      "artifactName": "CrownOfTheDead-x86_64.${ext}"
+    }
+  }
+}

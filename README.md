@@ -5,10 +5,26 @@
 
 설치나 빌드 없이 브라우저만으로 실행됩니다. 캐릭터·몬스터·던전·마을 그림과 효과음은 무료 공개 자원인 [Flare 프로젝트](https://github.com/flareteam/flare-game)의 것(CC-BY-SA 3.0)을 씁니다.
 
-## 실행 방법
+## 다운로드 (다른 사람에게 나눠 주기)
+
+**https://github.com/kts4u1/Game/releases/latest** 에서 받습니다. 이 링크는 항상 최신 버전을 가리키므로 그대로 공유하면 됩니다.
+
+| 파일 | 누구에게 | 하는 법 |
+| --- | --- | --- |
+| **CrownOfTheDead-Setup.exe** | 윈도우 (추천) | 실행하면 바로 설치되고 게임이 켜집니다. 바탕화면·시작 메뉴에 '망자의 왕관'이 생깁니다. |
+| CrownOfTheDead-Portable.exe | 윈도우, 설치 없이 | 받은 파일을 그대로 실행합니다. |
+| CrownOfTheDead-Web.zip | 맥 · 리눅스 · 그 밖 | 압축을 풀고 index.html을 브라우저로 엽니다. |
+| CrownOfTheDead-x86_64.AppImage | 리눅스 | 실행 권한을 주고 실행합니다. |
+
+- 코드 서명 인증서가 없어서 윈도우가 처음에 "Windows의 PC 보호" 창을 띄웁니다. **추가 정보 → 실행**을 누르면 됩니다.
+- 앱에서는 **F11**(또는 Alt+Enter)로 전체 화면을 켜고 끕니다. 창을 닫을 때도 자동 저장됩니다. 저장 위치는 `%APPDATA%\Crown of the Dead`입니다.
+- 게임 파일(`index.html`, `js/`, `css/`, `assets/`)을 바꿔서 푸시하면 GitHub Actions(`.github/workflows/desktop.yml`)가 새 버전을 자동으로 만들어 릴리스에 올립니다 (약 10분).
+
+## 실행 방법 (개발용)
 
 - `index.html`을 브라우저(크롬, 엣지, 파이어폭스, 사파리)로 열면 바로 실행됩니다.
 - 또는 로컬 서버로: `python3 -m http.server 8000` 실행 후 `http://localhost:8000` 접속
+- 데스크톱 앱으로: `cd desktop && npm install && npm start` (Electron). 설치 파일은 `npm run dist:win`(윈도우에서), `npm run dist:linux`, 브라우저용 묶음은 `npm run dist:web`으로 만들고 결과는 `desktop/dist/`에 생깁니다.
 
 진행 상황은 브라우저 저장소에 자동 저장됩니다(층 이동, 마을 이동, 레벨업 시). 타이틀 화면의 **이어하기**로 계속할 수 있습니다. 보관함(4쪽 × 48칸 = 192칸)에 넣은 물건과 열린 웨이포인트도 저장됩니다.
 
@@ -408,6 +424,8 @@ Flare 그림은 **CC-BY-SA 3.0**입니다. 이 게임을 배포하거나 공개�
 index.html        화면 구성 (HUD, 패널, 오버레이)
 assets/flare/     Flare 스프라이트 아틀라스(WebP), manifest.js(프레임 좌표), 저작자 표시
 tools/build_flare_assets.py  Flare 원본 → 게임용 아틀라스 변환
+desktop/          데스크톱 앱(Electron): main.js(창·저장·전체 화면), package.json(설치 파일 설정), build/icon.png
+.github/workflows/desktop.yml  푸시하면 윈도우·리눅스 앱과 브라우저용 zip을 만들어 릴리스에 올림
 css/style.css     UI 스타일
 js/util.js        공통 함수, 아이소메트릭 좌표 변환
 js/data.js        스킬, 아이템 기본형, 접두사/접미사, 유니크, 세트, 몬스터, 보스, 테마, 비약 데이터
