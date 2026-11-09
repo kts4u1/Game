@@ -40,7 +40,15 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
-      - run: npm run dist:win -- -c.extraMetadata.version=${{ env.VERSION }}
+      - name: Build Windows app
+        # GitHub 다운로드가 잠깐 실패(504)하는 일이 있어 몇 번 다시 시도
+        run: |
+          for i in 1 2 3 4; do
+            npm run dist:win -- -c.extraMetadata.version=${{ env.VERSION }} && exit 0
+            echo "build attempt $i failed, retrying"
+            sleep $((i * 30))
+          done
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -62,7 +70,14 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
-      - run: npm run dist:linux -- -c.extraMetadata.version=${{ env.VERSION }}
+      - name: Build Linux app
+        run: |
+          for i in 1 2 3 4; do
+            npm run dist:linux -- -c.extraMetadata.version=${{ env.VERSION }} && exit 0
+            echo "build attempt $i failed, retrying"
+            sleep $((i * 30))
+          done
+          exit 1
       - name: Browser zip
         run: |
           npm run dist:web
